@@ -11,6 +11,8 @@
 //   SinnersNav.onReturn(fn)  run fn(url) when a parked page is opened again
 
 const SinnersNav = (() => {
+  // The site version from this file's own address (nav.js?v=...), so page scripts load the same version
+  const VERSION = (document.currentScript && new URL(document.currentScript.src).searchParams.get("v")) || "";
   const PAGE_SCRIPTS = {
     watch: "watch.js",
     content: "content.js",
@@ -58,8 +60,8 @@ const SinnersNav = (() => {
   async function loadScript(page) {
     const file = PAGE_SCRIPTS[page.name];
     if (!file) return;
-    // A fresh copy each time, so the page script starts clean
-    await import(new URL(`${file}?load=${++loads}`, location.href).href);
+    // A fresh copy each time, so the page script starts clean; ?v= matches this site version
+    await import(new URL(`${file}?v=${VERSION}&load=${++loads}`, location.href).href);
   }
 
   function updateMenu() {
