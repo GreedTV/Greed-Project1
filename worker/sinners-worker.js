@@ -1155,6 +1155,21 @@ async function roundOutcome(env, id, round) {
   return choices[n % choices.length];
 }
 
+// The last `count` finished rounds, including ones nobody bet on: every round's result comes from the
+// same keyed hash, so it can be worked out any time. Pot and winners come from rounds that had bets.
+async function recentRounds(env, id, current, count) {
+  const { results } = await env.DB.prepare("SELECT round, pot, winners, paid FROM rounds WHERE game = ? AND round >= ? AND round < ?")
+    .bind(id, current - count, current)
+    .all();
+  const played = Object.fromEntries(results.map((r) => [r.round, r]));
+  const out = [];
+  for (let r = current - 1; r >= current - count; r--) {
+    const p = played[r];
+    out.push({ round: r, outcome: await roundOutcome(env, id, r), pot: p ? p.pot : 0, winners: p ? p.winners : 0, paid: p ? p.paid : 0, bets: !!p });
+  }
+  return out;
+}
+
 async function settleRounds(env, id) {
   const current = Math.floor(Date.now() / ROUND_MS);
   const { results: pending } = await env.DB.prepare(
@@ -1239,11 +1254,7 @@ async function betState(request, url, env, cors) {
     choices[b.choice].count += 1;
   });
   const pool = await env.DB.prepare("SELECT jackpot FROM pools WHERE game = ?").bind(id).first();
-  const { results: history } = await env.DB.prepare(
-    "SELECT round, outcome, pot, winners, paid FROM rounds WHERE game = ? ORDER BY round DESC LIMIT 10"
-  )
-    .bind(id)
-    .all();
+  const history = await recentRounds(env, id, round, 10);
 
   const out = {
     game: id,
@@ -3348,7 +3359,7 @@ async function botCommand(interaction, env, origin) {
     const round = Math.floor(now / ROUND_MS);
     const { results: bets } = await env.DB.prepare("SELECT amount FROM bets WHERE game = ? AND round = ?").bind(id, round).all();
     const pool = await env.DB.prepare("SELECT jackpot FROM pools WHERE game = ?").bind(id).first();
-    const { results: history } = await env.DB.prepare("SELECT outcome FROM rounds WHERE game = ? ORDER BY round DESC LIMIT 8").bind(id).all();
+    const history = await recentRounds(env, id, round, 8);
     const label = id === "colors" ? "🎨 Color Clash" : "🍀 Lucky Number";
     const dot = { red: "🔴", green: "🟢", blue: "🔵" };
     const pot = bets.reduce((s, b) => s + b.amount, 0);
@@ -3625,8 +3636,8 @@ async function statsReport(env, interaction) {
       one("SELECT COUNT(*) AS n FROM rounds WHERE settled_at >= ?", startOfDay),
       one("SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS points FROM bets WHERE created >= ?", startOfDay),
       many("SELECT game, jackpot FROM pools"),
-      many("SELECT outcome FROM rounds WHERE game = 'colors' ORDER BY round DESC LIMIT 6"),
-      many("SELECT outcome FROM rounds WHERE game = 'lucky' ORDER BY round DESC LIMIT 6"),
+      recentRounds(env, "colors", Math.floor(Date.now() / ROUND_MS), 6),
+      recentRounds(env, "lucky", Math.floor(Date.now() / ROUND_MS), 6),
       one("SELECT COUNT(*) AS n FROM scores WHERE created >= ?", startOfDay),
       one("SELECT name, COUNT(*) AS n FROM messages WHERE deleted = 0 AND created >= ? GROUP BY user_id ORDER BY n DESC LIMIT 1", startOfDay),
       one("SELECT COUNT(*) AS n FROM shop_items"),

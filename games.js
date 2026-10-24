@@ -649,7 +649,8 @@ function startBet(id) {
     history.replaceChildren(el("span", "bet-history-label", "Last results"));
     (state.history || []).forEach((r) => {
       const chip = el("span", `bet-result c-${r.outcome}`, labelOf(r.outcome));
-      chip.title = r.winners ? `${r.winners} winner(s) shared ${r.paid}` : `No winner, ${r.pot} rolled over`;
+      chip.title = !r.bets ? "No bets this round" : r.winners ? `${r.winners} winner(s) shared ${r.paid}` : `No winner, ${r.pot} rolled over to the jackpot`;
+      if (!r.bets) chip.classList.add("quiet");
       history.append(chip);
     });
     if (!(state.history || []).length) history.append(el("span", "bet-history-empty", "No rounds yet"));
