@@ -10,7 +10,7 @@ Live at https://greedtv.github.io/Greed-Project1/
 - `index.html`: home page with a quick "watch a streamer" box
 - `watch.html`: watch streams one at a time with chat, or up to 4 at once
 - `gallery.html`: community gallery with Images and Clips sections; visitors share links
-- `about.html`: about page
+- `about.html`: short, plain about page (to be filled in later)
 - `admin.html`: review shared gallery links (password protected, not in the menu)
 
 ## Scripts
