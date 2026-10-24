@@ -2,16 +2,11 @@
 // Each entry: { platform: "twitch" | "kick", channel: "name" }
 //         or: { platform: "youtube", video: "VIDEO_ID" } / { platform: "youtube", channel: "UC..." }
 // Add a "label" to show a different display name.
-const DEFAULT_STREAMERS = [
-  { platform: "kick", channel: "lexor2k", label: "Lexor2k" },
-  { platform: "kick", channel: "st0pcs", label: "St0pCS" },
-  { platform: "twitch", channel: "kaicenat", label: "Kai Cenat" },
-  { platform: "youtube", channel: "UCWsDFcIhY2DBi3GB5uykGXA", label: "IShowSpeed" },
-];
+const DEFAULT_STREAMERS = [];
 
-// Address of the Cloudflare Worker from worker/kick-proxy.js, e.g. "https://sinners-kick.name.workers.dev".
-// When set, Kick streams play in HD with volume and quality controls. When empty, Kick's own player is used.
-const KICK_PROXY = "https://sinners-kick.baterdene03253016.workers.dev";
+// Kick streams play in HD through the Worker (set in config.js) with volume and quality controls.
+// If it's empty, Kick's own player is used.
+const KICK_PROXY = WORKER_URL;
 
 const STORAGE_KEY = "sinners-streamers";
 const MAX_MULTI = 4;
@@ -738,4 +733,27 @@ function cap(word) {
   return word === "youtube" ? "YouTube" : word.charAt(0).toUpperCase() + word.slice(1);
 }
 
+// Coming from the home page: watch.html?platform=kick&add=name-or-link
+function addFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const text = params.get("add");
+  if (!text) return;
+  history.replaceState(null, "", location.pathname);
+  const platform = ["twitch", "youtube", "kick"].includes(params.get("platform")) ? params.get("platform") : "twitch";
+  try {
+    const s = parse(text, platform);
+    s.id = makeId(s);
+    if (!streamers.some((x) => x.id === s.id)) {
+      streamers.push(s);
+      save();
+    }
+    selected = [s.id];
+  } catch (err) {
+    input.value = text;
+    platformSelect.value = platform;
+    showMsg(err.message, "error");
+  }
+}
+
+addFromUrl();
 render();

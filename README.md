@@ -1,48 +1,55 @@
 # Sinners
 
-A gaming and streaming website built with plain HTML, CSS and JavaScript.
+Watch Kick, Twitch and YouTube streams side by side, plus a community gallery of shared images and clips.
+Plain HTML, CSS and JavaScript, hosted on GitHub Pages, with a small Cloudflare Worker for the parts that need a server.
 
 Live at https://greedtv.github.io/Greed-Project1/
 
 ## Pages
 
-- `index.html`: home page with live/next-stream badge, stats, latest clips and socials
-- `watch.html`: watch Twitch, YouTube and Kick streams, one at a time with chat or up to 4 at once
-- `schedule.html`: weekly stream schedule (today is highlighted automatically)
-- `gallery.html`: filterable image gallery with a click-to-enlarge viewer
-- `about.html`: about, setup and collab info
+- `index.html`: home page with a quick "watch a streamer" box
+- `watch.html`: watch streams one at a time with chat, or up to 4 at once
+- `gallery.html`: community gallery with Images and Clips sections; visitors share links
+- `about.html`: about page
+- `admin.html`: review shared gallery links (password protected, not in the menu)
 
-## Other files
+## Scripts
 
-- `styles.css`: colors, layout and animations
-- `script.js`: menu, scroll animations, live badge, gallery filters and viewer
-- `watch.js`: the Watch page (players, multi-view, adding and fixing streamers)
-- `images/`: gallery and clip images
+- `config.js`: the Worker address (`WORKER_URL`)
+- `script.js`: menu and scroll animations (all pages)
+- `watch.js`: the Watch page (players, multi-view, volume/quality, adding and fixing streamers)
+- `gallery.js`: loads approved items, the viewer, and the share forms
+- `admin.js`: approve / reject / remove gallery items
+- `worker/sinners-worker.js`: the Cloudflare Worker
 
-## Editing
+## Watch page
 
-- **Colors:** change `--accent` and `--accent-2` at the top of `styles.css`.
-- **Social links:** replace the `href="#"` links (marked with comments) in each page.
-- **Schedule:** edit the rows in `schedule.html`, and update the `STREAMS` list at the top of `script.js` so the home page badge matches.
-- **Gallery:** add an image to `images/`, then copy one `<button class="gallery-item">` block in `gallery.html`. The `data-category` value must match a filter button.
-- **Stats:** change the `data-count` numbers in `index.html`.
-- **Streamers on the Watch page:** visitors can add streamers by name or link with the "Add a streamer" box, but those are saved only in their own browser. To show streamers to everyone, add them to `DEFAULT_STREAMERS` at the top of `watch.js`.
-  - YouTube can't look up names, so use a live video link (`youtube.com/watch?v=…`) or a channel link with `/channel/UC…`.
-  - Volume controls work for Twitch and YouTube; the quality picker (Auto, Source, 360p–1080p) works for Twitch. Kick has no player API, so Kick streams use the Kick player's own controls, and YouTube quality is set from the ⚙ in its player.
-  - Twitch chat and players only work when the site is opened through a web address (GitHub Pages or a local server), not by double-clicking the file.
+- Visitors add streamers by name or link; they're saved in their own browser. To show streamers to everyone, add them to `DEFAULT_STREAMERS` at the top of `watch.js`.
+- YouTube can't look up names, so use a live video link (`youtube.com/watch?v=…`) or a channel link with `/channel/UC…`.
+- Volume works for all platforms; the quality menu works for Twitch and Kick. YouTube quality is set from the ⚙ in its player.
+- Kick streams play in HD through the Worker (see below). If it's unavailable, Kick's own player is used.
 
-## Kick HD player (Cloudflare Worker)
+## Gallery
 
-Kick's official embed is limited in quality and can't be controlled by the page. For HD Kick streams with volume and quality controls, the site uses a small Cloudflare Worker (`worker/kick-proxy.js`):
+- Anyone can share an image link or a Kick / Twitch / YouTube clip link.
+- Shared links go into a review queue and only appear after they're approved on `admin.html`.
+- Each visitor can share up to 5 links per hour; image links must point to an actual image; mature Kick clips are refused.
 
-1. The Worker asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers.
-2. The Watch page plays it with [hls.js](https://github.com/video-dev/hls.js). Quality playlists and video chunks load straight from Kick's video servers, so the Worker handles one small request per stream start.
-3. If the Worker is down or blocked, the page falls back to Kick's official player.
+## Cloudflare Worker
 
-To set it up: create a Worker in the Cloudflare dashboard, paste in `worker/kick-proxy.js`, deploy, then put the Worker's address in `KICK_PROXY` at the top of `watch.js`. If you use a custom domain, add it to `ALLOWED_ORIGINS` in the Worker.
+`worker/sinners-worker.js` does two jobs:
 
-This relies on Kick's private API, so Kick may change or block it at any time.
+1. **Kick HD:** asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers. Video chunks load straight from Kick's servers. Kick may change or block this at any time.
+2. **Gallery:** stores shared links in Workers KV and handles the review queue.
+
+Setup in the Cloudflare dashboard (Workers & Pages → the Worker):
+
+1. **Edit code** → paste `worker/sinners-worker.js` → **Deploy**.
+2. **Bindings** → **Add binding** → **KV namespace** → variable name `GALLERY` → create a namespace (e.g. `sinners-gallery`).
+3. **Settings** → **Variables and Secrets** → **Add** → type **Secret**, name `ADMIN_PASSWORD`, value: your admin password.
+
+If you use a custom domain, add it to `ALLOWED_ORIGINS` in the Worker.
 
 ## Run it locally
 
-Open `index.html` in a browser, or run `python -m http.server` in this folder and visit http://localhost:8000.
+Run `python -m http.server 8080` in this folder and visit http://localhost:8080. (Twitch players need a real web address, so opening the files directly won't work.)

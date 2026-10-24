@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Admin — Sinners</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a href="index.html" class="logo">SINNERS<span>.</span></a>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+      <nav>
+        <ul id="nav-links">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="watch.html">Watch</a></li>
+          <li><a href="gallery.html">Gallery</a></li>
+          <li><a href="about.html">About</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <h1>Gallery <span class="gradient-text">Review</span></h1>
+        <p>Approve or reject shared links. Only approved ones show on the gallery.</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:24px">
+      <div class="container">
+        <form id="login" class="share-form admin-login" autocomplete="off">
+          <h3>Admin password</h3>
+          <div class="add-row">
+            <input id="password" type="password" placeholder="Password" aria-label="Admin password" required>
+            <button class="button" type="submit">Log in</button>
+          </div>
+          <p class="form-msg" id="login-msg" role="status"></p>
+        </form>
+
+        <div id="admin" hidden>
+          <div class="admin-bar">
+            <button class="button ghost" id="refresh" type="button">↻ Refresh</button>
+            <button class="button ghost" id="logout" type="button">Log out</button>
+          </div>
+          <h2>Waiting for review <span class="count" id="pending-count"></span></h2>
+          <div class="review-list" id="pending-list"></div>
+          <h2>On the gallery <span class="count" id="approved-count"></span></h2>
+          <div class="review-list" id="approved-list"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span id="year"></span> Sinners</p>
+      <p><a href="watch.html">Watch</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+  <script src="config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gallery — Sinners</title>
-  <meta name="description" content="Clips and screenshots from Sinners streams.">
+  <meta name="description" content="Community gallery: images and clips shared by Sinners viewers.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
@@ -19,7 +19,6 @@
         <ul id="nav-links">
           <li><a href="index.html">Home</a></li>
           <li><a href="watch.html">Watch</a></li>
-          <li><a href="schedule.html">Schedule</a></li>
           <li><a href="gallery.html" aria-current="page">Gallery</a></li>
           <li><a href="about.html">About</a></li>
         </ul>
@@ -30,31 +29,46 @@
   <main>
     <section class="page-hero">
       <div class="container reveal">
-        <h1>The <span class="gradient-text">Gallery</span></h1>
-        <p>Best moments, screenshots and highlights. Click any image to view it bigger.</p>
+        <h1>Community <span class="gradient-text">Gallery</span></h1>
+        <p>Images and clips shared by viewers. Share yours with a link.</p>
       </div>
     </section>
 
     <section class="section" style="padding-top:24px">
       <div class="container">
-        <div class="filters reveal">
-          <button class="filter active" data-filter="all">All</button>
-          <button class="filter" data-filter="fps">FPS</button>
-          <button class="filter" data-filter="rpg">RPG</button>
-          <button class="filter" data-filter="horror">Horror</button>
-          <button class="filter" data-filter="irl">IRL</button>
+        <div class="tabs" role="tablist">
+          <button class="tab active" role="tab" aria-selected="true" data-tab="images">Images <span class="count" id="count-images"></span></button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="clips">Clips <span class="count" id="count-clips"></span></button>
         </div>
 
-        <!-- To add your own: put an image in /images and copy one <button> block -->
-        <div class="gallery" id="gallery">
-          <button class="gallery-item reveal" data-category="fps"><figure style="margin:0"><img src="images/clip-1.svg" alt="The 1v4 clutch"><figcaption>The 1v4 clutch</figcaption></figure></button>
-          <button class="gallery-item reveal" data-category="rpg"><figure style="margin:0"><img src="images/clip-2.svg" alt="Boss down, first try"><figcaption>Boss down, first try</figcaption></figure></button>
-          <button class="gallery-item reveal" data-category="fps"><figure style="margin:0"><img src="images/clip-3.svg" alt="Squad wipe finale"><figcaption>Squad wipe finale</figcaption></figure></button>
-          <button class="gallery-item reveal" data-category="horror"><figure style="margin:0"><img src="images/clip-4.svg" alt="The jumpscare"><figcaption>The jumpscare</figcaption></figure></button>
-          <button class="gallery-item reveal" data-category="irl"><figure style="margin:0"><img src="images/clip-5.svg" alt="New setup reveal"><figcaption>New setup reveal</figcaption></figure></button>
-          <button class="gallery-item reveal" data-category="rpg"><figure style="margin:0"><img src="images/clip-6.svg" alt="Legendary drop"><figcaption>Legendary drop</figcaption></figure></button>
-          <button class="gallery-item reveal" data-category="horror"><figure style="margin:0"><img src="images/clip-7.svg" alt="Lights out"><figcaption>Lights out</figcaption></figure></button>
-          <button class="gallery-item reveal" data-category="irl"><figure style="margin:0"><img src="images/clip-8.svg" alt="1,000 followers night"><figcaption>1,000 followers night</figcaption></figure></button>
+        <div class="tab-panel" id="panel-images">
+          <form class="share-form" data-kind="image" autocomplete="off">
+            <h3>Share an image</h3>
+            <div class="share-row">
+              <input name="link" type="url" placeholder="Image link (https://…/picture.jpg)" aria-label="Image link" required>
+              <input name="title" type="text" maxlength="80" placeholder="Title (optional)" aria-label="Title">
+              <input name="name" type="text" maxlength="30" placeholder="Your name (optional)" aria-label="Your name">
+              <button class="button" type="submit">Share</button>
+            </div>
+            <p class="hint">Use a direct image link: right-click an image and choose "Copy image address". Links appear after a quick review.</p>
+            <p class="form-msg" role="status"></p>
+          </form>
+          <div class="gallery" id="images-grid"></div>
+        </div>
+
+        <div class="tab-panel" id="panel-clips" hidden>
+          <form class="share-form" data-kind="clip" autocomplete="off">
+            <h3>Share a clip</h3>
+            <div class="share-row">
+              <input name="link" type="url" placeholder="Kick, Twitch or YouTube clip link" aria-label="Clip link" required>
+              <input name="title" type="text" maxlength="80" placeholder="Title (optional)" aria-label="Title">
+              <input name="name" type="text" maxlength="30" placeholder="Your name (optional)" aria-label="Your name">
+              <button class="button" type="submit">Share</button>
+            </div>
+            <p class="hint">Works with Kick clips, Twitch clips, and YouTube videos or Shorts. Links appear after a quick review.</p>
+            <p class="form-msg" role="status"></p>
+          </form>
+          <div class="clips-grid" id="clips-grid"></div>
         </div>
       </div>
     </section>
@@ -64,7 +78,7 @@
     <button class="close" aria-label="Close">✕</button>
     <button class="prev" aria-label="Previous">‹</button>
     <figure>
-      <img id="lightbox-img" src="" alt="">
+      <div id="lightbox-media" class="lightbox-media"></div>
       <figcaption id="lightbox-caption"></figcaption>
     </figure>
     <button class="next" aria-label="Next">›</button>
@@ -73,10 +87,12 @@
   <footer class="site-footer">
     <div class="container">
       <p>&copy; <span id="year"></span> Sinners</p>
-      <p><a href="watch.html">Watch</a><a href="schedule.html">Schedule</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
+      <p><a href="watch.html">Watch</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
     </div>
   </footer>
 
   <script src="script.js"></script>
+  <script src="config.js"></script>
+  <script src="gallery.js"></script>
 </body>
 </html>

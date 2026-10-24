@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sinners — Gaming & Streams</title>
-  <meta name="description" content="Sinners: live gaming streams, clips and community.">
+  <title>Sinners — Watch Streams Together</title>
+  <meta name="description" content="Watch Kick, Twitch and YouTube streams side by side, in HD, with volume and quality controls.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
@@ -19,7 +19,6 @@
         <ul id="nav-links">
           <li><a href="index.html" aria-current="page">Home</a></li>
           <li><a href="watch.html">Watch</a></li>
-          <li><a href="schedule.html">Schedule</a></li>
           <li><a href="gallery.html">Gallery</a></li>
           <li><a href="about.html">About</a></li>
         </ul>
@@ -30,23 +29,63 @@
   <main>
     <section class="hero">
       <div class="container">
-        <div class="live-badge" id="live-badge"><span class="dot"></span><span id="live-text">Offline</span></div>
-        <h1>Welcome to <span class="gradient-text">SINNERS</span></h1>
-        <p>Late-night streams, ranked grinds and chaotic clips. Pull up a chair and join the crew.</p>
-        <div class="hero-actions">
-          <a href="watch.html" class="button">▶ Watch streams</a>
-          <a href="schedule.html" class="button ghost">See schedule</a>
+        <div class="platform-row">
+          <span class="platform kick">Kick</span>
+          <span class="platform twitch">Twitch</span>
+          <span class="platform youtube">YouTube</span>
         </div>
+        <h1>All your streams.<br><span class="gradient-text">One screen.</span></h1>
+        <p>Watch Kick, Twitch and YouTube side by side — in HD, with your own volume and quality controls.</p>
+
+        <form class="quick-watch" action="watch.html" method="get" autocomplete="off">
+          <select name="platform" aria-label="Platform">
+            <option value="kick">Kick</option>
+            <option value="twitch">Twitch</option>
+            <option value="youtube">YouTube</option>
+          </select>
+          <input name="add" type="text" placeholder="Streamer name or channel link" aria-label="Streamer name or channel link" required>
+          <button class="button" type="submit">▶ Watch</button>
+        </form>
+        <p class="quick-hint">Or <a href="watch.html">open the Watch page</a> and build your own multi-view.</p>
       </div>
     </section>
 
     <section class="section">
       <div class="container">
-        <div class="stats">
-          <div class="stat reveal"><strong class="gradient-text" data-count="1200">0</strong><span>Followers</span></div>
-          <div class="stat reveal"><strong class="gradient-text" data-count="350">0</strong><span>Streams</span></div>
-          <div class="stat reveal"><strong class="gradient-text" data-count="85">0</strong><span>Clips</span></div>
-          <div class="stat reveal"><strong class="gradient-text" data-count="5">0</strong><span>Days a week</span></div>
+        <div class="section-head reveal">
+          <h2>What you can do</h2>
+        </div>
+        <div class="features">
+          <article class="feature reveal">
+            <div class="feature-icon">▦</div>
+            <h3>Multi-view</h3>
+            <p>Watch up to 4 streams at once in a grid, from any mix of platforms.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-icon">HD</div>
+            <h3>Kick in 1080p</h3>
+            <p>Kick streams play in full HD with a quality menu from 360p to 1080p.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-icon">🔊</div>
+            <h3>Your controls</h3>
+            <p>Set the volume of each stream on its own, mute the rest, and pick the quality.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-icon">💬</div>
+            <h3>Chat alongside</h3>
+            <p>Twitch and YouTube chat sit right next to the player when you watch one stream.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-icon">🔗</div>
+            <h3>Name or link</h3>
+            <p>Type a streamer's name, or paste their channel link to get exactly the right person.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-icon">🖼</div>
+            <h3>Community gallery</h3>
+            <p>Share your favorite clips and images, and see what others found.</p>
+          </article>
         </div>
       </div>
     </section>
@@ -54,50 +93,34 @@
     <section class="section alt">
       <div class="container">
         <div class="section-head reveal">
-          <h2>Latest clips</h2>
-          <a href="gallery.html">View all →</a>
+          <h2>How it works</h2>
         </div>
-        <div class="cards">
-          <article class="card reveal">
-            <img src="images/clip-1.svg" alt="Clutch 1v4 clip thumbnail">
-            <div class="card-body">
-              <span class="tag">Valorant</span>
-              <h3>The 1v4 clutch</h3>
-              <p>Down to the last round and somehow it worked.</p>
-            </div>
-          </article>
-          <article class="card reveal">
-            <img src="images/clip-2.svg" alt="Boss fight clip thumbnail">
-            <div class="card-body">
-              <span class="tag">Elden Ring</span>
-              <h3>Boss down, first try</h3>
-              <p>No summons, no excuses, a lot of screaming.</p>
-            </div>
-          </article>
-          <article class="card reveal">
-            <img src="images/clip-3.svg" alt="Victory royale clip thumbnail">
-            <div class="card-body">
-              <span class="tag">Fortnite</span>
-              <h3>Squad wipe finale</h3>
-              <p>Final circle chaos with the whole squad.</p>
-            </div>
-          </article>
-        </div>
+        <ol class="steps">
+          <li class="step reveal">
+            <span class="step-num">1</span>
+            <h3>Add streamers</h3>
+            <p>Type a name or paste a link from Kick, Twitch or YouTube.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-num">2</span>
+            <h3>Pick one or turn on multi-view</h3>
+            <p>Watch one stream with chat, or up to 4 together.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-num">3</span>
+            <h3>Tune it your way</h3>
+            <p>Balance the volume, choose the quality, go fullscreen.</p>
+          </li>
+        </ol>
       </div>
     </section>
 
     <section class="section">
       <div class="container">
         <div class="cta reveal">
-          <h2>Join the <span class="gradient-text">Sinners</span></h2>
-          <p>Hang out between streams, share clips and find people to play with.</p>
-          <div class="socials" style="justify-content:center">
-            <!-- Replace # with your real links -->
-            <a href="#">Twitch</a>
-            <a href="#">YouTube</a>
-            <a href="#">Discord</a>
-            <a href="#">TikTok</a>
-          </div>
+          <h2>Got a clip worth sharing?</h2>
+          <p>Post a clip or image link to the community gallery.</p>
+          <a href="gallery.html" class="button">Go to the gallery</a>
         </div>
       </div>
     </section>
@@ -106,7 +129,7 @@
   <footer class="site-footer">
     <div class="container">
       <p>&copy; <span id="year"></span> Sinners</p>
-      <p><a href="watch.html">Watch</a><a href="schedule.html">Schedule</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
+      <p><a href="watch.html">Watch</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
     </div>
   </footer>
 
