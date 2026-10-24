@@ -31,12 +31,11 @@ function observeReveals(root = document) {
 }
 observeReveals();
 
-// Background glow: soft color clouds in Kick green, Twitch purple and YouTube red (styles.css .ambient).
+// Background glow: soft colors in Kick green, Twitch purple and YouTube red (styles.css .ambient).
 // Added once; nav.js only swaps <main>, so it stays while moving around the site.
 if (!document.querySelector(".ambient")) {
   const ambient = document.createElement("div");
   ambient.className = "ambient";
   ambient.setAttribute("aria-hidden", "true");
-  ambient.innerHTML = '<span class="glow kick"></span><span class="glow twitch"></span><span class="glow youtube"></span>';
   document.body.prepend(ambient);
 }

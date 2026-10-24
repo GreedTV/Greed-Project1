@@ -3077,50 +3077,24 @@ img {
 }
 
 /* ---------- Background glow ----------
-   Soft, blurry color clouds in Kick green, Twitch purple and YouTube red drift slowly behind every page.
+   Soft colors in Kick green, Twitch purple and YouTube red behind every page. It's painted once (plain
+   gradients: no blur filter, no animation) on its own fixed layer, so scrolling stays smooth.
    The element is added by script.js. */
 .ambient {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  overflow: hidden;
-}
-
-.glow {
-  position: absolute;
-  width: 46vmax;
-  height: 46vmax;
-  border-radius: 50%;
-  background: var(--glow-color);
-  filter: blur(120px);
-  opacity: 0.22;
-  will-change: transform;
-  animation: glow-drift 22s ease-in-out infinite;
-}
-
-.glow.kick { --glow-color: #53fc18; top: -14vmax; left: -12vmax; opacity: 0.16; }
-.glow.twitch { --glow-color: #9146ff; top: 30vh; left: 32vw; animation-delay: -8s; animation-duration: 26s; }
-.glow.youtube { --glow-color: #ff0033; top: -10vmax; right: -14vmax; animation-delay: -15s; animation-duration: 24s; }
-
-@keyframes glow-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(6vw, 5vh) scale(1.08); }
-  66% { transform: translate(-4vw, 8vh) scale(0.95); }
+  transform: translateZ(0);
+  background:
+    radial-gradient(ellipse 45% 55% at 0% 0%, rgba(83, 252, 24, 0.17), transparent 70%),
+    radial-gradient(ellipse 45% 55% at 100% 0%, rgba(255, 0, 51, 0.22), transparent 70%),
+    radial-gradient(ellipse 50% 50% at 50% 75%, rgba(145, 70, 255, 0.22), transparent 70%);
 }
 
 /* On a light page the colors are softer */
-:root[data-theme="light"] .glow {
-  opacity: 0.12;
-}
-:root[data-theme="light"] .glow.kick {
-  opacity: 0.1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .glow {
-    animation: none;
-  }
+:root[data-theme="light"] .ambient {
+  opacity: 0.6;
 }
 
 /* ---------- Shop (Games page) ---------- */
