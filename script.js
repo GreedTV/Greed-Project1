@@ -112,3 +112,31 @@ const SinnersDialog = (() => {
     alert: (message, options) => show(message, { ...options, alertOnly: true }),
   };
 })();
+
+// Small pop-up messages in the corner, e.g. for new achievements.
+//   SinnersToast.show("text")   SinnersToast.achievements(list from the Worker)
+const SinnersToast = (() => {
+  let box = null;
+  function show(text, icon = "✨") {
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "toast-stack";
+      box.setAttribute("role", "status");
+      document.body.append(box);
+    }
+    const t = document.createElement("div");
+    t.className = "toast";
+    t.append(Object.assign(document.createElement("span"), { className: "toast-icon", textContent: icon }), Object.assign(document.createElement("span"), { textContent: text }));
+    box.append(t);
+    void t.offsetWidth;
+    t.classList.add("show");
+    setTimeout(() => {
+      t.classList.remove("show");
+      setTimeout(() => t.remove(), 400);
+    }, 5000);
+  }
+  function achievements(list) {
+    (list || []).forEach((a, i) => setTimeout(() => show(`Achievement unlocked: ${a.name}${a.coins ? ` (+${a.coins} 🪙)` : ""}`, a.emoji), i * 700));
+  }
+  return { show, achievements };
+})();

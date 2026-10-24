@@ -368,6 +368,7 @@ async function submit(game, score, status) {
     const data = await res.json().catch(() => ({}));
     if (res.status === 401 || res.status === 403) SinnersAuth.expire();
     if (!res.ok) throw new Error(data.error || "Couldn't save your score.");
+    SinnersToast.achievements(data.achievements);
     const g = GAMES[game];
     const points = data.pointsEarned
       ? ` +${data.pointsEarned} points 🪙`

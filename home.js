@@ -1,4 +1,4 @@
-// Home page: a banner for this week's world boss (its live HP), linking to the Profile.
+// Home page: this week's world boss (live HP), last week's Clip of the Week, and the guide's tabs.
 
 const API = WORKER_URL.replace(/\/$/, "");
 const strip = document.getElementById("boss-strip");
@@ -34,6 +34,42 @@ async function loadBoss() {
   } catch (e) {}
 }
 
+// ---------- Clip of the Week ----------
+async function loadClip() {
+  try {
+    const res = await fetch(`${API}/gallery/votes`);
+    if (!res.ok) return;
+    const { winner: w } = await res.json();
+    if (!w) return;
+    const card = document.getElementById("cotw-home");
+    const thumb = el("span", "cotw-thumb");
+    if (w.thumb) {
+      const img = el("img");
+      img.src = w.thumb;
+      img.alt = "";
+      img.referrerPolicy = "no-referrer";
+      thumb.append(img);
+    } else thumb.append("🎬");
+    const text = el("div", "boss-strip-text");
+    text.append(el("strong", null, `🏆 Clip of the Week: ${w.title || "Untitled clip"}`), el("span", "hint", `${w.name ? `Shared by ${w.name} · ` : ""}${w.votes} vote${w.votes === 1 ? "" : "s"} · vote for this week's in the Gallery`));
+    card.replaceChildren(thumb, text, el("span", "button ghost", "▶ Watch"));
+    card.hidden = false;
+    document.getElementById("boss-strip-section").hidden = false;
+  } catch (e) {}
+}
+
+// ---------- Guide tabs ----------
+document.querySelectorAll("#guide-tabs [data-guide]").forEach((tab) =>
+  tab.addEventListener("click", () => {
+    document.querySelectorAll("#guide-tabs [data-guide]").forEach((t) => {
+      t.classList.toggle("active", t === tab);
+      t.setAttribute("aria-selected", t === tab);
+    });
+    document.querySelectorAll("[data-guide-panel]").forEach((p) => (p.hidden = p.dataset.guidePanel !== tab.dataset.guide));
+  })
+);
+
 loadBoss();
+loadClip();
 const timer = setInterval(() => !document.hidden && loadBoss(), 60000);
 SinnersNav.onLeave(() => clearInterval(timer));

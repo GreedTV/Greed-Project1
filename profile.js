@@ -52,7 +52,17 @@ function svg(tag, attrs = {}) {
   return node;
 }
 
+// Any response that earned achievements shows them as pop-ups
 async function api(path, body) {
+  const data = await rawApi(path, body);
+  if (data && data.achievements && Array.isArray(data.achievements) && data.achievements.length) {
+    SinnersToast.achievements(data.achievements);
+    loadExtras();
+  }
+  return data;
+}
+
+async function rawApi(path, body) {
   const res = await fetch(`${API}${path}`, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
@@ -94,7 +104,9 @@ function renderHero() {
   $("xp-fill").style.width = h.next ? `${Math.min(100, (h.xp / h.next) * 100)}%` : "100%";
   $("xp-text").textContent = h.next ? `${h.xp} / ${h.next} XP to level ${h.level + 1}` : "Max level reached!";
   const figure = $("hero-figure");
-  figure.replaceChildren(heroSvg(h.look, worn));
+  figure.replaceChildren(heroSvg(h.look, worn, h.style || {}));
+  const pet = petEmoji(h.style);
+  if (pet) figure.append(el("span", "hero-pet", pet));
   figure.classList.toggle("away", !!state.expedition && !state.expedition.done);
   const stat = (icon, label, key) => {
     const box = el("div", "hero-stat");
@@ -376,7 +388,7 @@ async function collect() {
     if (r.bossDealt) lines.push(`👹 It also hit the world boss for ${r.bossDealt.toLocaleString()}.`);
     await playFight({
       title: `${r.dungeon.emoji} ${r.dungeon.name}`,
-      a: { name: before.hero.name, look: before.hero.look, worn: wornFrom(before), ...r.me },
+      a: { name: before.hero.name, look: before.hero.look, style: before.hero.style, worn: wornFrom(before), ...r.me },
       b: { name: m.name, emoji: m.emoji, ...m },
       log: r.log,
       won: r.won,
@@ -388,6 +400,7 @@ async function collect() {
     loadProfile();
     loadDaily();
     loadBoss();
+    loadExtras();
   } catch (err) {
     showResult(`⚠️ ${err.message}`);
   } finally {
@@ -411,7 +424,7 @@ let fightDone = null;
 
 function fighterBox(box, f) {
   const pic = el("div", "fighter-pic");
-  if (f.look) pic.append(heroSvg(f.look, f.worn || {}));
+  if (f.look) pic.append(heroSvg(f.look, f.worn || {}, f.style || {}));
   else pic.append(el("span", "fighter-emoji", f.emoji || "👾"));
   const bar = el("div", "hp-bar");
   const fill = el("span");
@@ -489,9 +502,21 @@ function playFight({ title, a, b, log, won, result }) {
 
 async function loadArena() {
   let top = [];
+  let season = null;
   try {
-    top = (await (await fetch(`${API}/arena`)).json()).top || [];
+    const r = await (await fetch(`${API}/arena`)).json();
+    top = r.top || [];
+    season = r.season;
   } catch (e) {}
+  if (season) {
+    const name = new Date(season.endsAt - 86400000).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+    const bar = $("season-bar");
+    bar.replaceChildren(
+      el("strong", null, `🗓️ Season: ${name}`),
+      el("span", "hint", `ends in ${fmtTime(season.endsAt - Date.now())} · top 3 win 🪙 ${season.prizes.join(" / ")} and a title · 10+ duels earn 🪙 100`),
+      ...(season.last.length ? [el("span", "hint", `Last season: ${season.last.map((p) => `${["👑", "🥈", "🥉"][p.rank - 1]} ${p.name} (${p.rating})`).join("  ")}`)] : [])
+    );
+  }
   const h = state.hero;
   const me = $("arena-me");
   const find = el("button", "button", "⚔️ Find an opponent");
@@ -508,7 +533,7 @@ async function loadArena() {
   $("arena-top").replaceChildren(
     ...(top.length ? top : []).map((p, i) => {
       const li = el("li", "arena-row" + (p.userId === myId ? " me" : ""));
-      li.append(el("span", "lb-rank", ["🥇", "🥈", "🥉"][i] || `${i + 1}`), el("span", "lb-name", `${p.name} · Lv ${p.level}`), el("span", "lb-score", `${p.rating}`));
+      li.append(el("span", "lb-rank", ["🥇", "🥈", "🥉"][i] || `${i + 1}`), el("span", "lb-name", `${p.badge ? p.badge + " " : ""}${p.name} · Lv ${p.level}`), el("span", "lb-score", `${p.rating}`));
       if (p.userId !== myId) {
         const b = el("button", "link-btn", "Duel");
         b.type = "button";
@@ -784,6 +809,102 @@ async function loadBoss() {
   } catch (e) {}
 }
 
+// ---------- Achievements, badge and wardrobe ----------
+
+let extras = null;
+const petEmoji = (style) => {
+  const c = extras && style && style.pet && extras.catalog.find((x) => x.id === style.pet);
+  return c ? c.emoji : style && style.pet ? "🐾" : "";
+};
+
+async function extrasPost(body) {
+  const r = await rawApi("/profile/extras", body);
+  extras = { ...extras, achievements: r.achievements, cosmetics: r.cosmetics, catalog: r.catalog };
+  renderExtras();
+  return r;
+}
+
+function renderExtras() {
+  if (!extras) return;
+  const a = extras.achievements;
+  const earned = a.list.filter((x) => x.earned).length;
+  $("ach-count").textContent = `(${earned} / ${a.list.length})`;
+  $("ach-grid").replaceChildren(
+    ...a.list.map((x) => {
+      const b = el("button", "ach" + (x.earned ? " earned" : "") + (a.badge === x.id ? " badge" : ""));
+      b.type = "button";
+      b.title = `${x.name}: ${x.text}${x.coins ? ` (+${x.coins} 🪙)` : ""}${x.earned ? (a.badge === x.id ? "\nShown as your badge (click to remove)" : "\nClick to show it as your badge") : ""}`;
+      b.append(el("span", "ach-emoji", x.emoji), el("strong", null, x.name), el("small", null, x.text));
+      if (x.progress) {
+        const bar = el("div", "xp-bar ach-bar");
+        const fill = el("span");
+        fill.style.width = `${(x.progress[0] / x.progress[1]) * 100}%`;
+        bar.append(fill);
+        b.append(bar, el("small", "ach-progress", `${x.progress[0].toLocaleString()} / ${x.progress[1].toLocaleString()}`));
+      }
+      if (a.badge === x.id) b.append(el("span", "ach-tag", "Badge"));
+      b.disabled = !x.earned;
+      b.addEventListener("click", async () => {
+        try {
+          await extrasPost({ action: "badge", badge: a.badge === x.id ? null : x.id });
+          SinnersToast.show(a.badge === x.id ? "Badge removed" : `${x.name} is your badge now`, x.emoji);
+        } catch (err) {
+          showResult(`⚠️ ${err.message}`);
+        }
+      });
+      return b;
+    })
+  );
+
+  // Wardrobe: what they own, by kind
+  const { owned, style } = extras.cosmetics;
+  const kinds = [["hat", "🎩 Hat"], ["cape", "🧣 Cape"], ["pet", "🐾 Pet"], ["color", "🎨 Name color"]];
+  const list = $("wardrobe-list");
+  if (!owned.length) {
+    const link = el("a", "button ghost", "✨ Browse cosmetics");
+    link.href = "/shop#cosmetics";
+    list.replaceChildren(el("p", "hint", "Hats, capes, pets and name colors from the Shop show up here."), link);
+  } else {
+    list.replaceChildren(
+      ...kinds.map(([kind, label]) => {
+        const mine = extras.catalog.filter((c) => c.kind === kind && owned.includes(c.id));
+        const row = el("div", "wardrobe-row");
+        row.append(el("span", "hint", label));
+        const opts = el("div", "wardrobe-opts");
+        const current = kind === "color" ? style.color && `color-${style.color}` : style[kind];
+        const chip = (id, text, on) => {
+          const b = el("button", "wardrobe-chip" + (on ? " on" : ""), text);
+          b.type = "button";
+          b.addEventListener("click", async () => {
+            try {
+              await extrasPost({ action: "wear", id });
+              await loadHero();
+            } catch (err) {
+              showResult(`⚠️ ${err.message}`);
+            }
+          });
+          return b;
+        };
+        opts.append(chip(`none:${kind}`, "None", !current));
+        mine.forEach((c) => opts.append(chip(c.id, `${c.emoji} ${c.name}`, current === c.id)));
+        if (!mine.length) opts.append(el("span", "hint", "none owned"));
+        row.append(opts);
+        return row;
+      })
+    );
+  }
+}
+
+async function loadExtras() {
+  try {
+    const r = await rawApi("/profile/extras");
+    extras = r;
+    renderExtras();
+    if (r.fresh && r.fresh.length) SinnersToast.achievements(r.fresh);
+    if (state) renderHero(); // pet
+  } catch (e) {}
+}
+
 // ---------- Profile numbers ----------
 
 const GAME_FORMAT = {
@@ -841,7 +962,8 @@ async function start() {
     loadArena();
     loadDaily();
     loadBoss();
-    if (["#arena", "#daily", "#boss"].includes(location.hash)) $(location.hash.slice(1)).scrollIntoView();
+    loadExtras();
+    if (["#arena", "#daily", "#boss", "#achievements", "#wardrobe"].includes(location.hash)) $(location.hash.slice(1)).scrollIntoView();
   } catch (err) {
     $("profile-head").replaceChildren(el("p", "hint", `Couldn't load your profile: ${err.message}`));
   }

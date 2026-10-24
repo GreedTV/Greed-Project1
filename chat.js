@@ -46,7 +46,10 @@ function mountSinnersChat(container, room) {
         row.append(Object.assign(document.createElement("span"), { className: "chat-avatar", textContent: m.name.charAt(0).toUpperCase() }));
       }
       const content = document.createElement("div");
+      // Badge (an achievement they picked) and name color (a cosmetic) from their profile
       const name = Object.assign(document.createElement("strong"), { textContent: m.name });
+      if (m.color) name.classList.add("name-color", `name-${m.color}`);
+      if (m.badge) name.prepend(Object.assign(document.createElement("span"), { className: "chat-badge", textContent: m.badge }));
       const time = Object.assign(document.createElement("time"), {
         textContent: new Date(m.created).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });

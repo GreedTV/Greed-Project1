@@ -120,9 +120,68 @@ function renderClips() {
 
       card.append(thumb, body);
       card.addEventListener("click", () => open("clip", i));
-      return card;
+      const wrap = el("div", "clip-wrap");
+      wrap.append(card, voteBar(item));
+      return wrap;
     })
   );
+}
+
+// ---------- Clip of the Week ----------
+// One vote a week for your favorite clip (you can change it). Monday crowns last week's winner.
+let votes = null;
+
+function voteBar(item) {
+  const bar = el("div", "vote-bar");
+  const n = (votes && votes.votes[item.id]) || 0;
+  const mine = votes && votes.mine === item.id;
+  const b = el("button", "vote-btn" + (mine ? " voted" : ""), mine ? "✓ Your vote" : "🏆 Vote");
+  b.type = "button";
+  b.title = SinnersAuth.user ? "Vote for Clip of the Week" : "Log in to vote";
+  b.addEventListener("click", async () => {
+    if (!SinnersAuth.user) return SinnersAuth.login();
+    b.disabled = true;
+    try {
+      const res = await fetch(`${API}/gallery/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
+        body: JSON.stringify({ id: item.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      votes = data;
+      renderClips();
+      renderCotw();
+    } catch (err) {
+      b.disabled = false;
+      SinnersDialog.alert(err.message, { title: "Couldn't vote", icon: "⚠️" });
+    }
+  });
+  bar.append(b, el("span", "vote-count", `${n} vote${n === 1 ? "" : "s"}`));
+  return bar;
+}
+
+function renderCotw() {
+  const box = document.getElementById("cotw");
+  if (!votes) return;
+  const leaderId = Object.entries(votes.votes).sort((a, b) => b[1] - a[1])[0];
+  const leader = leaderId && items.clip.find((c) => c.id === leaderId[0]);
+  const w = votes.winner;
+  const parts = [el("strong", "cotw-title", "🏆 Clip of the Week")];
+  if (w) parts.push(el("span", null, `Last winner: "${w.title || "Untitled clip"}"${w.name ? ` by ${w.name}` : ""} with ${w.votes} vote${w.votes === 1 ? "" : "s"}`));
+  parts.push(el("span", "hint", leader ? `Leading this week: "${leader.title || "Untitled clip"}" (${leaderId[1]} vote${leaderId[1] === 1 ? "" : "s"}) · voting ends ${new Date(votes.endsAt).toLocaleDateString(undefined, { weekday: "long" })}` : "Vote for your favorite clip below. The winner's sharer gets 🪙 " + votes.prize + "."));
+  box.replaceChildren(...parts);
+  box.hidden = false;
+}
+
+async function loadVotes() {
+  try {
+    const res = await fetch(`${API}/gallery/votes`, { headers: SinnersAuth.user ? { Authorization: `Bearer ${SinnersAuth.token}` } : {} });
+    if (!res.ok) return;
+    votes = await res.json();
+    if (items.clip.length) renderClips();
+    renderCotw();
+  } catch (e) {}
 }
 
 // ---------- Viewer ----------
@@ -251,7 +310,8 @@ document.querySelectorAll(".share-form").forEach((form) => {
     try {
       const res = await fetch(`${API}/gallery/submit`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Logged in? The Worker remembers who shared it, so a Clip of the Week win can pay them
+        headers: { "Content-Type": "application/json", ...(SinnersAuth.user ? { Authorization: `Bearer ${SinnersAuth.token}` } : {}) },
         body: JSON.stringify({ kind: form.dataset.kind, ...data }),
       });
       const result = await res.json().catch(() => ({}));
@@ -268,4 +328,6 @@ document.querySelectorAll(".share-form").forEach((form) => {
   });
 });
 
-load();
+load().then(loadVotes);
+const stopVoteAuth = SinnersAuth.onChange(loadVotes);
+SinnersNav.onLeave(() => stopVoteAuth());

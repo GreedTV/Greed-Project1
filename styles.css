@@ -5534,3 +5534,428 @@ img {
     display: none;
   }
 }
+
+/* ---------- Toasts (script.js SinnersToast) ---------- */
+.toast-stack {
+  position: fixed;
+  top: 84px;
+  right: 16px;
+  z-index: 90;
+  display: grid;
+  gap: 8px;
+  max-width: min(360px, calc(100% - 32px));
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, #f59e0b 55%, var(--border));
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
+  font-weight: 600;
+  transform: translateX(120%);
+  transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.toast.show {
+  transform: translateX(0);
+}
+
+.toast-icon {
+  font-size: 1.6rem;
+}
+
+/* Chat badges and name colors (cosmetics) */
+.chat-badge {
+  margin-right: 4px;
+}
+
+.name-gold { color: #fbbf24; text-shadow: 0 0 8px rgba(251, 191, 36, 0.4); }
+.name-toxic { color: #a3e635; text-shadow: 0 0 8px rgba(163, 230, 53, 0.4); }
+.name-ice { color: #7dd3fc; text-shadow: 0 0 8px rgba(125, 211, 252, 0.45); }
+.name-fire {
+  background: linear-gradient(90deg, #f97316, #ef4444, #facc15);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.name-rainbow {
+  background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e, #3b82f6, #a855f7);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.name-fire .chat-badge,
+.name-rainbow .chat-badge {
+  color: initial;
+  -webkit-text-fill-color: initial;
+}
+
+/* ---------- Achievements and wardrobe (Profile) ---------- */
+.extras-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.ach {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  text-align: center;
+  font: inherit;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: default;
+}
+
+.ach .ach-emoji {
+  font-size: 1.7rem;
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+.ach strong {
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+
+.ach small {
+  font-size: 0.7rem;
+  line-height: 1.25;
+}
+
+.ach.earned {
+  color: var(--text);
+  cursor: pointer;
+  border-color: color-mix(in srgb, #f59e0b 45%, var(--border));
+  background: linear-gradient(170deg, color-mix(in srgb, #f59e0b 10%, var(--bg)), var(--bg));
+}
+
+.ach.earned .ach-emoji {
+  filter: none;
+  opacity: 1;
+}
+
+.ach.earned:hover {
+  border-color: #f59e0b;
+}
+
+.ach.badge {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.ach-bar {
+  width: 100%;
+  height: 5px;
+  margin-top: 4px;
+}
+
+.ach-tag {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.wardrobe-row {
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.wardrobe-row:first-child {
+  border-top: none;
+}
+
+.wardrobe-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wardrobe-chip {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.wardrobe-chip.on {
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 15%, var(--bg));
+}
+
+.hero-pet {
+  position: absolute;
+  right: 14%;
+  bottom: 10%;
+  font-size: 2rem;
+  animation: hero-idle 1.2s steps(2) infinite;
+}
+
+.season-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+/* ---------- Cosmetics (Shop) ---------- */
+.cosmetic-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cosmetic-card.owned {
+  border-color: color-mix(in srgb, #22c55e 45%, var(--border));
+}
+
+.cosmetic-preview {
+  display: grid;
+  place-items: center;
+  height: 120px;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 70%, color-mix(in srgb, var(--accent) 16%, var(--bg)), var(--bg) 70%);
+}
+
+.cosmetic-preview .hero-sprite {
+  width: 80px;
+  animation: none;
+}
+
+.cosmetic-pet {
+  font-size: 3.2rem;
+}
+
+.cosmetic-name {
+  font-size: 1.3rem;
+}
+
+.cosmetic-card .button {
+  padding: 7px 14px;
+}
+
+.cosmetic-card .button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- Watch party (Watch page) ---------- */
+.stage-wrap {
+  position: relative;
+}
+
+.party-float {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.float-emoji {
+  position: absolute;
+  bottom: 8px;
+  font-size: 2rem;
+  animation: float-up 3s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes float-up {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  12% { transform: translate(0, -20px) scale(1.1); opacity: 1; }
+  100% { transform: translate(var(--drift), -260px) scale(1); opacity: 0; }
+}
+
+.party-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+
+.party-watchers {
+  display: flex;
+  align-items: center;
+}
+
+.party-watchers img,
+.party-face {
+  width: 26px;
+  height: 26px;
+  margin-right: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--bg);
+}
+
+.party-count {
+  margin-left: 14px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.party-reacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.party-react {
+  width: 36px;
+  height: 36px;
+  font-size: 1.2rem;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+
+.party-react:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.08);
+  border-color: var(--accent-2);
+}
+
+.party-react:disabled {
+  opacity: 0.5;
+}
+
+/* ---------- Clip of the Week (Gallery, Home) ---------- */
+.clip-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.vote-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vote-btn {
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.vote-btn:hover {
+  border-color: #f59e0b;
+}
+
+.vote-btn.voted {
+  color: #f59e0b;
+  border-color: #f59e0b;
+}
+
+.vote-count {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.cotw {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(110deg, rgba(120, 53, 15, 0.45), var(--surface) 70%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.cotw-title {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.3rem;
+}
+
+.cotw-home {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 12px 18px;
+  border-radius: 16px;
+  text-decoration: none;
+  color: var(--text);
+  background: linear-gradient(110deg, rgba(120, 53, 15, 0.45), var(--surface) 70%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.cotw-thumb {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  flex: none;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 1.6rem;
+}
+
+.cotw-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Guide tabs (Home) */
+.guide-tabs {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 900px) {
+  .extras-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-pet {
+    animation: none;
+  }
+}

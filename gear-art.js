@@ -1,7 +1,7 @@
 // Pixel art for the adventure: the adventurer and their gear, drawn as SVG squares.
 // Gear looks like its tier's material (Wooden, Iron, Bogsteel, Frost, Abyssal), and higher tiers get
 // more detail: trims, horns, gems, bigger blades and a glow. Used by the Profile and Shop pages.
-//   SinnersArt.heroSvg(look, worn)   the character; worn = { slot: item }
+//   SinnersArt.heroSvg(look, worn, style)   the character; worn = { slot: item }, style = cosmetics { hat, cape }
 //   SinnersArt.gearIcon(item)        a 16 x 16 icon of one item ({ slot, tier })
 //   SinnersArt.auraOf(worn)          "frost" / "abyss" when most of the gear is tier 4 / 5
 
@@ -182,11 +182,20 @@ const SinnersArt = (() => {
 
   // ---------- The adventurer (16 x 22) ----------
 
-  function heroSvg(look, worn) {
+  const CAPES = { "cape-red": ["#b91c1c", "#7f1d1d"], "cape-purple": ["#7e22ce", "#4c1d95"], "cape-gold": ["#eab308", "#a16207"] };
+
+  function heroSvg(look, worn, style = {}) {
     const px = [];
     const put = (x, y, w, h, color) => px.push([x, y, w, h, color]);
     const mat = (slot) => tierOf(worn[slot]);
     const tier = (slot) => Math.min(5, Math.max(1, (worn[slot] && worn[slot].tier) || 1));
+
+    // Cape (cosmetic), behind everything
+    const cape = CAPES[style.cape];
+    if (cape) {
+      put(2, 9, 12, 11, cape[1]);
+      put(3, 9, 10, 10, cape[0]);
+    }
 
     // Body
     put(5, 2, 6, 6, look.skin);
@@ -323,6 +332,30 @@ const SinnersArt = (() => {
       if (n >= 2) put(1, 11, 1, 2, m.light);
       if (n >= 3) put(1, 11, 1, 2, m.accent);
       if (n >= 4) put(1, 12, 1, 1, m.gem);
+    }
+
+    // Hat (cosmetic), drawn over hair and helmet
+    if (style.hat === "hat-crown") {
+      put(5, 0, 6, 2, "#facc15");
+      [5, 7, 8, 10].forEach((x) => put(x, -1, 1, 1, "#facc15"));
+      put(7, 0, 2, 1, "#dc2626");
+      put(5, 1, 6, 1, "#ca8a04");
+    } else if (style.hat === "hat-wizard") {
+      put(7, -2, 2, 1, "#6d28d9");
+      put(6, -1, 4, 1, "#6d28d9");
+      put(5, 0, 6, 1, "#7c3aed");
+      put(3, 1, 10, 1, "#5b21b6");
+      put(8, -1, 1, 1, "#fde047");
+    } else if (style.hat === "hat-horns") {
+      put(3, -1, 1, 2, "#dc2626");
+      put(4, 0, 1, 2, "#dc2626");
+      put(12, -1, 1, 2, "#dc2626");
+      put(11, 0, 1, 2, "#dc2626");
+    } else if (style.hat === "hat-halo") {
+      put(6, -2, 4, 1, "#fde047");
+      put(5, -1, 1, 1, "#fde047");
+      put(10, -1, 1, 1, "#fde047");
+      put(6, -1, 4, 1, "rgba(253, 224, 71, 0.25)");
     }
 
     const root = svgOf("-2 -2 20 24", px, "hero-sprite", "Your adventurer");

@@ -22,8 +22,8 @@
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
-  <link rel="stylesheet" href="styles.css?v=202610250014">
-  <script src="theme.js?v=202610250014"></script>
+  <link rel="stylesheet" href="styles.css?v=202610250027">
+  <script src="theme.js?v=202610250027"></script>
 </head>
 <body>
   <header class="site-header">
@@ -60,6 +60,7 @@
     <section class="boss-strip-section" id="boss-strip-section" hidden>
       <div class="container">
         <a class="boss-strip" id="boss-strip" href="/profile#boss"></a>
+        <a class="cotw-home" id="cotw-home" href="/gallery#clips" hidden></a>
       </div>
     </section>
 
@@ -130,86 +131,169 @@
         <div class="section-head reveal">
           <h2>How to use Sinners</h2>
         </div>
-        <p class="guide-intro reveal">A quick guide to each page. Everything works without an account; log in only if you want to chat.</p>
+        <p class="guide-intro reveal">Watching works without an account. <strong>Log in with Discord</strong> (top right) to chat, earn points, level up an adventurer and join everything below. Your Discord account is your Sinners account, on the website and in our Discord bot.</p>
 
-        <div class="guide">
-          <article class="guide-card reveal">
+        <div class="game-picker guide-tabs" role="tablist" id="guide-tabs">
+          <button class="game-tab active" type="button" role="tab" data-guide="watch" aria-selected="true">📺 Watch</button>
+          <button class="game-tab" type="button" role="tab" data-guide="play" aria-selected="false">🎮 Play &amp; earn</button>
+          <button class="game-tab" type="button" role="tab" data-guide="adventure" aria-selected="false">⚔️ Adventure</button>
+          <button class="game-tab" type="button" role="tab" data-guide="shop" aria-selected="false">🛒 Shop &amp; style</button>
+          <button class="game-tab" type="button" role="tab" data-guide="community" aria-selected="false">👥 Community</button>
+        </div>
+
+        <div class="guide" data-guide-panel="watch">
+          <article class="guide-card">
             <div class="guide-head">
               <span class="guide-icon">▶</span>
-              <div>
-                <h3>Watch</h3>
-                <a href="/watch">Open Watch →</a>
-              </div>
+              <div><h3>Watch</h3><a href="/watch">Open Watch →</a></div>
             </div>
             <ol>
-              <li><strong>Add a streamer:</strong> use the <em>Kick</em>, <em>Twitch</em> or <em>YouTube</em> card, type their name (or @handle on YouTube) and press <em>Add</em>.</li>
-              <li><strong>Wrong person?</strong> Click <em>✎ Fix</em> next to them and paste their channel link instead.</li>
-              <li><strong>Watch:</strong> click a streamer in your list. Turn on <em>Multi-view</em> to watch up to 4 at once.</li>
-              <li><strong>Controls under the player:</strong> volume, quality (Kick and Twitch), <em>⛶</em> fullscreen and <em>⧉</em> mini player.</li>
-              <li><strong>Not live yet?</strong> Click <em>🔕</em> next to a Kick or YouTube streamer to turn on alerts (<em>🔔</em>).</li>
-              <li><strong>Chat:</strong> use the tabs beside the player for Sinners chat or the streamer's own chat. <em>💬 Hide chat</em> gives the video more room.</li>
+              <li><strong>Add a streamer</strong> with the <em>Kick</em>, <em>Twitch</em> or <em>YouTube</em> card (name or @handle). Wrong person? <em>✎ Fix</em> and paste their link.</li>
+              <li><strong>Multi-view</strong> shows up to 4 streams at once. Under the player: volume, quality, <em>⛶</em> fullscreen and <em>⧉</em> mini player (keeps playing on other pages).</li>
+              <li><strong>Chat</strong> beside the player: Sinners chat or the streamer's own. <em>🔕 → 🔔</em> on a Kick or YouTube streamer alerts you when they go live.</li>
+              <li><strong>Watch party:</strong> see who else is watching on Sinners and tap <em>🔥 😂 👏 …</em> to send reactions that float over the video for everyone.</li>
+              <li><strong>Earn while you watch:</strong> logged in, your adventurer gets a little XP every minute (up to 2 hours a day).</li>
             </ol>
           </article>
-
-          <article class="guide-card reveal">
+          <article class="guide-card">
             <div class="guide-head">
-              <span class="guide-icon">⏭</span>
-              <div>
-                <h3>Content</h3>
-                <a href="/content">Open Content →</a>
-              </div>
+              <span class="guide-icon">📺</span>
+              <div><h3>Content</h3><a href="/content">Open Content →</a></div>
             </div>
             <ol>
-              <li><strong>Add videos:</strong> paste a YouTube video or playlist link and press <em>Add</em>.</li>
-              <li><strong>Your queue</strong> plays in order and is saved for next time. Click any item to jump to it.</li>
-              <li><strong>Skip</strong> with <em>⏮ ⏭</em>, or press <em>⧉</em> to keep it playing in the mini player.</li>
-              <li><strong>Quality:</strong> YouTube only allows changing it with <em>⚙</em> inside the YouTube player.</li>
+              <li><strong>Browse YouTube</strong> with the search bar or categories like Gaming, 🔴 Live now and Streamer highlights.</li>
+              <li><strong>Click a video</strong> to play it, or <em>+ Queue</em> to watch it next. Paste any YouTube video or playlist link too.</li>
+              <li><strong>Your queue</strong> is saved for next time; <em>⏮ ⏭</em> to skip, <em>⧉</em> for the mini player.</li>
             </ol>
           </article>
+        </div>
 
-          <article class="guide-card reveal">
+        <div class="guide" data-guide-panel="play" hidden>
+          <article class="guide-card">
+            <div class="guide-head">
+              <span class="guide-icon">🪙</span>
+              <div><h3>Points</h3><a href="/profile">Your profile →</a></div>
+            </div>
+            <ol>
+              <li><strong>You start with 100.</strong> Earn more from games, daily quests, your login streak, adventures, duels, the world boss and achievements.</li>
+              <li><strong>Spend them</strong> in the <a href="/shop">Shop</a>: gear, potions, cosmetics and special rewards.</li>
+              <li><strong>Just for fun:</strong> points can't be bought or turned into money.</li>
+            </ol>
+          </article>
+          <article class="guide-card">
             <div class="guide-head">
               <span class="guide-icon">🎮</span>
-              <div>
-                <h3>Games</h3>
-                <a href="/games">Open Games →</a>
-              </div>
+              <div><h3>Games</h3><a href="/games">Open Games →</a></div>
             </div>
             <ol>
-              <li><strong>Play</strong> <em>⚡ Quick Draw</em>, <em>🎯 Target Rush</em> or <em>⌨️ Chat Typer</em>. Logged in, your best score goes on the leaderboard.</li>
-              <li><strong>Earn points 🪙:</strong> you start with 100, and every game you finish earns more (up to 300 a day).</li>
-              <li><strong>Bet them</strong> in <em>🎨 Color Clash</em> or <em>🍀 Lucky Number</em>: new rounds every minute, winners split the pot. Points are just for fun.</li>
+              <li><strong>Mini games:</strong> <em>⚡ Quick Draw</em>, <em>🎯 Target Rush</em>, <em>⌨️ Chat Typer</em>. Better scores earn more (up to 300 a day) and go on the leaderboard.</li>
+              <li><strong>Betting games:</strong> <em>🎨 Color Clash</em> and <em>🍀 Lucky Number</em> run a new round every minute for everyone. Winners split the pot plus a small site bonus. The <em>❓ How this game works</em> box explains it all.</li>
             </ol>
           </article>
+          <article class="guide-card">
+            <div class="guide-head">
+              <span class="guide-icon">📅</span>
+              <div><h3>Daily quests &amp; streak</h3><a href="/profile#daily">Today's quests →</a></div>
+            </div>
+            <ol>
+              <li><strong>Every day you visit,</strong> claim your 🔥 streak reward: more each day, a bonus every 7th day and an epic item on day 30. Miss a day and it starts over.</li>
+              <li><strong>3 daily quests</strong> (watch, play, adventure, duel, bet, chat) pay coins and XP. Finish all 3 for a 🎁 bonus chest. New quests at midnight UTC.</li>
+            </ol>
+          </article>
+        </div>
 
-          <article class="guide-card reveal">
+        <div class="guide" data-guide-panel="adventure" hidden>
+          <article class="guide-card">
+            <div class="guide-head">
+              <span class="guide-icon">🧝</span>
+              <div><h3>Your adventurer</h3><a href="/profile">Open your profile →</a></div>
+            </div>
+            <ol>
+              <li><strong>Click your name</strong> (top right) for your profile. A pixel adventurer is made for you, with <em>⚔️ Attack</em>, <em>🛡️ Defense</em> and <em>❤️ HP</em>.</li>
+              <li><strong>Level up</strong> to grow your stats, and wear gear in 8 slots: helmet, chest, legs, shoes, gloves, weapon, shield, ring. Rarer gear is stronger.</li>
+              <li><strong>Potions and scrolls</strong> boost Attack, Defense, HP, XP or loot for your next 3 fights.</li>
+            </ol>
+          </article>
+          <article class="guide-card">
+            <div class="guide-head">
+              <span class="guide-icon">🗺️</span>
+              <div><h3>Adventures</h3><a href="/profile">World map →</a></div>
+            </div>
+            <ol>
+              <li><strong>Pick a place on the world map</strong>: 🌲 Forest, 🕳️ Caves, 🐸 Swamp, 🏔️ Mountains, 😈 Abyss. Each unlocks at a higher level and takes longer.</li>
+              <li><strong>Your adventurer fights the region's boss</strong> while away (you can close the page). Come back and <em>🎁 Collect</em>: XP, coins and sometimes loot.</li>
+              <li><strong>The win chance</strong> is shown before you go; stronger gear raises it.</li>
+            </ol>
+          </article>
+          <article class="guide-card">
+            <div class="guide-head">
+              <span class="guide-icon">🏟️</span>
+              <div><h3>Arena &amp; world boss</h3><a href="/profile#arena">Arena →</a></div>
+            </div>
+            <ol>
+              <li><strong>Duel</strong> other players' adventurers (they don't need to be online). Wins raise your rating; 10 duels a day.</li>
+              <li><strong>Monthly seasons:</strong> the top 3 win coins and a 👑 🥈 🥉 title; ratings then soften back toward 1000.</li>
+              <li><strong>👹 Weekly world boss:</strong> everyone fights it together. Adventures, duels and <em>⚔️ Strike</em> (every 4 hours) damage it. When it falls, everyone who fought gets a chest, and the top 3 get gear.</li>
+            </ol>
+          </article>
+        </div>
+
+        <div class="guide" data-guide-panel="shop" hidden>
+          <article class="guide-card">
+            <div class="guide-head">
+              <span class="guide-icon">🛒</span>
+              <div><h3>Shop</h3><a href="/shop">Open Shop →</a></div>
+            </div>
+            <ol>
+              <li><strong>⚔️ Adventure:</strong> gear for all 8 slots in 5 tiers, Wooden to Abyssal, that unlock as you level. Never sells out; sells back for half.</li>
+              <li><strong>🧪 Extras:</strong> potions and scrolls (3 uses each).</li>
+              <li><strong>✨ Cosmetics:</strong> hats, capes, pets and chat name colors. Looks only.</li>
+              <li><strong>🎁 Redeem:</strong> special rewards from the Sinners team, handed out after you buy them.</li>
+            </ol>
+          </article>
+          <article class="guide-card">
+            <div class="guide-head">
+              <span class="guide-icon">🏅</span>
+              <div><h3>Achievements &amp; badges</h3><a href="/profile#achievements">See yours →</a></div>
+            </div>
+            <ol>
+              <li><strong>Earn achievements</strong> by playing: reach levels, win adventures and duels, keep streaks, beat bosses… Each pays coins once.</li>
+              <li><strong>Pick one as your badge.</strong> It shows next to your name in chat and the arena.</li>
+              <li><strong>Your Wardrobe</strong> on the profile lets you swap hats, capes, pets and name colors any time.</li>
+            </ol>
+          </article>
+        </div>
+
+        <div class="guide" data-guide-panel="community" hidden>
+          <article class="guide-card">
             <div class="guide-head">
               <span class="guide-icon">🖼</span>
-              <div>
-                <h3>Gallery</h3>
-                <a href="/gallery">Open Gallery →</a>
-              </div>
+              <div><h3>Gallery &amp; Clip of the Week</h3><a href="/gallery">Open Gallery →</a></div>
             </div>
             <ol>
-              <li><strong>Browse</strong> the <em>Images</em> and <em>Clips</em> tabs. Click anything to view it bigger.</li>
-              <li><strong>Share an image:</strong> right-click an image online, choose <em>Copy image address</em>, and paste it.</li>
-              <li><strong>Share a clip:</strong> paste a Kick clip, Twitch clip or YouTube video link.</li>
-              <li><strong>Shared links appear after a quick review</strong> to keep the gallery clean.</li>
+              <li><strong>Share</strong> image links and Kick, Twitch or YouTube clips. They appear after a quick review.</li>
+              <li><strong>🏆 Vote</strong> for one clip a week. On Monday the winner goes on the home page, and whoever shared it gets coins.</li>
             </ol>
           </article>
-
-          <article class="guide-card reveal">
+          <article class="guide-card">
             <div class="guide-head">
-              <span class="guide-icon">⚙</span>
-              <div>
-                <h3>Account &amp; settings</h3>
-              </div>
+              <span class="guide-icon">🤖</span>
+              <div><h3>Discord bot</h3></div>
             </div>
             <ol>
-              <li><strong>Log in</strong> (top right) with Discord to write in Sinners chat. It only shares your name and picture.</li>
-              <li><strong>Light or dark:</strong> switch with <em>☀️ / 🌙</em> at the top.</li>
-              <li><strong>Mini player tip:</strong> while a stream is in the mini player, you can open other pages and it keeps playing. Click <em>⤢</em> to go back.</li>
-              <li><strong>Your lists stay on your device:</strong> streamers, queue and alerts are saved in this browser.</li>
+              <li><strong>Type <em>/help</em></strong> in our Discord for the full guide. It's the same account as the website.</li>
+              <li><strong>Play from Discord:</strong> <em>/daily</em>, <em>/dungeon</em>, <em>/duel</em>, <em>/boss</em>, <em>/points</em>, <em>/top</em>, <em>/shop</em>, <em>/round</em>.</li>
+            </ol>
+          </article>
+          <article class="guide-card">
+            <div class="guide-head">
+              <span class="guide-icon">⚙</span>
+              <div><h3>Account &amp; more</h3><a href="/stats">Site stats →</a></div>
+            </div>
+            <ol>
+              <li><strong>Log in</strong> with Discord; it only shares your name and picture.</li>
+              <li><strong>Light or dark:</strong> <em>☀️ / 🌙</em> at the top. <strong>🟢 online</strong> (top left) shows how many people are here.</li>
+              <li><strong>Streamers, queue and alerts</strong> are saved in this browser.</li>
             </ol>
           </article>
         </div>
@@ -235,15 +319,15 @@
     </div>
   </footer>
 
-  <script src="script.js?v=202610250014"></script>
-  <script src="gear-art.js?v=202610250014"></script>
-  <script src="config.js?v=202610250014"></script>
-  <script src="presence.js?v=202610250014"></script>
-  <script src="auth.js?v=202610250014"></script>
-  <script src="streak.js?v=202610250014"></script>
-  <script src="alerts.js?v=202610250014"></script>
-  <script src="chat.js?v=202610250014"></script>
-  <script src="mini.js?v=202610250014"></script>
-  <script src="nav.js?v=202610250014"></script>
+  <script src="script.js?v=202610250027"></script>
+  <script src="gear-art.js?v=202610250027"></script>
+  <script src="config.js?v=202610250027"></script>
+  <script src="presence.js?v=202610250027"></script>
+  <script src="auth.js?v=202610250027"></script>
+  <script src="streak.js?v=202610250027"></script>
+  <script src="alerts.js?v=202610250027"></script>
+  <script src="chat.js?v=202610250027"></script>
+  <script src="mini.js?v=202610250027"></script>
+  <script src="nav.js?v=202610250027"></script>
 </body>
 </html>

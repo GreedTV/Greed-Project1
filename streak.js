@@ -67,6 +67,7 @@
         });
         const r = await res.json();
         if (!res.ok) throw new Error(r.error);
+        SinnersToast.achievements(r.achievements);
         const extras = [r.potion && `${r.potion.emoji} ${r.potion.name} ×${r.potion.uses}`, r.item && (r.item.soldFor ? `${r.item.name} (sold, bag full)` : r.item.name)].filter(Boolean);
         text.replaceChildren(el("strong", null, `🔥 ${r.streak} day streak · +${r.coins} 🪙`), el("span", null, extras.length ? `and ${extras.join(", ")}` : "Come back tomorrow to keep it going."));
         const link = el("a", "button ghost", "📋 Daily quests");

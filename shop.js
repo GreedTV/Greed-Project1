@@ -4,12 +4,13 @@
 const API = WORKER_URL.replace(/\/$/, "");
 const SLOT_ICON = { helmet: "🪖", chest: "🥋", legs: "👖", shoes: "🥾", gloves: "🧤", weapon: "⚔️", shield: "🛡️", ring: "💍" };
 const RARITY_COLOR = { common: "#9ca3af", uncommon: "#22c55e", rare: "#3b82f6", epic: "#a855f7", legendary: "#f59e0b" };
-const TABS = ["adventure", "extras", "redeem"];
+const TABS = ["adventure", "extras", "cosmetics", "redeem"];
 
 const $ = (id) => document.getElementById(id);
 let adv = null; // gear catalog, extras, your level, boosts and points
 let redeemItems = null;
 let points = null;
+let cos = null; // cosmetics catalog and what you own
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -181,6 +182,59 @@ function flash(text) {
   flash.timer = setTimeout(() => box.classList.remove("show"), 3500);
 }
 
+// ---------- Cosmetics ----------
+
+const PREVIEW_LOOK = { skin: "#e0ac87", hair: "#2b1b17", style: 0, eyes: "#1e293b", shirt: "#475569", pants: "#334155" };
+
+function renderCosmetics() {
+  const box = $("cosmetics");
+  if (!cos) return box.replaceChildren(el("p", "shop-empty", "Cosmetics are unavailable right now."));
+  const owned = new Set(cos.owned || []);
+  const labels = { hat: "🎩 Hats", cape: "🧣 Capes", pet: "🐾 Pets", color: "🎨 Name colors" };
+  box.replaceChildren(
+    ...Object.entries(labels).flatMap(([kind, label]) => {
+      const grid = el("div", "gear-grid");
+      cos.catalog
+        .filter((c) => c.kind === kind)
+        .forEach((c) => {
+          const card = el("article", "cosmetic-card" + (owned.has(c.id) ? " owned" : ""));
+          const preview = el("div", "cosmetic-preview");
+          if (kind === "hat" || kind === "cape") preview.append(SinnersArt.heroSvg(PREVIEW_LOOK, {}, { [kind]: c.id }));
+          else if (kind === "pet") preview.append(el("span", "cosmetic-pet", c.emoji));
+          else preview.append(el("strong", `name-color name-${c.id.slice(6)} cosmetic-name`, SinnersAuth.user ? SinnersAuth.user.name : "YourName"));
+          const msg = el("p", "form-msg");
+          const foot = el("div", "shop-foot");
+          foot.append(el("span", "shop-price", `🪙 ${c.price.toLocaleString()}`));
+          let label2 = "Buy";
+          let ok = true;
+          if (owned.has(c.id)) [label2, ok] = ["✓ Owned", false];
+          else if (!SinnersAuth.user) label2 = "Log in to buy";
+          else if (!canAfford(c.price)) [label2, ok] = [`Need ${(c.price - points).toLocaleString()} more`, false];
+          foot.append(buyButton(label2, ok, SinnersAuth.user ? (b, m) => buyCosmetic(c, b, m) : SinnersAuth.login, msg));
+          card.append(preview, el("strong", null, `${c.emoji} ${c.name}`), foot, msg);
+          grid.append(card);
+        });
+      return [el("div", "shop-tier-head", label), grid];
+    })
+  );
+}
+
+async function buyCosmetic(c, button, msg) {
+  if (!(await SinnersDialog.confirm(`It costs 🪙 ${c.price.toLocaleString()} points. You'll wear it right away; swap it any time in your Wardrobe.`, { title: `Buy ${c.name}?`, yes: "Buy", icon: c.emoji }))) return;
+  button.disabled = true;
+  try {
+    const r = await post("/profile/extras", { action: "buy", id: c.id });
+    points = r.points;
+    cos = { catalog: r.catalog, owned: r.cosmetics.owned };
+    renderAll();
+    flash(`${c.emoji} ${c.name} is yours, and you're wearing it!`);
+  } catch (err) {
+    button.disabled = false;
+    msg.className = "form-msg error";
+    msg.textContent = err.message;
+  }
+}
+
 // ---------- Redeem (admin rewards) ----------
 
 function renderRedeem() {
@@ -269,6 +323,7 @@ function renderAll() {
   renderBar();
   renderGear();
   renderExtras();
+  renderCosmetics();
   renderRedeem();
 }
 
@@ -278,6 +333,19 @@ async function load() {
     fetch(`${API}/shop`).then((res) => res.json().then((d) => (res.ok ? d : Promise.reject(d)))),
   ]);
   adv = a.status === "fulfilled" ? a.value : null;
+  // Cosmetics: the catalog comes with your profile extras (logged in) or the public list
+  try {
+    if (SinnersAuth.user) {
+      const res = await fetch(`${API}/profile/extras`, { headers: authHeaders() });
+      const d = await res.json();
+      cos = res.ok ? { catalog: d.catalog, owned: d.cosmetics.owned } : null;
+    } else {
+      const res = await fetch(`${API}/cosmetics`);
+      cos = res.ok ? { catalog: (await res.json()).catalog, owned: [] } : null;
+    }
+  } catch (e) {
+    cos = null;
+  }
   redeemItems = r.status === "fulfilled" ? r.value.items || [] : null;
   points = adv && adv.points != null ? adv.points : null;
   renderAll();

@@ -992,6 +992,100 @@ async function addFromUrl() {
 render();
 addFromUrl().then((added) => added && render());
 
+// ---------- Watch party ----------
+// Logged-in viewers of the same stream see each other, and emoji reactions float over the video for
+// everyone watching it on Sinners. The stream is the one whose chat is shown.
+const PARTY_EMOJIS = ["🔥", "😂", "😮", "👏", "💀", "❤️", "🎉", "😡"];
+const partyBar = document.getElementById("party-bar");
+const partyFloat = document.getElementById("party-float");
+let partyRoom = null;
+let partySince = 0;
+let partyBeatAt = 0;
+
+function floatEmoji(emoji) {
+  const e = document.createElement("span");
+  e.className = "float-emoji";
+  e.textContent = emoji;
+  e.style.left = `${10 + Math.random() * 80}%`;
+  e.style.setProperty("--drift", `${Math.round(Math.random() * 60 - 30)}px`);
+  partyFloat.append(e);
+  setTimeout(() => e.remove(), 3200);
+}
+
+function renderPartyButtons() {
+  const box = document.getElementById("party-reacts");
+  box.replaceChildren(
+    ...PARTY_EMOJIS.map((emoji) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "party-react";
+      b.textContent = emoji;
+      b.title = SinnersAuth.user ? "React" : "Log in to react";
+      b.addEventListener("click", async () => {
+        if (!SinnersAuth.user) return SinnersAuth.login();
+        if (!partyRoom) return;
+        b.disabled = true;
+        setTimeout(() => (b.disabled = false), 1000);
+        try {
+          const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/party/${partyRoom}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
+            body: JSON.stringify({ emoji }),
+          });
+          if (res.ok) partyPoll();
+        } catch (e) {}
+      });
+      return b;
+    })
+  );
+}
+
+async function partyPoll() {
+  const room = chatStreamId && /^(kick|twitch|youtube):[a-z0-9_-]{2,40}$/.test(chatStreamId) ? chatStreamId : null;
+  if (room !== partyRoom) {
+    partyRoom = room;
+    partySince = Date.now();
+    partyBeatAt = 0;
+  }
+  partyBar.hidden = !partyRoom;
+  if (!partyRoom || document.hidden) return;
+  const beat = SinnersAuth.user && Date.now() - partyBeatAt > 30000;
+  try {
+    const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/party/${partyRoom}?since=${partySince}${beat ? "&beat=1" : ""}`, {
+      headers: SinnersAuth.user ? { Authorization: `Bearer ${SinnersAuth.token}` } : {},
+    });
+    if (!res.ok) return;
+    if (beat) partyBeatAt = Date.now();
+    const data = await res.json();
+    data.reactions.forEach((r, i) => setTimeout(() => floatEmoji(r.emoji), i * 120));
+    if (data.reactions.length) partySince = data.reactions[data.reactions.length - 1].created;
+    const box = document.getElementById("party-watchers");
+    const faces = data.watchers.slice(0, 6).map((w) => {
+      if (w.avatar) {
+        const img = document.createElement("img");
+        img.src = w.avatar;
+        img.alt = "";
+        img.title = w.name;
+        return img;
+      }
+      return Object.assign(document.createElement("span"), { className: "party-face", textContent: w.name.charAt(0).toUpperCase(), title: w.name });
+    });
+    const count = Object.assign(document.createElement("span"), {
+      className: "party-count",
+      textContent: data.watchers.length ? `👀 ${data.watchers.length} watching on Sinners` : "👀 Watch party: log in to show up here",
+    });
+    box.replaceChildren(...faces, count);
+  } catch (e) {}
+}
+
+renderPartyButtons();
+const partyTimer = setInterval(partyPoll, 4000);
+setTimeout(partyPoll, 800);
+const stopPartyAuth = SinnersAuth.onChange(() => {
+  partyBeatAt = 0;
+  renderPartyButtons();
+});
+
 // ---------- Watch-time XP ----------
 // While logged in with a stream open and this tab visible, your adventurer (Profile page) earns a
 // little XP each minute, up to 2 hours a day. The Worker checks the timing.
@@ -1036,6 +1130,8 @@ const stopWatchAuth = SinnersAuth.onChange(showWatchXp);
 // In-site navigation (nav.js): stop players and chat when this page closes,
 // and pick up a new streamer link (/watch?add=...) when coming back to it
 SinnersNav.onLeave(() => {
+  clearInterval(partyTimer);
+  stopPartyAuth();
   clearInterval(watchTimer);
   stopWatchAuth();
   if (stopChat) stopChat();

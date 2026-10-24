@@ -46,6 +46,12 @@
 //   GET  /arena                        -> top adventurers by arena rating
 //   GET  /boss                         -> this week's world boss, top damage dealers (and yours if logged in)
 //   POST /boss                         -> { action: "strike" } (every 4 hours) | { action: "claim", week? }   (logged in)
+//   GET  /profile/extras               -> achievements, badge, cosmetics owned / worn   (logged in)
+//   POST /profile/extras               -> { action: "badge", badge } | { action: "buy" | "wear", id }   (logged in)
+//   GET  /party/<room>?since=&beat=1   -> who's watching this stream, new emoji reactions
+//   POST /party/<room>                 -> { emoji }   (logged in)
+//   GET  /gallery/votes                -> this week's Clip of the Week votes, your vote, last week's winner
+//   POST /gallery/vote                 -> { id }   (logged in)
 //   GET  /daily                        -> today's 3 quests with progress, the bonus chest and the login streak   (logged in)
 //   POST /daily                        -> { action: "checkin" } | { action: "claim", index } | { action: "bonus" }   (logged in)
 //   GET  /shop/adventure               -> gear for each tier, potions and scrolls (and your level and boosts if logged in)
@@ -134,12 +140,24 @@ export default {
         if (request.method === "POST") return await discordAdminAction(request, env, cors);
       }
 
-      if (path === "/hero" || path === "/profile" || path === "/arena" || path === "/daily" || path === "/boss") {
+      const party = path.replace(/%3A/gi, ":").match(/^\/party\/([a-z]+:[a-z0-9_-]+)$/);
+      if (party || path === "/gallery/votes" || path === "/gallery/vote") {
+        if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
+        await ensureSchema(env);
+        if (party && request.method === "GET") return await partyGet(party[1], request, url, env, cors);
+        if (party && request.method === "POST") return await partyReact(party[1], request, env, cors);
+        if (path === "/gallery/votes" && request.method === "GET") return await clipVotesGet(request, env, cors);
+        if (path === "/gallery/vote" && request.method === "POST") return await clipVote(request, env, cors);
+      }
+
+      if (path === "/hero" || path === "/profile" || path === "/profile/extras" || path === "/arena" || path === "/daily" || path === "/boss") {
         if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
         await ensureSchema(env);
         if (path === "/hero" && request.method === "GET") return await heroGet(request, env, cors);
         if (path === "/hero" && request.method === "POST") return await heroAction(request, env, cors);
         if (path === "/profile" && request.method === "GET") return await profileGet(request, env, cors);
+        if (path === "/profile/extras" && request.method === "GET") return await profileExtrasGet(request, env, cors);
+        if (path === "/profile/extras" && request.method === "POST") return await profileExtrasAction(request, env, cors);
         if (path === "/arena" && request.method === "GET") return await arenaGet(request, env, cors);
         if (path === "/daily" && request.method === "GET") return await dailyGet(request, env, cors);
         if (path === "/boss" && request.method === "GET") return await bossGet(request, env, cors);
@@ -163,11 +181,12 @@ export default {
         if (!env.GALLERY) return text("Not found", 404, cors);
         return await shopImageGet(shopImage[1], env, cors);
       }
-      if (path.startsWith("/shop")) {
+      if (path.startsWith("/shop") || path === "/cosmetics") {
         if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
         await ensureSchema(env);
         if (path === "/shop" && request.method === "GET") return await shopList(request, env, cors);
         if (path === "/shop/adventure" && request.method === "GET") return await adventureShopGet(request, env, cors);
+        if (path === "/cosmetics" && request.method === "GET") return json({ catalog: COSMETICS }, 200, cors);
         if (path === "/shop/adventure" && request.method === "POST") return await adventureShopBuy(request, env, cors);
         if (path === "/shop/mine" && request.method === "GET") return await shopMine(request, env, cors);
         if (path === "/shop/buy" && request.method === "POST") return await shopBuy(request, env, cors, ctx);
@@ -414,7 +433,8 @@ async function getList(env, key) {
 }
 
 async function listGallery(env, cors) {
-  const items = await getList(env, "approved");
+  // who shared an item (userId) stays private
+  const items = (await getList(env, "approved")).map(({ userId, ...item }) => item);
   return json(
     { images: items.filter((i) => i.kind === "image"), clips: items.filter((i) => i.kind === "clip") },
     200,
@@ -439,6 +459,9 @@ async function submit(request, env, cors, ctx) {
   item.title = clean(body.title, 80) || item.title || "";
   item.name = clean(body.name, 30);
   item.created = Date.now();
+  // Logged in? Remember who shared it, so a Clip of the Week win can pay them
+  const sharer = request.headers.get("Authorization") && env.DB ? await optionalUser(request, env) : null;
+  if (sharer) item.userId = sharer.id;
 
   const approved = await getList(env, "approved");
   if ([...queue, ...approved].some((i) => i.key === item.key)) fail("That link has already been shared.", 409);
@@ -742,7 +765,7 @@ async function mergeSplitAccounts(env) {
 // Bump SCHEMA_VERSION whenever tables or columns change. The database remembers the version it has,
 // so the full setup below runs once per change instead of on every cold start (which was slow
 // enough to miss Discord's 3-second limit).
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -820,6 +843,20 @@ async function ensureSchema(env) {
     ),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS streaks (user_id TEXT PRIMARY KEY, last_day TEXT NOT NULL, streak INTEGER NOT NULL, best INTEGER NOT NULL)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS bets_user ON bets (user_id, created)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS achievements (user_id TEXT NOT NULL, id TEXT NOT NULL, earned INTEGER NOT NULL, PRIMARY KEY (user_id, id))"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS cosmetics (user_id TEXT NOT NULL, id TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (user_id, id))"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS season_results (season TEXT NOT NULL, rank INTEGER NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, rating INTEGER NOT NULL, PRIMARY KEY (season, rank))"
+    ),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS party (room TEXT NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, avatar TEXT, seen INTEGER NOT NULL, last_react INTEGER, PRIMARY KEY (room, user_id))"
+    ),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS reactions (id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, emoji TEXT NOT NULL, created INTEGER NOT NULL)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS reactions_room ON reactions (room, created)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS clip_votes (week TEXT NOT NULL, user_id TEXT NOT NULL, item_id TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (week, user_id))"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS clip_winners (week TEXT PRIMARY KEY, item_id TEXT NOT NULL, votes INTEGER NOT NULL, title TEXT, link TEXT, thumb TEXT, platform TEXT, name TEXT)"
+    ),
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS bosses (week TEXT PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, hp_max INTEGER NOT NULL, " +
         "hp_left INTEGER NOT NULL, defeated_at INTEGER)"
@@ -851,6 +888,14 @@ async function ensureSchema(env) {
     "ALTER TABLE heroes ADD COLUMN watch_at INTEGER",
     "ALTER TABLE heroes ADD COLUMN watch_day TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE heroes ADD COLUMN watch_minutes INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE heroes ADD COLUMN badge TEXT",
+    "ALTER TABLE heroes ADD COLUMN style TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE heroes ADD COLUMN cleared TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE heroes ADD COLUMN watch_total INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE heroes ADD COLUMN quests_done INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE heroes ADD COLUMN duel_wins_total INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE messages ADD COLUMN badge TEXT",
+    "ALTER TABLE messages ADD COLUMN color TEXT",
   ]) {
     try {
       await env.DB.prepare(sql).run();
@@ -868,7 +913,7 @@ function checkRoom(room) {
   if (!ROOM_PATTERN.test(room)) fail("Unknown chat room", 400);
 }
 
-const MESSAGE_COLUMNS = "id, user_id AS userId, name, avatar, text, created";
+const MESSAGE_COLUMNS = "id, user_id AS userId, name, avatar, text, created, badge, color";
 
 async function chatList(room, url, env, cors) {
   checkRoom(room);
@@ -903,11 +948,12 @@ async function chatPost(room, request, env, cors) {
   if (last && Date.now() - last.created < CHAT_MIN_GAP_MS) fail("You're sending messages too fast.", 429);
 
   const created = Date.now();
-  const result = await env.DB.prepare("INSERT INTO messages (room, user_id, name, avatar, text, created) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(room, user.id, user.name, user.avatar, message, created)
+  const style = await nameStyle(env, user.id); // badge and name color, shown next to the name
+  const result = await env.DB.prepare("INSERT INTO messages (room, user_id, name, avatar, text, created, badge, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(room, user.id, user.name, user.avatar, message, created, style.badge, style.color)
     .run();
   return json(
-    { message: { id: result.meta.last_row_id, userId: user.id, name: user.name, avatar: user.avatar, text: message, created } },
+    { message: { id: result.meta.last_row_id, userId: user.id, name: user.name, avatar: user.avatar, text: message, created, badge: style.badge, color: style.color } },
     200,
     cors
   );
@@ -1009,7 +1055,8 @@ async function gameScore(request, env, cors) {
   const earned = await awardPoints(env, user, game.points(score));
   const hero = await addHeroXp(env, user.id, earned.pointsEarned);
   await bumpDaily(env, user.id, { games: 1 });
-  return json({ best: mine.score, rank: ahead.n + 1, newBest: mine.score === score, ...earned, heroXp: hero.xp, heroLevels: hero.levels }, 200, cors);
+  const achievements = await checkAchievements(env, user.id);
+  return json({ achievements, best: mine.score, rank: ahead.n + 1, newBest: mine.score === score, ...earned, heroXp: hero.xp, heroLevels: hero.levels }, 200, cors);
 }
 
 async function gamesAdminList(request, env, cors) {
@@ -1508,13 +1555,14 @@ function itemStats(slot, tier, rarity, roll = 1) {
 
 const HERO_COLUMNS =
   "user_id AS userId, name, look, level, xp, runs, wins, buffs, rating, duel_wins AS duelWins, duel_losses AS duelLosses, " +
-  "duel_day AS duelDay, duel_count AS duelCount, exp_dungeon AS expDungeon, exp_start AS expStart, exp_end AS expEnd, exp_stats AS expStats";
+  "duel_day AS duelDay, duel_count AS duelCount, exp_dungeon AS expDungeon, exp_start AS expStart, exp_end AS expEnd, exp_stats AS expStats, style";
 const ITEM_COLUMNS = "id, slot, name, rarity, power, atk, def, hp, tier, source, icon, sell, equipped, created";
 
 function parseHero(hero) {
   if (!hero) return hero;
   hero.look = JSON.parse(hero.look || "{}");
   hero.buffs = JSON.parse(hero.buffs || "{}");
+  hero.style = JSON.parse(hero.style || "{}");
   return hero;
 }
 
@@ -1612,6 +1660,7 @@ async function heroState(env, user) {
     hero: {
       name: hero.name,
       look: hero.look,
+      style: hero.style,
       level: hero.level,
       xp: hero.xp,
       next: hero.level >= MAX_LEVEL ? null : xpToNext(hero.level),
@@ -1736,6 +1785,8 @@ async function collectDungeon(env, user) {
         .run();
     }
   }
+  // Remember which regions they've beaten (for achievements)
+  if (won) await env.DB.prepare("UPDATE heroes SET cleared = cleared || ',' || ? WHERE user_id = ? AND instr(cleared, ?) = 0").bind(dungeon.id, user.id, dungeon.id).run();
   // A win also pays coins; longer, harder regions pay more per hour
   const coins = won ? between(...dungeon.coins) : 0;
   await env.DB.batch([
@@ -1767,6 +1818,7 @@ async function collectDungeon(env, user) {
 // potions count, the defender fights with plain stats. 10 duels a day; wins pay a few points.
 
 async function duel(env, user, opponentId) {
+  await seasonRollover(env);
   const hero = await heroOf(env, user);
   const day = today();
   const used = hero.duelDay === day ? hero.duelCount : 0;
@@ -1797,8 +1849,8 @@ async function duel(env, user, opponentId) {
   const delta = won ? change : -change;
   await env.DB.batch([
     env.DB.prepare(
-      `UPDATE heroes SET rating = MAX(0, rating + ?), duel_wins = duel_wins + ?, duel_losses = duel_losses + ?, duel_day = ?, duel_count = ? WHERE user_id = ?`
-    ).bind(delta, won ? 1 : 0, won ? 0 : 1, day, used + 1, user.id),
+      `UPDATE heroes SET rating = MAX(0, rating + ?), duel_wins = duel_wins + ?, duel_wins_total = duel_wins_total + ?, duel_losses = duel_losses + ?, duel_day = ?, duel_count = ? WHERE user_id = ?`
+    ).bind(delta, won ? 1 : 0, won ? 1 : 0, won ? 0 : 1, day, used + 1, user.id),
     env.DB.prepare("UPDATE heroes SET rating = MAX(0, rating - ?), duel_wins = duel_wins + ?, duel_losses = duel_losses + ? WHERE user_id = ?").bind(
       delta,
       won ? 0 : 1,
@@ -1812,8 +1864,8 @@ async function duel(env, user, opponentId) {
   const earned = won ? await awardPoints(env, user, 10) : { pointsEarned: 0 };
   const gained = await addHeroXp(env, user.id, won ? 25 : 8);
   return {
-    me: { name: hero.name, look: hero.look, level: hero.level, ...mine },
-    foe: { userId: foe.userId, name: foe.name, look: foe.look, level: foe.level, rating: foe.rating - delta, ...theirs },
+    me: { name: hero.name, look: hero.look, style: hero.style, level: hero.level, ...mine },
+    foe: { userId: foe.userId, name: foe.name, look: foe.look, style: foe.style, level: foe.level, rating: foe.rating - delta, ...theirs },
     won,
     log,
     rating: hero.rating + delta,
@@ -1828,11 +1880,13 @@ async function duel(env, user, opponentId) {
 }
 
 async function arenaGet(request, env, cors) {
+  await seasonRollover(env);
   const { results } = await env.DB.prepare(
-    "SELECT h.user_id AS userId, h.name, h.level, h.look, h.rating, h.duel_wins AS wins, h.duel_losses AS losses FROM heroes h " +
+    "SELECT h.user_id AS userId, h.name, h.level, h.look, h.rating, h.badge, h.duel_wins AS wins, h.duel_losses AS losses FROM heroes h " +
       "LEFT JOIN users u ON u.id = h.user_id WHERE COALESCE(u.banned, 0) = 0 ORDER BY h.rating DESC, h.level DESC LIMIT 15"
   ).all();
-  return json({ top: results.map((r) => ({ ...r, look: JSON.parse(r.look || "{}") })) }, 200, cors);
+  const badgeOf = (id) => (ACHIEVEMENTS.find((a) => a.id === id) || {}).emoji || null;
+  return json({ top: results.map((r) => ({ ...r, badge: badgeOf(r.badge), look: JSON.parse(r.look || "{}") })), season: await seasonInfo(env) }, 200, cors);
 }
 
 // ---------- Adventure shop ----------
@@ -1911,7 +1965,7 @@ async function watchTick(env, user) {
   if (now - (hero.at || 0) < 50000) return { ...base, counted: false, reason: "early" };
   // Claim this minute (a second tab at the same moment won't count twice)
   const claim = await env.DB.prepare(
-    "UPDATE heroes SET watch_at = ?, watch_day = ?, watch_minutes = ? WHERE user_id = ? AND COALESCE(watch_at, 0) = ?"
+    "UPDATE heroes SET watch_at = ?, watch_day = ?, watch_minutes = ?, watch_total = watch_total + 1 WHERE user_id = ? AND COALESCE(watch_at, 0) = ?"
   )
     .bind(now, day, minutes + 1, user.id, hero.at || 0)
     .run();
@@ -1968,8 +2022,9 @@ async function heroAction(request, env, cors) {
     await env.DB.prepare("UPDATE hero_items SET equipped = 0 WHERE user_id = ? AND slot = ?").bind(user.id, body.slot).run();
   } else fail("Unknown action", 400);
 
+  const achievements = ["collect", "duel", "equip"].includes(action) ? await checkAchievements(env, user.id) : [];
   const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
-  return json({ ...result, points: w ? w.points : 0, state: await heroState(env, user) }, 200, cors);
+  return json({ ...result, achievements, points: w ? w.points : 0, state: await heroState(env, user) }, 200, cors);
 }
 
 // The Profile page's numbers
@@ -2177,7 +2232,10 @@ async function dailyClaim(env, user, index) {
   if (!mark.meta || mark.meta.changes !== 1) fail("Already claimed.", 409);
   await wallet(env, user);
   await heroOf(env, user);
-  await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(q.coins, user.id).run();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(q.coins, user.id),
+    env.DB.prepare("UPDATE heroes SET quests_done = quests_done + 1 WHERE user_id = ?").bind(user.id),
+  ]);
   const gained = await addHeroXp(env, user.id, q.xp);
   return { quest: q, coins: q.coins, xp: q.xp, levels: gained.levels, level: gained.level };
 }
@@ -2206,8 +2264,9 @@ async function dailyAction(request, env, cors) {
   else if (body.action === "claim") result = await dailyClaim(env, user, body.index);
   else if (body.action === "bonus") result = await dailyBonus(env, user);
   else fail("Unknown action", 400);
+  const achievements = await checkAchievements(env, user.id);
   const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
-  return json({ ...result, points: w ? w.points : 0, state: await dailyState(env, user) }, 200, cors);
+  return json({ ...result, achievements, points: w ? w.points : 0, state: await dailyState(env, user) }, 200, cors);
 }
 
 // ---------- Weekly world boss ----------
@@ -2358,6 +2417,7 @@ async function bossClaim(env, user, week) {
     const top = BOSS_TOP_REWARDS[rank - 1];
     out.rank = rank;
     out.coins = Math.round(150 * levelScale(hero.level)) + (top ? top.coins : 0);
+    if (top) out.achievement = await grantAchievement(env, user.id, "bosstop");
     out.potion = await giveRandomBuff(env, user, 3);
     if (top) {
       const tier = TIER_LEVELS.filter((l) => hero.level >= l).length;
@@ -2393,8 +2453,365 @@ async function bossAction(request, env, cors, ctx) {
   if (body.action === "strike") result = await bossStrike(env, user, ctx);
   else if (body.action === "claim") result = await bossClaim(env, user, body.week);
   else fail("Unknown action", 400);
+  const achievements = await checkAchievements(env, user.id);
   const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
-  return json({ ...result, points: w ? w.points : 0, state: await bossState(env, user) }, 200, cors);
+  return json({ ...result, achievements, points: w ? w.points : 0, state: await bossState(env, user) }, 200, cors);
+}
+
+// ---------- Achievements and badges ----------
+// Earned automatically from what players do (checked when they open their profile and after games,
+// adventures, duels, quests and boss fights). Each pays coins once. One earned achievement (or season
+// title) can be shown as a badge next to the player's name in chat, the arena and the boss board.
+
+const ACHIEVEMENTS = [
+  { id: "welcome", emoji: "👋", name: "Welcome, Sinner", text: "Log in to Sinners", coins: 25, check: (s) => s.joined },
+  { id: "lvl5", emoji: "🌱", name: "Rookie Adventurer", text: "Reach adventurer level 5", coins: 50, check: (s) => s.level >= 5, progress: (s) => [s.level, 5] },
+  { id: "lvl10", emoji: "🗡️", name: "Seasoned Adventurer", text: "Reach adventurer level 10", coins: 100, check: (s) => s.level >= 10, progress: (s) => [s.level, 10] },
+  { id: "lvl20", emoji: "🛡️", name: "Veteran", text: "Reach adventurer level 20", coins: 250, check: (s) => s.level >= 20, progress: (s) => [s.level, 20] },
+  { id: "lvl30", emoji: "👑", name: "Living Legend", text: "Reach adventurer level 30", coins: 500, check: (s) => s.level >= 30, progress: (s) => [s.level, 30] },
+  { id: "wins10", emoji: "🐺", name: "Monster Hunter", text: "Win 10 adventures", coins: 75, check: (s) => s.wins >= 10, progress: (s) => [s.wins, 10] },
+  { id: "wins100", emoji: "⚔️", name: "Slayer", text: "Win 100 adventures", coins: 300, check: (s) => s.wins >= 100, progress: (s) => [s.wins, 100] },
+  { id: "abyss", emoji: "😈", name: "Demon Slayer", text: "Beat the Sin Demon in the Abyss", coins: 500, check: (s) => s.cleared.includes("abyss") },
+  { id: "duel10", emoji: "🏟️", name: "Gladiator", text: "Win 10 arena duels", coins: 100, check: (s) => s.duelWins >= 10, progress: (s) => [s.duelWins, 10] },
+  { id: "rating1200", emoji: "🏆", name: "Arena Elite", text: "Reach 1200 arena rating", coins: 250, check: (s) => s.rating >= 1200, progress: (s) => [s.rating, 1200] },
+  { id: "streak7", emoji: "🔥", name: "On Fire", text: "Keep a 7-day login streak", coins: 100, check: (s) => s.bestStreak >= 7, progress: (s) => [s.bestStreak, 7] },
+  { id: "streak30", emoji: "☄️", name: "Unstoppable", text: "Keep a 30-day login streak", coins: 500, check: (s) => s.bestStreak >= 30, progress: (s) => [s.bestStreak, 30] },
+  { id: "quests30", emoji: "📋", name: "Questmaster", text: "Finish 30 daily quests", coins: 200, check: (s) => s.quests >= 30, progress: (s) => [s.quests, 30] },
+  { id: "boss1", emoji: "👹", name: "Boss Fighter", text: "Hit a world boss", coins: 50, check: (s) => s.bossFights >= 1 },
+  { id: "bosstop", emoji: "🥇", name: "Boss Slayer", text: "Finish top 3 on a defeated world boss", coins: 300, check: () => false },
+  { id: "games50", emoji: "🎮", name: "Gamer", text: "Finish 50 mini games", coins: 100, check: (s) => s.games >= 50, progress: (s) => [s.games, 50] },
+  { id: "watch600", emoji: "📺", name: "Couch Sinner", text: "Watch streams for 10 hours on Sinners", coins: 150, check: (s) => s.watch >= 600, progress: (s) => [s.watch, 600] },
+  { id: "legendary", emoji: "🟠", name: "Legendary Find", text: "Own a legendary item", coins: 300, check: (s) => s.legendary },
+  { id: "abyssal", emoji: "🔴", name: "Abyssal Lord", text: "Wear 5 Abyssal (tier 5) items at once", coins: 500, check: (s) => s.tier5Worn >= 5, progress: (s) => [s.tier5Worn, 5] },
+  { id: "rich", emoji: "💰", name: "High Roller", text: "Have 10,000 points at once", coins: 200, check: (s) => s.points >= 10000, progress: (s) => [s.points, 10000] },
+  { id: "clip", emoji: "🎬", name: "Clip of the Week", text: "Share the week's most-voted clip", coins: 0, check: () => false },
+  { id: "champion", emoji: "👑", name: "Season Champion", text: "Finish an arena season in 1st place", coins: 0, check: () => false },
+  { id: "podium", emoji: "🎖️", name: "Season Podium", text: "Finish an arena season in the top 3", coins: 0, check: () => false },
+];
+
+async function achievementStats(env, userId) {
+  const one = (sql, ...args) => env.DB.prepare(sql).bind(...args).first();
+  const [w, h, streak, quests, boss, games, items] = await Promise.all([
+    one("SELECT points FROM wallets WHERE user_id = ?", userId),
+    one("SELECT level, wins, rating, duel_wins_total AS duelWins, cleared, watch_total AS watch FROM heroes WHERE user_id = ?", userId),
+    one("SELECT best FROM streaks WHERE user_id = ?", userId),
+    one("SELECT quests_done AS n FROM heroes WHERE user_id = ?", userId),
+    one("SELECT COUNT(*) AS n FROM boss_hits WHERE user_id = ? AND damage > 0", userId),
+    one("SELECT COALESCE(SUM(games), 0) AS n FROM daily WHERE user_id = ?", userId),
+    one(
+      "SELECT SUM(CASE WHEN rarity = 'legendary' THEN 1 ELSE 0 END) AS legendary, SUM(CASE WHEN equipped = 1 AND tier >= 5 THEN 1 ELSE 0 END) AS t5 FROM hero_items WHERE user_id = ?",
+      userId
+    ),
+  ]);
+  return {
+    joined: !!w,
+    points: w ? w.points : 0,
+    level: h ? h.level : 0,
+    wins: h ? h.wins : 0,
+    rating: h ? h.rating : 0,
+    duelWins: h ? h.duelWins : 0,
+    cleared: h ? String(h.cleared || "").split(",") : [],
+    watch: h ? h.watch : 0,
+    bestStreak: streak ? streak.best : 0,
+    quests: quests ? quests.n : 0,
+    bossFights: boss.n,
+    games: games.n,
+    legendary: !!(items && items.legendary),
+    tier5Worn: (items && items.t5) || 0,
+  };
+}
+
+// Gives an achievement once (with its coins); returns it if it's new
+async function grantAchievement(env, userId, id) {
+  const a = ACHIEVEMENTS.find((x) => x.id === id);
+  if (!a) return null;
+  const add = await env.DB.prepare("INSERT INTO achievements (user_id, id, earned) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(userId, id, Date.now()).run();
+  if (!add.meta || add.meta.changes !== 1) return null;
+  if (a.coins) await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(a.coins, userId).run();
+  return { id: a.id, emoji: a.emoji, name: a.name, coins: a.coins };
+}
+
+// Checks every achievement and gives the new ones; returns what was just earned
+async function checkAchievements(env, userId) {
+  const s = await achievementStats(env, userId);
+  const { results } = await env.DB.prepare("SELECT id FROM achievements WHERE user_id = ?").bind(userId).all();
+  const have = new Set(results.map((r) => r.id));
+  const fresh = [];
+  for (const a of ACHIEVEMENTS) {
+    if (!have.has(a.id) && a.check(s)) {
+      const got = await grantAchievement(env, userId, a.id);
+      if (got) fresh.push(got);
+    }
+  }
+  return fresh;
+}
+
+async function achievementsState(env, userId) {
+  const s = await achievementStats(env, userId);
+  const { results } = await env.DB.prepare("SELECT id, earned FROM achievements WHERE user_id = ?").bind(userId).all();
+  const earned = Object.fromEntries(results.map((r) => [r.id, r.earned]));
+  const hero = await env.DB.prepare("SELECT badge FROM heroes WHERE user_id = ?").bind(userId).first();
+  return {
+    badge: hero ? hero.badge : null,
+    list: ACHIEVEMENTS.map((a) => ({
+      id: a.id,
+      emoji: a.emoji,
+      name: a.name,
+      text: a.text,
+      coins: a.coins,
+      earned: earned[a.id] || null,
+      progress: !earned[a.id] && a.progress ? a.progress(s).map((n) => Math.max(0, Math.min(n, a.progress(s)[1]))) : null,
+    })),
+  };
+}
+
+// Badge emoji and name color shown next to a player's name
+async function nameStyle(env, userId) {
+  const h = await env.DB.prepare("SELECT badge, style FROM heroes WHERE user_id = ?").bind(userId).first();
+  if (!h) return { badge: null, color: null };
+  const a = ACHIEVEMENTS.find((x) => x.id === h.badge);
+  const style = JSON.parse(h.style || "{}");
+  return { badge: a ? a.emoji : null, color: style.color || null };
+}
+
+// ---------- Cosmetics ----------
+// Looks only (no stats): hats and capes drawn on the adventurer, a pet next to them, and a name color
+// in chat. Bought once in the Shop's Cosmetics tab, then worn or taken off on the Profile.
+
+const COSMETICS = [
+  { id: "hat-horns", kind: "hat", name: "Devil Horns", emoji: "😈", price: 600 },
+  { id: "hat-wizard", kind: "hat", name: "Wizard Hat", emoji: "🧙", price: 800 },
+  { id: "hat-halo", kind: "hat", name: "Halo", emoji: "😇", price: 1000 },
+  { id: "hat-crown", kind: "hat", name: "Golden Crown", emoji: "👑", price: 1500 },
+  { id: "cape-red", kind: "cape", name: "Crimson Cape", emoji: "🟥", price: 700 },
+  { id: "cape-purple", kind: "cape", name: "Royal Cape", emoji: "🟪", price: 900 },
+  { id: "cape-gold", kind: "cape", name: "Golden Cape", emoji: "🟨", price: 1800 },
+  { id: "pet-slime", kind: "pet", name: "Slime", emoji: "🟢", price: 800 },
+  { id: "pet-fox", kind: "pet", name: "Fox", emoji: "🦊", price: 1200 },
+  { id: "pet-ghost", kind: "pet", name: "Ghost", emoji: "👻", price: 1500 },
+  { id: "pet-dragon", kind: "pet", name: "Baby Dragon", emoji: "🐲", price: 2500 },
+  { id: "color-gold", kind: "color", name: "Gold Name", emoji: "✨", price: 800 },
+  { id: "color-toxic", kind: "color", name: "Toxic Name", emoji: "☢️", price: 1000 },
+  { id: "color-ice", kind: "color", name: "Ice Name", emoji: "❄️", price: 1200 },
+  { id: "color-fire", kind: "color", name: "Fire Name", emoji: "🔥", price: 1500 },
+  { id: "color-rainbow", kind: "color", name: "Rainbow Name", emoji: "🌈", price: 2500 },
+];
+
+async function cosmeticsState(env, userId) {
+  const { results } = await env.DB.prepare("SELECT id FROM cosmetics WHERE user_id = ?").bind(userId).all();
+  const h = await env.DB.prepare("SELECT style FROM heroes WHERE user_id = ?").bind(userId).first();
+  return { owned: results.map((r) => r.id), style: h ? JSON.parse(h.style || "{}") : {} };
+}
+
+async function cosmeticBuy(env, user, id) {
+  const c = COSMETICS.find((x) => x.id === id);
+  if (!c) fail("That cosmetic isn't in the shop.", 404);
+  await heroOf(env, user);
+  await wallet(env, user);
+  const owned = await env.DB.prepare("SELECT 1 FROM cosmetics WHERE user_id = ? AND id = ?").bind(user.id, id).first();
+  if (owned) fail("You already own that.", 409);
+  const take = await env.DB.prepare("UPDATE wallets SET points = points - ? WHERE user_id = ? AND points >= ?").bind(c.price, user.id, c.price).run();
+  if (!take.meta || take.meta.changes !== 1) fail("You don't have enough points for that.", 400);
+  await env.DB.prepare("INSERT INTO cosmetics (user_id, id, created) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(user.id, id, Date.now()).run();
+  await cosmeticWear(env, user, id); // wear it right away
+  return c;
+}
+
+// Wears a cosmetic (or takes off a kind when id is "none:<kind>")
+async function cosmeticWear(env, user, id) {
+  const hero = await env.DB.prepare("SELECT style FROM heroes WHERE user_id = ?").bind(user.id).first();
+  const style = JSON.parse((hero && hero.style) || "{}");
+  if (String(id).startsWith("none:")) {
+    delete style[id.slice(5)];
+  } else {
+    const c = COSMETICS.find((x) => x.id === id);
+    if (!c) fail("Unknown cosmetic.", 404);
+    const owned = await env.DB.prepare("SELECT 1 FROM cosmetics WHERE user_id = ? AND id = ?").bind(user.id, id).first();
+    if (!owned) fail("Buy it in the Shop first.", 409);
+    style[c.kind] = c.kind === "color" ? c.id.slice(6) : c.id;
+  }
+  await env.DB.prepare("UPDATE heroes SET style = ? WHERE user_id = ?").bind(JSON.stringify(style), user.id).run();
+  return style;
+}
+
+// ---------- Arena seasons ----------
+// A season is a calendar month (UTC). The first arena visit of a new month closes the last one: the
+// top 3 by rating (with at least 5 duels) get coins and a title, everyone with 10+ duels gets a little,
+// ratings move halfway back to 1000 and season records start over.
+
+const SEASON_PRIZES = [1000, 600, 400];
+const seasonOf = (time = Date.now()) => new Date(time).toISOString().slice(0, 7);
+const seasonEnds = (season) => Date.UTC(Number(season.slice(0, 4)), Number(season.slice(5, 7)), 1);
+
+async function seasonRollover(env) {
+  const now = seasonOf();
+  const row = await env.DB.prepare("SELECT value FROM meta WHERE key = 'season'").first();
+  if (!row) {
+    await env.DB.prepare("INSERT INTO meta (key, value) VALUES ('season', ?) ON CONFLICT DO NOTHING").bind(now).run();
+    return;
+  }
+  if (row.value === now) return;
+  // Only one request closes the season
+  const claim = await env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'season' AND value = ?").bind(now, row.value).run();
+  if (!claim.meta || claim.meta.changes !== 1) return;
+  const { results: top } = await env.DB.prepare(
+    "SELECT user_id AS userId, name, rating FROM heroes WHERE duel_wins + duel_losses >= 5 ORDER BY rating DESC, level DESC LIMIT 3"
+  ).all();
+  const writes = [];
+  top.forEach((p, i) => {
+    writes.push(
+      env.DB.prepare("INSERT INTO season_results (season, rank, user_id, name, rating) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING").bind(row.value, i + 1, p.userId, p.name, p.rating),
+      env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(SEASON_PRIZES[i], p.userId)
+    );
+  });
+  writes.push(env.DB.prepare("UPDATE wallets SET points = points + 100 WHERE user_id IN (SELECT user_id FROM heroes WHERE duel_wins + duel_losses >= 10)"));
+  writes.push(env.DB.prepare("UPDATE heroes SET rating = 1000 + (rating - 1000) / 2, duel_wins = 0, duel_losses = 0"));
+  await env.DB.batch(writes);
+  for (const [i, p] of top.entries()) {
+    await grantAchievement(env, p.userId, "podium");
+    if (i === 0) await grantAchievement(env, p.userId, "champion");
+  }
+}
+
+async function seasonInfo(env) {
+  const season = seasonOf();
+  const { results: last } = await env.DB.prepare(
+    "SELECT season, rank, name, rating FROM season_results WHERE season = (SELECT MAX(season) FROM season_results) ORDER BY rank"
+  ).all();
+  return { id: season, endsAt: seasonEnds(season), prizes: SEASON_PRIZES, last };
+}
+
+// ---------- Watch parties ----------
+// Logged-in viewers of the same stream see each other (a heartbeat every ~30 s) and can send emoji
+// reactions that float over the video for everyone watching. Rooms are the same as chat rooms.
+
+const PARTY_EMOJIS = ["🔥", "😂", "😮", "👏", "💀", "❤️", "🎉", "😡"];
+
+async function partyGet(room, request, url, env, cors) {
+  checkRoom(room);
+  const now = Date.now();
+  if (url.searchParams.get("beat") === "1" && request.headers.get("Authorization")) {
+    const user = await optionalUser(request, env);
+    if (user) {
+      await env.DB.prepare(
+        "INSERT INTO party (room, user_id, name, avatar, seen) VALUES (?, ?, ?, ?, ?) ON CONFLICT(room, user_id) DO UPDATE SET seen = excluded.seen, name = excluded.name, avatar = excluded.avatar"
+      )
+        .bind(room, user.id, user.name, user.avatar, now)
+        .run();
+    }
+  }
+  const since = Math.max(Number(url.searchParams.get("since")) || 0, now - 15000);
+  const [{ results: watchers }, { results: reactions }] = await Promise.all([
+    env.DB.prepare("SELECT name, avatar FROM party WHERE room = ? AND seen > ? ORDER BY seen DESC LIMIT 24").bind(room, now - 75000).all(),
+    env.DB.prepare("SELECT emoji, created FROM reactions WHERE room = ? AND created > ? ORDER BY created LIMIT 40").bind(room, since).all(),
+  ]);
+  if (Math.random() < 0.02) {
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM reactions WHERE created < ?").bind(now - 120000),
+      env.DB.prepare("DELETE FROM party WHERE seen < ?").bind(now - 3600000),
+    ]);
+  }
+  return json({ watchers, reactions, now }, 200, cors);
+}
+
+async function partyReact(room, request, env, cors) {
+  checkRoom(room);
+  const user = await requireUser(request, env);
+  const { emoji } = await readJson(request);
+  if (!PARTY_EMOJIS.includes(emoji)) fail("Pick one of the reactions.", 400);
+  const now = Date.now();
+  // At most one reaction a second per viewer
+  const ok = await env.DB.prepare(
+    "INSERT INTO party (room, user_id, name, avatar, seen, last_react) VALUES (?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT(room, user_id) DO UPDATE SET last_react = excluded.last_react, seen = excluded.seen WHERE COALESCE(party.last_react, 0) < ?"
+  )
+    .bind(room, user.id, user.name, user.avatar, now, now, now - 1000)
+    .run();
+  if (!ok.meta || ok.meta.changes !== 1) fail("Slow down a little.", 429);
+  await env.DB.prepare("INSERT INTO reactions (room, emoji, created) VALUES (?, ?, ?)").bind(room, emoji, now).run();
+  return json({ ok: true }, 200, cors);
+}
+
+// ---------- Clip of the Week ----------
+// Logged-in viewers vote for one gallery clip a week (they can change it). The first visit of a new week
+// crowns last week's most-voted clip; whoever shared it (if they were logged in) gets coins.
+
+const CLIP_PRIZE = 300;
+
+async function clipRollover(env) {
+  const week = weekOf();
+  const lastWeek = weekOf(Date.parse(week + "T00:00:00Z") - 86400000);
+  const done = await env.DB.prepare("SELECT 1 FROM clip_winners WHERE week = ?").bind(lastWeek).first();
+  if (done) return;
+  const top = await env.DB.prepare("SELECT item_id AS id, COUNT(*) AS votes FROM clip_votes WHERE week = ? GROUP BY item_id ORDER BY votes DESC LIMIT 1")
+    .bind(lastWeek)
+    .first();
+  if (!top) return;
+  const item = (await getList(env, "approved")).find((i) => i.id === top.id);
+  if (!item) return;
+  const add = await env.DB.prepare(
+    "INSERT INTO clip_winners (week, item_id, votes, title, link, thumb, platform, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
+  )
+    .bind(lastWeek, item.id, top.votes, item.title || "", item.link || item.url || "", item.thumb || "", item.platform || "", item.name || "")
+    .run();
+  if (add.meta && add.meta.changes === 1 && item.userId) {
+    await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(CLIP_PRIZE, item.userId).run();
+    await grantAchievement(env, item.userId, "clip");
+  }
+}
+
+async function clipVotesGet(request, env, cors) {
+  await clipRollover(env);
+  const week = weekOf();
+  const { results } = await env.DB.prepare("SELECT item_id AS id, COUNT(*) AS votes FROM clip_votes WHERE week = ? GROUP BY item_id").bind(week).all();
+  const user = request.headers.get("Authorization") ? await optionalUser(request, env) : null;
+  const mine = user ? await env.DB.prepare("SELECT item_id AS id FROM clip_votes WHERE week = ? AND user_id = ?").bind(week, user.id).first() : null;
+  const winner = await env.DB.prepare("SELECT week, item_id AS id, votes, title, link, thumb, platform, name FROM clip_winners ORDER BY week DESC LIMIT 1").first();
+  return json({ week, endsAt: weekEnds(week), votes: Object.fromEntries(results.map((r) => [r.id, r.votes])), mine: mine ? mine.id : null, winner, prize: CLIP_PRIZE }, 200, cors);
+}
+
+async function clipVote(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { id } = await readJson(request);
+  const item = (await getList(env, "approved")).find((i) => i.id === id && i.kind !== "image" && i.platform);
+  if (!item) fail("That clip isn't in the gallery.", 404);
+  await env.DB.prepare(
+    "INSERT INTO clip_votes (week, user_id, item_id, created) VALUES (?, ?, ?, ?) ON CONFLICT(week, user_id) DO UPDATE SET item_id = excluded.item_id, created = excluded.created"
+  )
+    .bind(weekOf(), user.id, id, Date.now())
+    .run();
+  return clipVotesGet(request, env, cors);
+}
+
+// ---------- Profile extras: achievements, badge, cosmetics ----------
+
+async function profileExtrasGet(request, env, cors) {
+  const user = await requireUser(request, env);
+  const fresh = await checkAchievements(env, user.id);
+  return json({ achievements: await achievementsState(env, user.id), cosmetics: await cosmeticsState(env, user.id), catalog: COSMETICS, fresh }, 200, cors);
+}
+
+async function profileExtrasAction(request, env, cors) {
+  const user = await requireUser(request, env);
+  const body = await readJson(request);
+  let result = {};
+  if (body.action === "badge") {
+    const id = body.badge || null;
+    if (id) {
+      const has = await env.DB.prepare("SELECT 1 FROM achievements WHERE user_id = ? AND id = ?").bind(user.id, id).first();
+      if (!has) fail("Earn that achievement first.", 409);
+    }
+    await heroOf(env, user);
+    await env.DB.prepare("UPDATE heroes SET badge = ? WHERE user_id = ?").bind(id, user.id).run();
+  } else if (body.action === "buy") result = { bought: await cosmeticBuy(env, user, body.id) };
+  else if (body.action === "wear") result = { style: await cosmeticWear(env, user, body.id) };
+  else fail("Unknown action", 400);
+  const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
+  return json(
+    { ...result, points: w ? w.points : 0, achievements: await achievementsState(env, user.id), cosmetics: await cosmeticsState(env, user.id), catalog: COSMETICS },
+    200,
+    cors
+  );
 }
 
 // ---------- Site stats ----------
@@ -3064,6 +3481,7 @@ const HELP_TOPICS = {
     fields: [
       { name: "Commands", value: "`/duel` a random opponent near your rating\n`/duel opponent:@player` someone specific" },
       { name: "Rating", value: "Everyone starts at **1000**. Beating stronger players earns more rating; losing to weaker ones costs more." },
+      { name: "🗓️ Monthly seasons", value: "When the month ends, the top 3 (with 5+ duels) win 🪙 1000 / 600 / 400 and a 👑 🥈 🥉 title, everyone with 10+ duels gets 🪙 100, and ratings soften back toward 1000." },
       { name: "Rewards", value: `A win pays **🪙 10** and 25 XP, a loss still 8 XP. **${DUELS_PER_DAY} duels a day.**` },
       { name: "Leaderboard", value: `${SITE_URL}/profile#arena shows the top players and lets you pick who to fight.` },
     ],
@@ -3090,6 +3508,7 @@ const HELP_TOPICS = {
     fields: [
       { name: "⚔️ Adventure", value: "Gear for all 8 slots in 5 tiers (unlock at adventurer level 1 / 5 / 10 / 20 / 30). Never sells out; sells back for half." },
       { name: "🧪 Extras", value: "Potions (+25% Attack, Defense or HP) and scrolls (+50% XP, +15% loot) for your next 3 fights or adventures." },
+      { name: "✨ Cosmetics", value: "Hats, capes, pets and chat name colors. Looks only; swap them in your Wardrobe on your profile." },
       { name: "🎁 Redeem", value: "Special rewards from the Sinners team, handed out after you buy them. `/shop` lists them here." },
     ],
   },
@@ -3101,7 +3520,9 @@ const HELP_TOPICS = {
       { name: "▶️ Watch", value: `${SITE_URL}/watch: Kick, Twitch and YouTube side by side, HD, mini player, Sinners chat and live alerts.` },
       { name: "📺 Content", value: `${SITE_URL}/content: browse and search YouTube while you wait for a stream.` },
       { name: "🖼️ Gallery", value: `${SITE_URL}/gallery: share clip and image links (checked before they appear).` },
-      { name: "👤 Profile", value: "Click your name at the top: your stats, adventurer, world map and arena." },
+      { name: "👤 Profile", value: "Click your name at the top: your stats, adventurer, world map, arena, daily quests and 🏅 achievements (pick one as your badge in chat)." },
+      { name: "👀 Watch parties", value: "On the Watch page you see who else is watching the same stream and can send emoji reactions that float over the video." },
+      { name: "🏆 Clip of the Week", value: "Vote for one gallery clip a week. Monday's winner goes on the home page, and whoever shared it gets coins." },
     ],
   },
   admin: {
