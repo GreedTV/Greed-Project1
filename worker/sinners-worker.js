@@ -40,7 +40,8 @@
 // Adventure (Profile page): an adventurer with gear, a bag and dungeon runs
 //   GET  /hero                         -> your adventurer, items, regions and the current run   (logged in)
 //   POST /hero                         -> { action: "dungeon", dungeon } | { action: "collect" } | { action: "equip" | "sell", item }
-//                                         | { action: "unequip", slot } | { action: "look" } | { action: "duel", opponent? }   (logged in)
+//                                         | { action: "unequip", slot } | { action: "look" } | { action: "duel", opponent? }
+//                                         | { action: "watch" }  once a minute while watching streams: a little XP   (logged in)
 //   GET  /profile                      -> your profile numbers   (logged in)
 //   GET  /arena                        -> top adventurers by arena rating
 //   GET  /shop/adventure               -> gear for each tier, potions and scrolls (and your level and boosts if logged in)
@@ -715,6 +716,7 @@ async function ensureSchema(env) {
         "xp INTEGER NOT NULL DEFAULT 0, runs INTEGER NOT NULL DEFAULT 0, wins INTEGER NOT NULL DEFAULT 0, exp_dungeon TEXT, exp_start INTEGER, " +
         "exp_end INTEGER, exp_power INTEGER, exp_stats TEXT, buffs TEXT NOT NULL DEFAULT '{}', rating INTEGER NOT NULL DEFAULT 1000, " +
         "duel_wins INTEGER NOT NULL DEFAULT 0, duel_losses INTEGER NOT NULL DEFAULT 0, duel_day TEXT NOT NULL DEFAULT '', duel_count INTEGER NOT NULL DEFAULT 0, " +
+        "watch_at INTEGER, watch_day TEXT NOT NULL DEFAULT '', watch_minutes INTEGER NOT NULL DEFAULT 0, " +
         "created INTEGER NOT NULL)"
     ),
     env.DB.prepare(
@@ -744,6 +746,9 @@ async function ensureSchema(env) {
     "ALTER TABLE hero_items ADD COLUMN atk INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE hero_items ADD COLUMN def INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE hero_items ADD COLUMN hp INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE heroes ADD COLUMN watch_at INTEGER",
+    "ALTER TABLE heroes ADD COLUMN watch_day TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE heroes ADD COLUMN watch_minutes INTEGER NOT NULL DEFAULT 0",
   ]) {
     try {
       await env.DB.prepare(sql).run();
@@ -1342,8 +1347,9 @@ const SLOT_NOUNS = {
   shield: ["Shield", "Buckler", "Aegis"],
   ring: ["Ring", "Bracelet", "Band"],
 };
-// Adventure shop: one uncommon item per slot in each tier, never sold out; sells back for half
-const GEAR_PRICES = [25, 90, 250, 600, 1200];
+// Adventure shop: one uncommon item per slot in each tier, never sold out; sells back for half.
+// Higher tiers take weeks to months to reach, and players have earned a lot of points by then.
+const GEAR_PRICES = [30, 150, 500, 1500, 4000];
 // Potions and scrolls: each purchase adds 3 uses (up to 9), used up by fights / adventures
 const EXTRAS = [
   { id: "strength", name: "Potion of Strength", emoji: "🧪", buff: "atk", text: "+25% Attack", price: 30 },
@@ -1353,6 +1359,12 @@ const EXTRAS = [
   { id: "fortune", name: "Scroll of Fortune", emoji: "🍀", buff: "luck", text: "+15% loot chance on adventures", price: 45 },
 ];
 const BUFF_EFFECT = { atk: 0.25, def: 0.25, hp: 0.25, xp: 0.5, luck: 0.15 };
+// Potions and scrolls cost more as the adventurer levels up (x1.1 at level 1, x4 at level 30)
+const extraPrice = (x, level) => Math.round(x.price * (1 + level / 10));
+const extrasFor = (level) => EXTRAS.map((x) => ({ ...x, price: extraPrice(x, level) }));
+// Watching streams: a little XP each minute (1 + 1 per 5 levels), up to 2 hours a day
+const WATCH_MINUTES_PER_DAY = 120;
+const watchXpPerMinute = (level) => 1 + Math.floor(level / 5);
 const BUFF_USES = 3;
 const BUFF_MAX = 9;
 const DUELS_PER_DAY = 10;
@@ -1516,7 +1528,7 @@ async function heroState(env, user) {
       chance: Math.round(winChance(fighting, d.monster) * 100),
       monsterPower: powerOf(d.monster),
     })),
-    extras: EXTRAS,
+    extras: extrasFor(hero.level),
     buffEffect: BUFF_EFFECT,
     tiers: TIER_LEVELS,
     bagSize: BAG_SIZE,
@@ -1730,7 +1742,7 @@ async function adventureShopGet(request, env, cors) {
     buffs = hero.buffs;
     points = (await wallet(env, user)).points;
   }
-  return json({ gear: gearCatalog(level), extras: EXTRAS, buffEffect: BUFF_EFFECT, buffUses: BUFF_USES, buffMax: BUFF_MAX, level, buffs, points, loggedIn: !!user }, 200, cors);
+  return json({ gear: gearCatalog(level), extras: extrasFor(level), buffEffect: BUFF_EFFECT, buffUses: BUFF_USES, buffMax: BUFF_MAX, level, buffs, points, loggedIn: !!user }, 200, cors);
 }
 
 async function adventureShopBuy(request, env, cors) {
@@ -1738,7 +1750,7 @@ async function adventureShopBuy(request, env, cors) {
   const { item: id } = await readJson(request);
   const hero = await heroOf(env, user);
   await wallet(env, user);
-  const extra = EXTRAS.find((e) => e.id === id);
+  const extra = extrasFor(hero.level).find((e) => e.id === id);
   const gear = extra ? null : gearCatalog(hero.level).flatMap((t) => t.items).find((i) => i.id === id);
   if (!extra && !gear) fail("That item isn't in the shop.", 404);
   if (gear && !tierOpen(hero.level, gear.tier)) fail(`Tier ${gear.tier} unlocks at adventurer level ${TIER_LEVELS[gear.tier - 1]}.`, 409);
@@ -1761,6 +1773,32 @@ async function adventureShopBuy(request, env, cors) {
   return json({ ok: true, points: w.points, buffs: hero.buffs, bought: extra ? "extra" : "gear" }, 200, cors);
 }
 
+// ---------- Watch-time XP ----------
+// The Watch page calls this once a minute while a stream is open and the tab is visible. Calls closer
+// than 50 seconds apart don't count, and only 2 hours a day earn XP.
+
+async function watchTick(env, user) {
+  const hero = await env.DB.prepare("SELECT level, watch_at AS at, watch_day AS day, watch_minutes AS minutes FROM heroes WHERE user_id = ?")
+    .bind(user.id)
+    .first();
+  if (!hero) return { counted: false, reason: "no-hero" };
+  const now = Date.now();
+  const day = today();
+  const minutes = hero.day === day ? hero.minutes : 0;
+  const base = { minutesToday: minutes, cap: WATCH_MINUTES_PER_DAY, perMinute: watchXpPerMinute(hero.level) };
+  if (minutes >= WATCH_MINUTES_PER_DAY) return { ...base, counted: false, reason: "cap" };
+  if (now - (hero.at || 0) < 50000) return { ...base, counted: false, reason: "early" };
+  // Claim this minute (a second tab at the same moment won't count twice)
+  const claim = await env.DB.prepare(
+    "UPDATE heroes SET watch_at = ?, watch_day = ?, watch_minutes = ? WHERE user_id = ? AND COALESCE(watch_at, 0) = ?"
+  )
+    .bind(now, day, minutes + 1, user.id, hero.at || 0)
+    .run();
+  if (!claim.meta || claim.meta.changes !== 1) return { ...base, counted: false, reason: "early" };
+  const gained = await addHeroXp(env, user.id, watchXpPerMinute(hero.level));
+  return { ...base, counted: true, minutesToday: minutes + 1, xp: gained.xp, levels: gained.levels, level: gained.level };
+}
+
 // ---------- Hero endpoints ----------
 
 async function heroGet(request, env, cors) {
@@ -1778,6 +1816,10 @@ async function heroAction(request, env, cors) {
   if (action === "dungeon") result = await startDungeon(env, user, body.dungeon);
   else if (action === "collect") result = await collectDungeon(env, user);
   else if (action === "duel") result = await duel(env, user, body.opponent);
+  else if (action === "watch") {
+    await wallet(env, user);
+    return json(await watchTick(env, user), 200, cors);
+  }
   else if (action === "look") {
     await heroOf(env, user);
     await env.DB.prepare("UPDATE heroes SET look = ? WHERE user_id = ?").bind(JSON.stringify(randomLook()), user.id).run();

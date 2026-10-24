@@ -5177,3 +5177,26 @@ img {
     display: none;
   }
 }
+
+/* Watch-time XP badge (Watch page) */
+.watch-xp {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--accent-2) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--border));
+}
+
+.watch-xp.done {
+  color: var(--muted);
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.watch-xp.level-up {
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+}

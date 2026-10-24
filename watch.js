@@ -992,9 +992,52 @@ async function addFromUrl() {
 render();
 addFromUrl().then((added) => added && render());
 
+// ---------- Watch-time XP ----------
+// While logged in with a stream open and this tab visible, your adventurer (Profile page) earns a
+// little XP each minute, up to 2 hours a day. The Worker checks the timing.
+const watchXp = document.getElementById("watch-xp");
+let watchInfo = null;
+
+function showWatchXp() {
+  if (!watchInfo || !SinnersAuth.user) return (watchXp.hidden = true);
+  watchXp.hidden = false;
+  if (watchInfo.reason === "no-hero") {
+    watchXp.textContent = "⚔️ Create your adventurer to earn XP while watching";
+    watchXp.title = "Open your Profile to get an adventurer";
+    return;
+  }
+  const done = watchInfo.minutesToday >= watchInfo.cap;
+  watchXp.classList.toggle("done", done);
+  watchXp.textContent = done
+    ? "⚔️ Watch XP maxed for today"
+    : `⚔️ +${watchInfo.perMinute} XP/min · ${watchInfo.minutesToday}/${watchInfo.cap} min today`;
+  watchXp.title = "Your adventurer earns a little XP every minute you watch (up to 2 hours a day)";
+}
+
+async function watchTick() {
+  if (!SinnersAuth.user || document.hidden || !selected.length) return;
+  try {
+    const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/hero`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
+      body: JSON.stringify({ action: "watch" }),
+    });
+    if (!res.ok) return;
+    watchInfo = await res.json();
+    if (watchInfo.levels && watchInfo.levels.length) watchXp.classList.add("level-up");
+    showWatchXp();
+  } catch (e) {}
+}
+
+// The first minute is counted after a full minute of watching
+const watchTimer = setInterval(watchTick, 60000);
+const stopWatchAuth = SinnersAuth.onChange(showWatchXp);
+
 // In-site navigation (nav.js): stop players and chat when this page closes,
 // and pick up a new streamer link (/watch?add=...) when coming back to it
 SinnersNav.onLeave(() => {
+  clearInterval(watchTimer);
+  stopWatchAuth();
   if (stopChat) stopChat();
   cleanups.splice(0).forEach((stop) => stop());
   players.clear();
