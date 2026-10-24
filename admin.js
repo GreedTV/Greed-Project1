@@ -74,7 +74,36 @@ async function refreshGames() {
     box.replaceChildren(el("p", "gallery-empty", `Leaderboards unavailable: ${err.message}`));
     return;
   }
+  // Points (earned in games, bet in Color Clash / Lucky Number)
+  const richest = boards.richest || [];
+  const pointsCard = el("div", "side-box games-admin-card");
+  const pointsHead = el("div", "side-head");
+  pointsHead.append(el("h3", null, `🪙 Points (${richest.length} players)`));
+  const resetPoints = el("button", "button ghost", "Reset all points");
+  resetPoints.type = "button";
+  resetPoints.disabled = !richest.length;
+  resetPoints.addEventListener("click", () =>
+    gameAction(
+      { action: "reset-points" },
+      "Reset everyone's points? Every player goes back to the starting amount, and all bets and round history are cleared.",
+      resetPoints
+    )
+  );
+  pointsHead.append(resetPoints);
+  pointsCard.append(pointsHead);
+  if (!richest.length) pointsCard.append(el("p", "lb-empty", "Nobody has points yet."));
+  else {
+    const list = el("ol", "lb-list");
+    richest.forEach((p, i) => {
+      const li = el("li", "lb-row admin-row");
+      li.append(el("span", "lb-rank", `${i + 1}`), el("span", "lb-name", p.name), el("span", "lb-score", `${p.points} 🪙`), el("span"));
+      list.append(li);
+    });
+    pointsCard.append(list);
+  }
+
   box.replaceChildren(
+    pointsCard,
     ...Object.entries(GAME_NAMES).map(([id, [name, format]]) => {
       const scores = boards[id] || [];
       const card = el("div", "side-box games-admin-card");

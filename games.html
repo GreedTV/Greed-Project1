@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Games — Sinners</title>
-  <meta name="description" content="Quick mini games with a leaderboard: reaction time, aim and typing speed.">
+  <meta name="description" content="Mini games with leaderboards, plus multiplayer betting rounds with points earned from playing.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
@@ -15,7 +15,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Sinners">
   <meta property="og:title" content="Games — Sinners">
-  <meta property="og:description" content="Quick mini games with a leaderboard: reaction time, aim and typing speed.">
+  <meta property="og:description" content="Mini games with leaderboards, plus multiplayer betting rounds with points earned from playing.">
   <meta property="og:url" content="https://sinnerstv.com/games">
   <meta property="og:image" content="https://sinnerstv.com/og-image.png">
   <meta property="og:image:width" content="1200">
@@ -48,12 +48,13 @@
     <section class="page-hero">
       <div class="container reveal">
         <h1>Mini <span class="gradient-text">Games</span></h1>
-        <p>Quick games for the wait before a stream. Log in to put your best score on the leaderboard.</p>
+        <p>Play quick games to earn points, then bet them against everyone in Color Clash and Lucky Number. Points are just for fun.</p>
       </div>
     </section>
 
     <section class="section" style="padding-top:24px">
       <div class="container wide">
+        <div class="points-bar" id="points-bar"></div>
         <div class="game-picker" role="tablist" id="game-picker"></div>
 
         <div class="games-layout">

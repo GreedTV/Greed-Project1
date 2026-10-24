@@ -1211,8 +1211,127 @@ img {
 /* Streamer list and add box sit above the player so it gets the full width */
 .watch-layout .watch-side {
   order: -1;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 1fr;
   align-items: start;
+}
+
+/* One add card per platform, in its brand color */
+.add-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.add-card {
+  --brand: var(--accent);
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 18px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--brand) 14%, var(--surface)), var(--surface) 65%);
+  border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--border));
+  border-top: 3px solid var(--brand);
+  border-radius: var(--radius);
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.add-card:focus-within,
+.add-card.editing {
+  border-color: var(--brand);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--brand) 25%, transparent);
+}
+
+.add-card.kick { --brand: #53fc18; --brand-text: #000; }
+.add-card.twitch { --brand: #9146ff; --brand-text: #fff; }
+.add-card.youtube { --brand: #ff0033; --brand-text: #fff; }
+
+.add-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.add-card-logo {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  fill: var(--brand);
+  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--brand) 45%, transparent));
+}
+
+.add-card-head h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.add-card-title {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.add-card.editing .add-card-title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.add-card .add-row input {
+  flex: 1;
+}
+
+.add-card .add-row input:focus {
+  border-color: var(--brand);
+}
+
+.add-card .button {
+  background: var(--brand);
+  color: var(--brand-text);
+  padding: 10px 16px;
+}
+
+.add-card .button:hover {
+  box-shadow: 0 0 18px color-mix(in srgb, var(--brand) 55%, transparent);
+}
+
+.add-card-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.add-card-features li {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--brand) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+}
+
+.add-card-cancel {
+  justify-self: start;
+}
+
+.add-card .form-msg {
+  margin: 0;
+}
+
+.add-card .form-msg:empty {
+  display: none;
+}
+
+.add-hint {
+  margin: 4px 0 0;
+}
+
+@media (max-width: 900px) {
+  .add-cards {
+    grid-template-columns: 1fr;
+  }
 }
 
 .watch-layout .streamer-list {
@@ -2617,6 +2736,224 @@ img {
 
 .lb-row.admin-row {
   grid-template-columns: 30px 1fr auto auto;
+}
+
+/* Points bar and betting games */
+.points-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.points-bar .points-total {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.4rem;
+  color: var(--text);
+}
+
+.points-bar .discord-btn {
+  width: auto;
+  padding: 8px 16px;
+  margin-left: auto;
+}
+
+.game-picker {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.game-stage.bet {
+  aspect-ratio: auto;
+  min-height: 420px;
+  padding: 16px;
+  gap: 14px;
+}
+
+.bet-top {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.bet-timer.low {
+  color: var(--live);
+}
+
+.bet-pot {
+  color: var(--accent);
+}
+
+.bet-choices {
+  display: grid;
+  gap: 10px;
+}
+
+.bet-choices.colors {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.bet-choices.lucky {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.bet-choice {
+  --c: var(--accent);
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 18px 8px;
+  font: inherit;
+  color: #fff;
+  background: color-mix(in srgb, var(--c) 70%, #000);
+  border: 3px solid transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.bet-choices.lucky .bet-choice {
+  padding: 12px 4px;
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.bet-choice:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.bet-choice:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.bet-choice.picked,
+.bet-choice.mine {
+  border-color: #fff;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--c) 60%, transparent);
+  opacity: 1;
+}
+
+.bet-choices.lucky .bet-choice.picked,
+.bet-choices.lucky .bet-choice.mine {
+  border-color: var(--accent);
+}
+
+.c-red { --c: #e11d48; }
+.c-green { --c: #16a34a; }
+.c-blue { --c: #2563eb; }
+
+.bet-choice-label {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.bet-choice-total {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.bet-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.bet-controls[hidden] {
+  display: none;
+}
+
+.bet-controls input {
+  width: 110px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.bet-quick {
+  display: flex;
+  gap: 4px;
+}
+
+.bet-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.bet-history {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.bet-history-label,
+.bet-history-empty {
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.bet-result {
+  --c: var(--surface);
+  min-width: 28px;
+  text-align: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: #fff;
+  background: color-mix(in srgb, var(--c) 75%, #000);
+  border: 1px solid var(--border);
+}
+
+.bet-live {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.bet-live li {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 900px) {
+  .game-picker {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .bet-choices.lucky {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .game-stage.bet {
+    aspect-ratio: auto;
+  }
 }
 
 /* Footer */

@@ -17,7 +17,14 @@
 //   GET  /games/leaderboard?game=<id>   -> { game, scores: [top 10] }
 //   POST /games/score                  -> { game, score }  (logged in; only your best counts)
 //   GET  /games-admin                  -> every game's top 50   (admin)
-//   POST /games-admin                  -> { action: "reset", game } | { action: "delete", game, userId }   (admin)
+//   POST /games-admin                  -> { action: "reset", game } | { action: "delete", game, userId }
+//                                         | { action: "reset-points" }   (admin)
+//
+// Points and betting games (points are earned by playing the games above; just for fun, no real value)
+//   GET  /points                       -> your wallet { points, earnedToday, dailyCap }   (logged in)
+//   GET  /points/top                   -> the 10 players with the most points
+//   GET  /bets/state?game=colors|lucky -> the current round, its bets, recent results (and your bet if logged in)
+//   POST /bets/place                   -> { game, choice, amount }   (logged in)
 //
 // Discord login
 //   GET  /auth/discord?return=<page url>  -> sends the visitor to Discord, then back to the page with #session=<token>
@@ -88,6 +95,15 @@ export default {
       if (path === "/auth/discord") return await discordStart(url, env);
       if (path === "/auth/discord/callback") return await discordCallback(url, env);
       if (path === "/me" && request.method === "GET") return json({ user: await requireUser(request, env) }, 200, cors);
+
+      if (path.startsWith("/points") || path.startsWith("/bets")) {
+        if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
+        await ensureSchema(env);
+        if (path === "/points" && request.method === "GET") return await pointsMine(request, env, cors);
+        if (path === "/points/top" && request.method === "GET") return await pointsTop(env, cors);
+        if (path === "/bets/state" && request.method === "GET") return await betState(request, url, env, cors);
+        if (path === "/bets/place" && request.method === "POST") return await betPlace(request, env, cors);
+      }
 
       if (path.startsWith("/games")) {
         if (!env.DB) return json({ error: "Leaderboard storage isn't set up yet (DB binding missing)." }, 503, cors);
@@ -526,6 +542,19 @@ async function ensureSchema(env) {
         "created INTEGER NOT NULL, PRIMARY KEY (game, user_id))"
     ),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS score_limits (user_id TEXT PRIMARY KEY, at INTEGER NOT NULL)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS wallets (user_id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT, points INTEGER NOT NULL, " +
+        "earned_day TEXT NOT NULL DEFAULT '', earned_today INTEGER NOT NULL DEFAULT 0)"
+    ),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS bets (game TEXT NOT NULL, round INTEGER NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, avatar TEXT, " +
+        "choice TEXT NOT NULL, amount INTEGER NOT NULL, payout INTEGER, created INTEGER NOT NULL, PRIMARY KEY (game, round, user_id))"
+    ),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS rounds (game TEXT NOT NULL, round INTEGER NOT NULL, outcome TEXT NOT NULL, pot INTEGER NOT NULL DEFAULT 0, " +
+        "winners INTEGER NOT NULL DEFAULT 0, paid INTEGER NOT NULL DEFAULT 0, settled_at INTEGER NOT NULL, PRIMARY KEY (game, round))"
+    ),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS pools (game TEXT PRIMARY KEY, jackpot INTEGER NOT NULL DEFAULT 0)"),
   ]);
   schemaReady = true;
 }
@@ -618,9 +647,10 @@ async function chatAdminAction(request, env, cors) {
 // refused, submissions are rate limited, banned users can't post, and the admin can remove entries.
 
 const GAMES = {
-  reaction: { lowerIsBetter: true, min: 90, max: 3000 }, // average reaction time in ms
-  aim: { lowerIsBetter: false, min: 1, max: 120 }, // targets hit in 30 seconds
-  typing: { lowerIsBetter: false, min: 1, max: 90 }, // words typed in 30 seconds
+  // points: how many points one finished game earns (better play earns more)
+  reaction: { lowerIsBetter: true, min: 90, max: 3000, points: (s) => clampInt((600 - s) / 10, 5, 40) }, // average ms
+  aim: { lowerIsBetter: false, min: 1, max: 120, points: (s) => clampInt(s, 3, 50) }, // targets hit in 30 s
+  typing: { lowerIsBetter: false, min: 1, max: 90, points: (s) => clampInt(s, 3, 50) }, // words typed in 30 s
 };
 const SCORE_GAP_MS = 4000;
 
@@ -671,24 +701,234 @@ async function gameScore(request, env, cors) {
   const ahead = await env.DB.prepare(`SELECT COUNT(*) AS n FROM scores WHERE game = ? AND score ${game.lowerIsBetter ? "<" : ">"} ?`)
     .bind(id, mine.score)
     .first();
-  return json({ best: mine.score, rank: ahead.n + 1, newBest: mine.score === score }, 200, cors);
+  const earned = await awardPoints(env, user, game.points(score));
+  return json({ best: mine.score, rank: ahead.n + 1, newBest: mine.score === score, ...earned }, 200, cors);
 }
 
 async function gamesAdminList(request, env, cors) {
   checkAdmin(request, env);
   const boards = {};
   for (const id of Object.keys(GAMES)) boards[id] = await topScores(env, id, 50);
-  return json(boards, 200, cors);
+  const { results: richest } = await env.DB.prepare("SELECT user_id AS userId, name, points FROM wallets ORDER BY points DESC LIMIT 20").all();
+  return json({ ...boards, richest }, 200, cors);
 }
 
 async function gamesAdminAction(request, env, cors) {
   checkAdmin(request, env);
   const { action, game: id, userId } = await readJson(request);
+  if (action === "reset-points") {
+    await env.DB.batch(["wallets", "bets", "rounds", "pools"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+    return json({ ok: true }, 200, cors);
+  }
   gameOf(id);
   if (action === "reset") await env.DB.prepare("DELETE FROM scores WHERE game = ?").bind(id).run();
   else if (action === "delete") await env.DB.prepare("DELETE FROM scores WHERE game = ? AND user_id = ?").bind(id, String(userId)).run();
   else fail("Unknown action", 400);
   return json({ ok: true }, 200, cors);
+}
+
+// ---------- Points ----------
+
+const START_POINTS = 100;
+const DAILY_CAP = 300; // most points a player can earn from games per day
+
+function clampInt(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, Math.round(v)));
+}
+
+async function wallet(env, user) {
+  await env.DB.prepare(
+    "INSERT INTO wallets (user_id, name, avatar, points) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET name = excluded.name, avatar = excluded.avatar"
+  )
+    .bind(user.id, user.name, user.avatar, START_POINTS)
+    .run();
+  return env.DB.prepare("SELECT points, earned_day AS day, earned_today AS today FROM wallets WHERE user_id = ?").bind(user.id).first();
+}
+
+async function awardPoints(env, user, amount) {
+  const w = await wallet(env, user);
+  const day = new Date().toISOString().slice(0, 10);
+  const today = w.day === day ? w.today : 0;
+  const earned = Math.max(0, Math.min(amount, DAILY_CAP - today));
+  await env.DB.prepare("UPDATE wallets SET points = points + ?, earned_day = ?, earned_today = ? WHERE user_id = ?")
+    .bind(earned, day, today + earned, user.id)
+    .run();
+  return { pointsEarned: earned, points: w.points + earned, earnedToday: today + earned, dailyCap: DAILY_CAP };
+}
+
+async function pointsMine(request, env, cors) {
+  const user = await requireUser(request, env);
+  const w = await wallet(env, user);
+  const day = new Date().toISOString().slice(0, 10);
+  return json({ points: w.points, earnedToday: w.day === day ? w.today : 0, dailyCap: DAILY_CAP }, 200, cors);
+}
+
+async function pointsTop(env, cors) {
+  const { results } = await env.DB.prepare("SELECT user_id AS userId, name, avatar, points FROM wallets ORDER BY points DESC LIMIT 10").all();
+  return json({ players: results }, 200, cors);
+}
+
+// ---------- Betting games ----------
+// A new round starts every minute for everyone. Each round's result comes from a keyed hash of the
+// round number (HMAC with SESSION_SECRET), so it can't be predicted or changed from a browser.
+// Winners split the round's pot (plus any jackpot) in proportion to their bets; if nobody picked
+// the result, the pot rolls over into the jackpot. Rounds are paid out once, by whichever request
+// first sees that a round has finished.
+
+const ROUND_MS = 60000;
+const BET_CLOSE_MS = 5000; // betting closes this long before the round ends
+const BET_GAMES = {
+  colors: { choices: ["red", "green", "blue"] },
+  lucky: { choices: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] },
+};
+
+function betGameOf(id) {
+  const game = BET_GAMES[id];
+  if (!game) fail("Unknown game", 400);
+  return game;
+}
+
+async function roundOutcome(env, id, round) {
+  const sig = await crypto.subtle.sign("HMAC", await hmacKey(env), new TextEncoder().encode(`bet:${id}:${round}`));
+  const n = new DataView(sig).getUint32(0);
+  const { choices } = BET_GAMES[id];
+  return choices[n % choices.length];
+}
+
+async function settleRounds(env, id) {
+  const current = Math.floor(Date.now() / ROUND_MS);
+  const { results: pending } = await env.DB.prepare(
+    "SELECT DISTINCT round FROM bets WHERE game = ? AND round < ? AND round NOT IN (SELECT round FROM rounds WHERE game = ?) ORDER BY round LIMIT 20"
+  )
+    .bind(id, current, id)
+    .all();
+
+  for (const { round } of pending) {
+    const outcome = await roundOutcome(env, id, round);
+    // Claim the round; if another request already did, skip it
+    const claim = await env.DB.prepare("INSERT INTO rounds (game, round, outcome, settled_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
+      .bind(id, round, outcome, Date.now())
+      .run();
+    if (!claim.meta || claim.meta.changes !== 1) continue;
+
+    const { results: bets } = await env.DB.prepare("SELECT user_id, choice, amount FROM bets WHERE game = ? AND round = ?").bind(id, round).all();
+    const pot = bets.reduce((sum, b) => sum + b.amount, 0);
+    const winners = bets.filter((b) => b.choice === outcome);
+    await env.DB.prepare("INSERT INTO pools (game, jackpot) VALUES (?, 0) ON CONFLICT DO NOTHING").bind(id).run();
+    const pool = await env.DB.prepare("SELECT jackpot FROM pools WHERE game = ?").bind(id).first();
+
+    const writes = [env.DB.prepare("UPDATE bets SET payout = 0 WHERE game = ? AND round = ?").bind(id, round)];
+    let paid = 0;
+    if (winners.length) {
+      const total = pot + pool.jackpot;
+      const winningStake = winners.reduce((sum, b) => sum + b.amount, 0);
+      for (const b of winners) {
+        const payout = Math.floor((total * b.amount) / winningStake);
+        paid += payout;
+        writes.push(env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(payout, b.user_id));
+        writes.push(env.DB.prepare("UPDATE bets SET payout = ? WHERE game = ? AND round = ? AND user_id = ?").bind(payout, id, round, b.user_id));
+      }
+      writes.push(env.DB.prepare("UPDATE pools SET jackpot = ? WHERE game = ?").bind(total - paid, id)); // leftover from rounding
+    } else {
+      writes.push(env.DB.prepare("UPDATE pools SET jackpot = jackpot + ? WHERE game = ?").bind(pot, id));
+    }
+    writes.push(
+      env.DB.prepare("UPDATE rounds SET pot = ?, winners = ?, paid = ? WHERE game = ? AND round = ?").bind(pot, winners.length, paid, id, round)
+    );
+    await env.DB.batch(writes);
+  }
+}
+
+async function optionalUser(request, env) {
+  try {
+    return await requireUser(request, env);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function betState(request, url, env, cors) {
+  const id = url.searchParams.get("game") || "";
+  const game = betGameOf(id);
+  await settleRounds(env, id);
+  const now = Date.now();
+  const round = Math.floor(now / ROUND_MS);
+  const user = request.headers.get("Authorization") ? await optionalUser(request, env) : null;
+
+  const { results: bets } = await env.DB.prepare(
+    "SELECT user_id AS userId, name, avatar, choice, amount FROM bets WHERE game = ? AND round = ? ORDER BY created DESC"
+  )
+    .bind(id, round)
+    .all();
+  const choices = Object.fromEntries(game.choices.map((c) => [c, { total: 0, count: 0 }]));
+  bets.forEach((b) => {
+    choices[b.choice].total += b.amount;
+    choices[b.choice].count += 1;
+  });
+  const pool = await env.DB.prepare("SELECT jackpot FROM pools WHERE game = ?").bind(id).first();
+  const { results: history } = await env.DB.prepare(
+    "SELECT round, outcome, pot, winners, paid FROM rounds WHERE game = ? ORDER BY round DESC LIMIT 10"
+  )
+    .bind(id)
+    .all();
+
+  const out = {
+    game: id,
+    round,
+    now,
+    endsAt: (round + 1) * ROUND_MS,
+    closesAt: (round + 1) * ROUND_MS - BET_CLOSE_MS,
+    choices,
+    pot: bets.reduce((sum, b) => sum + b.amount, 0),
+    jackpot: pool ? pool.jackpot : 0,
+    bets: bets.slice(0, 30),
+    history,
+  };
+  if (user) {
+    out.myBet = bets.find((b) => b.userId === user.id) || null;
+    out.myLast = await env.DB.prepare(
+      "SELECT b.round, b.choice, b.amount, b.payout, r.outcome FROM bets b JOIN rounds r ON r.game = b.game AND r.round = b.round " +
+        "WHERE b.game = ? AND b.user_id = ? ORDER BY b.round DESC LIMIT 1"
+    )
+      .bind(id, user.id)
+      .first();
+    out.points = (await wallet(env, user)).points;
+  }
+  return json(out, 200, cors);
+}
+
+async function betPlace(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { game: id, choice: rawChoice, amount: raw } = await readJson(request);
+  const game = betGameOf(id);
+  const choice = String(rawChoice);
+  if (!game.choices.includes(choice)) fail("Pick one of the options.", 400);
+  const amount = Math.floor(Number(raw));
+  if (!Number.isFinite(amount) || amount < 1) fail("Bet at least 1 point.", 400);
+
+  const now = Date.now();
+  const round = Math.floor(now / ROUND_MS);
+  if (now >= (round + 1) * ROUND_MS - BET_CLOSE_MS) fail("Betting is closed for this round. Wait a few seconds for the next one.", 409);
+
+  await wallet(env, user);
+  const existing = await env.DB.prepare("SELECT 1 FROM bets WHERE game = ? AND round = ? AND user_id = ?").bind(id, round, user.id).first();
+  if (existing) fail("You already bet this round.", 409);
+
+  // Take the points only if there are enough
+  const take = await env.DB.prepare("UPDATE wallets SET points = points - ? WHERE user_id = ? AND points >= ?").bind(amount, user.id, amount).run();
+  if (!take.meta || take.meta.changes !== 1) fail("You don't have enough points for that bet.", 400);
+  try {
+    await env.DB.prepare(
+      "INSERT INTO bets (game, round, user_id, name, avatar, choice, amount, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+      .bind(id, round, user.id, user.name, user.avatar, choice, amount, now)
+      .run();
+  } catch (e) {
+    await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(amount, user.id).run();
+    fail("You already bet this round.", 409);
+  }
+  const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
+  return json({ ok: true, points: w.points, round }, 200, cors);
 }
 
 // ---------- Helpers ----------

@@ -17,17 +17,25 @@ const list = document.getElementById("streamer-list");
 const title = document.getElementById("now-title");
 const multiToggle = document.getElementById("multi-toggle");
 const chatToggle = document.getElementById("chat-toggle");
-const form = document.getElementById("add-form");
-const formTitle = document.getElementById("form-title");
-const platformSelect = document.getElementById("add-platform");
-const input = document.getElementById("add-input");
-const submitBtn = document.getElementById("add-submit");
-const cancelBtn = document.getElementById("add-cancel");
-const msg = document.getElementById("add-msg");
+// One "add" card per platform (Kick, Twitch, YouTube)
+const addCards = Object.fromEntries([...document.querySelectorAll(".add-card")].map((f) => [f.dataset.platform, f]));
+function cardParts(platform) {
+  const form = addCards[platform];
+  return {
+    form,
+    input: form.querySelector("input"),
+    submit: form.querySelector('button[type="submit"]'),
+    cancel: form.querySelector(".add-card-cancel"),
+    title: form.querySelector(".add-card-title"),
+    msg: form.querySelector(".form-msg"),
+  };
+}
+let msgPlatform = "kick"; // the card that shows the latest message
 
 let streamers = load();
 let selected = []; // ids currently playing
 let editingId = null;
+let editingPlatform = null;
 
 // ---------- Storage ----------
 
@@ -863,47 +871,62 @@ function removeStreamer(id) {
 }
 
 function startEdit(s) {
+  stopEdit();
   editingId = s.id;
-  formTitle.textContent = `Fix "${displayName(s)}"`;
-  submitBtn.textContent = "Replace";
-  cancelBtn.hidden = false;
-  platformSelect.value = s.platform;
+  editingPlatform = s.platform;
+  const { form, input, submit, cancel, title } = cardParts(s.platform);
+  title.textContent = `Fix "${displayName(s)}"`;
+  submit.textContent = "Replace";
+  cancel.hidden = false;
   input.value = "";
   input.placeholder = "Paste their correct channel link";
-  showMsg("");
+  form.classList.add("editing");
+  showMsg("", null, s.platform);
+  form.scrollIntoView({ behavior: "smooth", block: "nearest" });
   input.focus();
 }
 
 function stopEdit() {
+  if (editingPlatform) {
+    const { form, input, submit, cancel, title } = cardParts(editingPlatform);
+    title.textContent = `Add a ${cap(editingPlatform)} streamer`;
+    submit.textContent = "Add";
+    cancel.hidden = true;
+    input.placeholder = input.dataset.placeholder;
+    form.classList.remove("editing");
+  }
   editingId = null;
-  formTitle.textContent = "Add a streamer";
-  submitBtn.textContent = "Add";
-  cancelBtn.hidden = true;
-  input.placeholder = "Name or paste a link";
+  editingPlatform = null;
 }
 
-function showMsg(text, type) {
+function showMsg(text, type, platform = msgPlatform) {
+  // Only one card shows a message at a time
+  Object.keys(addCards).forEach((p) => {
+    if (p !== platform) cardParts(p).msg.textContent = "";
+  });
+  msgPlatform = platform;
+  const { msg } = cardParts(platform);
   msg.textContent = text;
   msg.className = "form-msg" + (type ? ` ${type}` : "");
 }
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
+async function addStreamer(platform) {
+  const { input, submit } = cardParts(platform);
   let s;
-  submitBtn.disabled = true;
-  if (platformSelect.value === "youtube" && !looksLikeLink(input.value)) showMsg("Looking up the YouTube channel…");
+  submit.disabled = true;
+  if (platform === "youtube" && !looksLikeLink(input.value)) showMsg("Looking up the YouTube channel…", null, platform);
   try {
-    s = await parseFull(input.value, platformSelect.value);
+    s = await parseFull(input.value, platform);
   } catch (err) {
-    showMsg(err.message, "error");
+    showMsg(err.message, "error", platform);
     return;
   } finally {
-    submitBtn.disabled = false;
+    submit.disabled = false;
   }
   s.id = makeId(s);
 
   if (streamers.some((x) => x.id === s.id && x.id !== editingId)) {
-    showMsg(`${displayName(s)} is already in the list.`, "error");
+    showMsg(`${displayName(s)} is already in the list.`, "error", platform);
     return;
   }
 
@@ -911,29 +934,28 @@ form.addEventListener("submit", async (e) => {
     const i = streamers.findIndex((x) => x.id === editingId);
     if (i !== -1) streamers[i] = s;
     selected = selected.map((x) => (x === editingId ? s.id : x));
-    showMsg(`Replaced with ${displayName(s)} (${cap(s.platform)}).`, "ok");
+    showMsg(`Replaced with ${displayName(s)} (${cap(s.platform)}).`, "ok", platform);
     stopEdit();
   } else {
     streamers.push(s);
-    showMsg(`Added ${displayName(s)} (${cap(s.platform)}).`, "ok");
+    showMsg(`Added ${displayName(s)} (${cap(s.platform)}).`, "ok", platform);
   }
 
   input.value = "";
   save();
   render();
-});
+}
 
-cancelBtn.addEventListener("click", () => {
-  stopEdit();
-  showMsg("");
-});
-
-// Pasting a link picks the platform for you
-input.addEventListener("input", () => {
-  const v = input.value.toLowerCase();
-  if (v.includes("twitch.tv")) platformSelect.value = "twitch";
-  else if (v.includes("kick.com")) platformSelect.value = "kick";
-  else if (v.includes("youtube.com") || v.includes("youtu.be")) platformSelect.value = "youtube";
+Object.keys(addCards).forEach((platform) => {
+  const { form, cancel } = cardParts(platform);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    addStreamer(platform);
+  });
+  cancel.addEventListener("click", () => {
+    stopEdit();
+    showMsg("", null, platform);
+  });
 });
 
 multiToggle.addEventListener("change", () => {
@@ -961,9 +983,8 @@ async function addFromUrl() {
     }
     selected = [s.id];
   } catch (err) {
-    input.value = text;
-    platformSelect.value = platform;
-    showMsg(err.message, "error");
+    cardParts(platform).input.value = text;
+    showMsg(err.message, "error", platform);
   }
   return true;
 }

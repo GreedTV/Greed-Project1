@@ -1,5 +1,7 @@
 // Mini games with a shared leaderboard (stored by the Worker).
-// Anyone can play; logged-in players' best scores go on the leaderboard.
+// Anyone can play; logged-in players' best scores go on the leaderboard and earn points.
+// Points can be bet in two multiplayer games (Color Clash, Lucky Number) that run in
+// one-minute rounds for everyone at once; the Worker decides results and pays winners.
 
 const API = WORKER_URL.replace(/\/$/, "");
 const PENDING_KEY = "sinners-pending-score"; // a score waiting for the player to log in
@@ -28,6 +30,24 @@ const GAMES = {
     format: (v) => `${v} words`,
     start: startTyping,
   },
+  colors: {
+    icon: "🎨",
+    title: "Color Clash",
+    blurb: "Bet points on red, green or blue. Every minute one color wins, and its backers split the whole pot.",
+    bet: true,
+    choices: [
+      ["red", "Red"],
+      ["green", "Green"],
+      ["blue", "Blue"],
+    ],
+  },
+  lucky: {
+    icon: "🍀",
+    title: "Lucky Number",
+    blurb: "Pick a number from 1 to 10 and bet. Every minute one number is drawn; if nobody picked it, the pot grows into a jackpot.",
+    bet: true,
+    choices: Array.from({ length: 10 }, (_, i) => [String(i + 1), String(i + 1)]),
+  },
 };
 
 const WORDS = (
@@ -43,6 +63,8 @@ const stage = document.getElementById("game-stage");
 const result = document.getElementById("game-result");
 const lbList = document.getElementById("lb-list");
 const lbHint = document.getElementById("lb-hint");
+const pointsBar = document.getElementById("points-bar");
+const lbTitle = document.querySelector(".leaderboard h3");
 
 let currentGame = "reaction";
 let timers = [];
@@ -98,6 +120,13 @@ function pick(id) {
 
 function showIntro() {
   const g = GAMES[currentGame];
+  if (g.bet) {
+    result.replaceChildren();
+    stage.className = "game-stage bet";
+    stage.replaceChildren();
+    startBet(currentGame);
+    return;
+  }
   result.replaceChildren();
   stage.className = "game-stage intro";
   const box = el("div", "game-intro");
@@ -334,10 +363,16 @@ async function submit(game, score, status) {
     if (res.status === 401 || res.status === 403) SinnersAuth.expire();
     if (!res.ok) throw new Error(data.error || "Couldn't save your score.");
     const g = GAMES[game];
-    status.textContent = data.newBest
-      ? `New personal best! You're #${data.rank} on the leaderboard.`
-      : `Saved. Your best is ${g.format(data.best)} (#${data.rank}).`;
+    const points = data.pointsEarned
+      ? ` +${data.pointsEarned} points 🪙`
+      : data.earnedToday >= data.dailyCap
+        ? " (daily points limit reached)"
+        : "";
+    status.textContent =
+      (data.newBest ? `New personal best! You're #${data.rank} on the leaderboard.` : `Saved. Your best is ${g.format(data.best)} (#${data.rank}).`) +
+      points;
     if (game === currentGame) loadLeaderboard();
+    refreshPoints();
   } catch (err) {
     status.textContent = err.message;
   }
@@ -346,6 +381,8 @@ async function submit(game, score, status) {
 async function loadLeaderboard() {
   const g = GAMES[currentGame];
   const game = currentGame;
+  if (g.bet) return loadRichest();
+  lbTitle.textContent = "🏆 Leaderboard";
   lbHint.textContent = g.lowerIsBetter ? `${g.title}: lowest time wins.` : `${g.title}: highest score wins.`;
   lbList.replaceChildren(el("li", "lb-empty", "Loading…"));
   try {
@@ -380,7 +417,235 @@ async function loadLeaderboard() {
   }
 }
 
+async function loadRichest() {
+  lbTitle.textContent = "🪙 Most points";
+  lbHint.textContent = "Earn points by playing the other games.";
+  try {
+    const data = await (await fetch(`${API}/points/top`)).json();
+    if (!GAMES[currentGame].bet) return;
+    const me = SinnersAuth.user && SinnersAuth.user.id;
+    if (!data.players || !data.players.length) {
+      lbList.replaceChildren(el("li", "lb-empty", "Nobody has points yet."));
+      return;
+    }
+    lbList.replaceChildren(
+      ...data.players.map((p, i) => {
+        const li = el("li", "lb-row" + (p.userId === me ? " me" : ""));
+        li.append(el("span", "lb-rank", ["🥇", "🥈", "🥉"][i] || `${i + 1}`));
+        if (p.avatar) {
+          const img = el("img");
+          img.src = p.avatar;
+          img.alt = "";
+          li.append(img);
+        } else li.append(el("span", "chat-avatar", p.name.charAt(0).toUpperCase()));
+        li.append(el("span", "lb-name", p.name), el("span", "lb-score", `${p.points} 🪙`));
+        return li;
+      })
+    );
+  } catch (e) {
+    lbList.replaceChildren(el("li", "lb-empty", "Unavailable right now."));
+  }
+}
+
 document.getElementById("lb-refresh").addEventListener("click", loadLeaderboard);
+
+// ---------- Points ----------
+
+let myPoints = null;
+
+async function refreshPoints() {
+  if (!SinnersAuth.user) {
+    myPoints = null;
+    pointsBar.replaceChildren(el("span", null, "🪙 Log in with Discord to get 100 free points and save your scores."));
+    const login = el("button", "button discord-btn", "Log in");
+    login.type = "button";
+    login.addEventListener("click", SinnersAuth.login);
+    pointsBar.append(login);
+    return;
+  }
+  try {
+    const res = await fetch(`${API}/points`, { headers: { Authorization: `Bearer ${SinnersAuth.token}` } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    myPoints = data.points;
+    pointsBar.replaceChildren(
+      el("strong", "points-total", `🪙 ${data.points} points`),
+      el("span", null, `Earned from games today: ${data.earnedToday} / ${data.dailyCap}`)
+    );
+  } catch (e) {
+    pointsBar.replaceChildren(el("span", null, "🪙 Points unavailable right now."));
+  }
+}
+
+// ---------- Betting games (Color Clash, Lucky Number) ----------
+
+function startBet(id) {
+  const g = GAMES[id];
+  let state = null;
+  let picked = null;
+  let clockSkew = 0; // server time minus our time
+  let lastRound = null;
+
+  const top = el("div", "bet-top");
+  const timer = el("div", "bet-timer");
+  const pot = el("div", "bet-pot");
+  top.append(timer, pot);
+
+  const grid = el("div", `bet-choices ${id}`);
+  const buttons = {};
+  g.choices.forEach(([value, label]) => {
+    const b = el("button", `bet-choice c-${value}`);
+    b.type = "button";
+    b.append(el("span", "bet-choice-label", label), el("span", "bet-choice-total", "0"));
+    b.addEventListener("click", () => {
+      picked = value;
+      draw();
+    });
+    buttons[value] = b;
+    grid.append(b);
+  });
+
+  const controls = el("form", "bet-controls");
+  controls.autocomplete = "off";
+  const amount = el("input");
+  amount.type = "number";
+  amount.min = "1";
+  amount.step = "1";
+  amount.value = "10";
+  amount.setAttribute("aria-label", "Points to bet");
+  const quick = el("div", "bet-quick");
+  [10, 50, 100].forEach((n) => {
+    const q = el("button", "link-btn", `${n}`);
+    q.type = "button";
+    q.addEventListener("click", () => (amount.value = n));
+    quick.append(q);
+  });
+  const max = el("button", "link-btn", "Max");
+  max.type = "button";
+  max.addEventListener("click", () => myPoints && (amount.value = myPoints));
+  quick.append(max);
+  const place = el("button", "button", "Place bet");
+  place.type = "submit";
+  controls.append(amount, quick, place);
+
+  const note = el("p", "bet-note");
+  const history = el("div", "bet-history");
+  const live = el("ul", "bet-live");
+  stage.append(top, grid, controls, note, history, live);
+
+  function draw() {
+    if (!state) return;
+    const now = Date.now() + clockSkew;
+    const left = Math.max(0, Math.ceil((state.endsAt - now) / 1000));
+    const closed = now >= state.closesAt;
+    timer.textContent = closed ? "Betting closed. Drawing…" : `Round ends in 0:${String(left).padStart(2, "0")}`;
+    timer.classList.toggle("low", !closed && left <= 10);
+    pot.textContent = `Pot ${state.pot} 🪙` + (state.jackpot ? `  ·  Jackpot +${state.jackpot}` : "");
+
+    g.choices.forEach(([value]) => {
+      const c = state.choices[value];
+      const b = buttons[value];
+      b.querySelector(".bet-choice-total").textContent = c.count ? `${c.total} 🪙 · ${c.count}` : "–";
+      b.classList.toggle("picked", picked === value);
+      b.classList.toggle("mine", !!state.myBet && state.myBet.choice === value);
+      b.disabled = closed || !!state.myBet;
+    });
+
+    const canBet = !!SinnersAuth.user && !closed && !state.myBet;
+    controls.hidden = !canBet;
+    if (!SinnersAuth.user) note.textContent = "Log in to bet your points.";
+    else if (state.myBet) note.textContent = `You bet ${state.myBet.amount} on ${labelOf(state.myBet.choice)}. Good luck!`;
+    else if (closed) note.textContent = "The next round starts in a moment.";
+    else if (!picked) note.textContent = "Pick an option, choose how many points, then place your bet.";
+    else note.textContent = `Betting on ${labelOf(picked)}.`;
+  }
+
+  const labelOf = (value) => (g.choices.find(([v]) => v === value) || [value, value])[1];
+
+  function drawHistory() {
+    history.replaceChildren(el("span", "bet-history-label", "Last results"));
+    (state.history || []).forEach((r) => {
+      const chip = el("span", `bet-result c-${r.outcome}`, labelOf(r.outcome));
+      chip.title = r.winners ? `${r.winners} winner(s) shared ${r.paid}` : `No winner, ${r.pot} rolled over`;
+      history.append(chip);
+    });
+    if (!(state.history || []).length) history.append(el("span", "bet-history-empty", "No rounds yet"));
+
+    live.replaceChildren(
+      ...(state.bets || []).map((b) => el("li", null, `${b.name} bet ${b.amount} on ${labelOf(b.choice)}`))
+    );
+  }
+
+  function announceLast() {
+    const m = state.myLast;
+    if (!m || m.round !== state.round - 1) return;
+    const won = m.payout > 0;
+    result.replaceChildren(
+      el(
+        "div",
+        "result-line",
+        won
+          ? `🎉 ${labelOf(m.outcome)} won! You got ${m.payout} points for your ${m.amount}.`
+          : `${labelOf(m.outcome)} won. You lost your ${m.amount} on ${labelOf(m.choice)}.`
+      )
+    );
+  }
+
+  async function poll() {
+    if (document.hidden) return;
+    try {
+      const headers = SinnersAuth.user ? { Authorization: `Bearer ${SinnersAuth.token}` } : {};
+      const res = await fetch(`${API}/bets/state?game=${id}`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      clockSkew = data.now - Date.now();
+      const newRound = lastRound !== null && data.round !== lastRound;
+      state = data;
+      lastRound = data.round;
+      if (typeof data.points === "number" && data.points !== myPoints) refreshPoints();
+      if (newRound) {
+        picked = null;
+        announceLast();
+        loadRichest();
+      }
+      drawHistory();
+      draw();
+    } catch (e) {
+      timer.textContent = "Couldn't reach the game right now.";
+    }
+  }
+
+  controls.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!picked) {
+      note.textContent = "Pick an option first.";
+      return;
+    }
+    place.disabled = true;
+    try {
+      const res = await fetch(`${API}/bets/place`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
+        body: JSON.stringify({ game: id, choice: picked, amount: Number(amount.value) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) SinnersAuth.expire();
+      if (!res.ok) throw new Error(data.error || "Couldn't place that bet.");
+      myPoints = data.points;
+      refreshPoints();
+      await poll();
+    } catch (err) {
+      note.textContent = err.message;
+    } finally {
+      place.disabled = false;
+    }
+  });
+
+  // Live: refresh the round every 2 seconds, and the countdown every second
+  poll();
+  timers.push(setInterval(poll, 2000));
+  timers.push(setInterval(draw, 1000));
+}
 
 // ---------- Start ----------
 
@@ -389,6 +654,8 @@ if (GAMES[fromHash]) currentGame = fromHash;
 renderPicker();
 showIntro();
 loadLeaderboard();
+refreshPoints();
+const stopAuthWatch = SinnersAuth.onChange(refreshPoints);
 
 // Back from Discord login with a score waiting to be saved
 try {
@@ -403,4 +670,7 @@ try {
 } catch (e) {}
 
 // In-site navigation (nav.js): stop any running game when leaving the page
-SinnersNav.onLeave(stopGame);
+SinnersNav.onLeave(() => {
+  stopGame();
+  stopAuthWatch();
+});

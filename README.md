@@ -13,7 +13,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 - `index.html` (`/`): home page with platform logo tiles and a "How to use Sinners" guide
 - `watch.html` (`/watch`): watch streams one at a time with chat, or up to 4 at once
 - `content.html` (`/content`): watch YouTube videos and playlists while waiting for a stream
-- `games.html` (`/games`): mini games (Quick Draw, Target Rush, Chat Typer) with a shared leaderboard
+- `games.html` (`/games`): mini games (Quick Draw, Target Rush, Chat Typer) with leaderboards, plus betting games (Color Clash, Lucky Number) played with points
 - `gallery.html` (`/gallery`): community gallery with Images and Clips sections; visitors share links
 - `about.html` (`/about`): short, plain about page (to be filled in later)
 - `admin.html` (`/admin`): review shared gallery links (password protected, not in the menu)
@@ -53,6 +53,9 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 
 - Three quick original games: Quick Draw (reaction time, 5 rounds), Target Rush (targets hit in 30 s) and Chat Typer (words typed in 30 s).
 - Anyone can play; logging in with Discord saves your best score to the leaderboard (top 10 shown).
+- **Points 🪙:** every account starts with 100; finished games earn more (better scores earn more, up to 300 a day).
+- **Color Clash / Lucky Number:** everyone bets on the same one-minute round. The Worker decides the result (unpredictable from a browser) and winners split the pot in proportion to their bets; if nobody picked the result, the pot rolls over into a jackpot. Points have no real value and can't be bought or cashed out.
+- Admin can reset all points (which also clears bets and round history).
 - Scores come from the browser, so they can't be fully cheat-proof: impossible scores are refused, submissions are rate limited, banned users can't post, and `admin.html` can remove entries or reset a game.
 
 ## Gallery
@@ -63,12 +66,13 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 
 ## Cloudflare Worker
 
-`worker/sinners-worker.js` does six jobs:
+`worker/sinners-worker.js` does seven jobs:
 
 1. **Kick HD:** asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers. Video chunks load straight from Kick's servers. Kick may change or block this at any time.
 2. **Gallery:** stores shared links in Workers KV and handles the review queue.
 3. **Discord login:** sends visitors to Discord and back with a signed session token.
 4. **Sinners chat:** stores messages in D1, with admin delete and ban.
+7. **Points and betting rounds:** wallets (100 to start, up to 300 earned per day from games), one-minute Color Clash / Lucky Number rounds whose results come from an HMAC of the round number, paid out exactly once.
 6. **Game leaderboards:** saves logged-in players' best scores in D1, refuses impossible scores, and lets the admin remove entries or reset a game.
 5. **YouTube channels:** finds a channel by name or @handle and checks whether it's live, by reading YouTube's public channel pages.
 
