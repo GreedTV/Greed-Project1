@@ -274,7 +274,12 @@ async function setupKickHD(s, box, controls, muted) {
     hls.destroy();
     if (data.response && data.response.code === 404) {
       quality.offline();
-      box.replaceChildren(el("div", "player-offline", `${displayName(s)} is offline.`));
+      // Offer something to watch meanwhile, with a live alert already set for this streamer
+      const offline = el("div", "player-offline");
+      const wait = el("a", null, "Watch something while you wait →");
+      wait.href = `content.html?alert=${encodeURIComponent(s.channel)}`;
+      offline.append(el("p", null, `${displayName(s)} is offline.`), wait);
+      box.replaceChildren(offline);
     } else {
       // Worker or HD feed not working: use Kick's own player instead
       kickEmbed(s, box, controls, muted, "HD player unavailable, using Kick's player.");

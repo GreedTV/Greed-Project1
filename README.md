@@ -9,6 +9,7 @@ Live at https://sinnerstv.com/
 
 - `index.html`: home page with a quick "watch a streamer" box
 - `watch.html`: watch streams one at a time with chat, or up to 4 at once
+- `content.html`: watch YouTube videos and playlists while waiting for a stream, with a Kick live alert
 - `gallery.html`: community gallery with Images and Clips sections; visitors share links
 - `about.html`: short, plain about page (to be filled in later)
 - `admin.html`: review shared gallery links (password protected, not in the menu)
@@ -16,12 +17,13 @@ Live at https://sinnerstv.com/
 ## Scripts
 
 - `config.js`: the Worker address (`WORKER_URL`)
-- `theme.js`: Display settings (dark / light theme, preset or custom color-code accent), loaded in <head> on all pages
+- `theme.js`: light / dark theme toggle, loaded in <head> on all pages
 - `script.js`: menu and scroll animations (all pages)
 - `auth.js`: Discord login and the menu's Log in / profile button (all pages)
 - `chat.js`: Sinners chat (our own chat room per stream)
 - `watch.js`: the Watch page (players, multi-view, volume/quality, chat column, adding and fixing streamers)
 - `gallery.js`: loads approved items, the viewer, and the share forms
+- `content.js`: YouTube queue (saved per visitor), community picks from the gallery, Kick live alert
 - `admin.js`: approve / reject / remove gallery items
 - `worker/sinners-worker.js`: the Cloudflare Worker
 
