@@ -44,6 +44,8 @@
 //                                         | { action: "watch" }  once a minute while watching streams: a little XP   (logged in)
 //   GET  /profile                      -> your profile numbers   (logged in)
 //   GET  /arena                        -> top adventurers by arena rating
+//   GET  /boss                         -> this week's world boss, top damage dealers (and yours if logged in)
+//   POST /boss                         -> { action: "strike" } (every 4 hours) | { action: "claim", week? }   (logged in)
 //   GET  /daily                        -> today's 3 quests with progress, the bonus chest and the login streak   (logged in)
 //   POST /daily                        -> { action: "checkin" } | { action: "claim", index } | { action: "bonus" }   (logged in)
 //   GET  /shop/adventure               -> gear for each tier, potions and scrolls (and your level and boosts if logged in)
@@ -132,7 +134,7 @@ export default {
         if (request.method === "POST") return await discordAdminAction(request, env, cors);
       }
 
-      if (path === "/hero" || path === "/profile" || path === "/arena" || path === "/daily") {
+      if (path === "/hero" || path === "/profile" || path === "/arena" || path === "/daily" || path === "/boss") {
         if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
         await ensureSchema(env);
         if (path === "/hero" && request.method === "GET") return await heroGet(request, env, cors);
@@ -140,6 +142,8 @@ export default {
         if (path === "/profile" && request.method === "GET") return await profileGet(request, env, cors);
         if (path === "/arena" && request.method === "GET") return await arenaGet(request, env, cors);
         if (path === "/daily" && request.method === "GET") return await dailyGet(request, env, cors);
+        if (path === "/boss" && request.method === "GET") return await bossGet(request, env, cors);
+        if (path === "/boss" && request.method === "POST") return await bossAction(request, env, cors, ctx);
         if (path === "/daily" && request.method === "POST") return await dailyAction(request, env, cors);
       }
 
@@ -667,9 +671,20 @@ function fromB64url(str) {
 // ---------- Sinners chat ----------
 // Messages live in D1. Viewers poll for new messages every few seconds.
 
+// Bump SCHEMA_VERSION whenever tables or columns change. The database remembers the version it has,
+// so the full setup below runs once per change instead of on every cold start (which was slow
+// enough to miss Discord's 3-second limit).
+const SCHEMA_VERSION = 13;
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
+  try {
+    const row = await env.DB.prepare("SELECT value FROM meta WHERE key = 'schema'").first();
+    if (row && Number(row.value) >= SCHEMA_VERSION) {
+      schemaReady = true;
+      return;
+    }
+  } catch (e) {} // no meta table yet: set everything up
   await env.DB.batch([
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, user_id TEXT NOT NULL, " +
@@ -737,6 +752,14 @@ async function ensureSchema(env) {
     ),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS streaks (user_id TEXT PRIMARY KEY, last_day TEXT NOT NULL, streak INTEGER NOT NULL, best INTEGER NOT NULL)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS bets_user ON bets (user_id, created)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS bosses (week TEXT PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, hp_max INTEGER NOT NULL, " +
+        "hp_left INTEGER NOT NULL, defeated_at INTEGER)"
+    ),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS boss_hits (week TEXT NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, damage INTEGER NOT NULL DEFAULT 0, " +
+        "hits INTEGER NOT NULL DEFAULT 0, last_strike INTEGER, claimed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (week, user_id))"
+    ),
   ]);
   // Added later: tables made before this need the column (fails harmlessly when it's already there)
   for (const sql of [
@@ -765,6 +788,10 @@ async function ensureSchema(env) {
       await env.DB.prepare(sql).run();
     } catch (e) {}
   }
+  await env.DB.batch([
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
+    env.DB.prepare("INSERT INTO meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(SCHEMA_VERSION)),
+  ]);
   schemaReady = true;
 }
 
@@ -1648,7 +1675,10 @@ async function collectDungeon(env, user) {
   ]);
   const gained = await addHeroXp(env, user.id, xp);
   await bumpDaily(env, user.id, { dungeons: 1, dungeon_wins: won ? 1 : 0 });
+  // Every adventure also hits the weekly boss (harder regions hit harder; a loss does half)
+  const bossDealt = await bossDamage(env, user, (60 + powerOf(snap)) * dungeon.tier * (won ? 1 : 0.5));
   return {
+    bossDealt,
     dungeon: { id: dungeon.id, name: dungeon.name, emoji: dungeon.emoji, monster: dungeon.monster },
     me: { name: hero.name, ...snap },
     log,
@@ -1709,6 +1739,7 @@ async function duel(env, user, opponentId) {
   ]);
   await useBuffs(env, hero, ["atk", "def", "hp"]);
   await bumpDaily(env, user.id, { duels: 1, duel_wins: won ? 1 : 0 });
+  const bossDealt = await bossDamage(env, user, 40 + powerOf(mine) / 2);
   const earned = won ? await awardPoints(env, user, 10) : { pointsEarned: 0 };
   const gained = await addHeroXp(env, user.id, won ? 25 : 8);
   return {
@@ -1723,6 +1754,7 @@ async function duel(env, user, opponentId) {
     levels: gained.levels,
     level: gained.level,
     duelsLeft: DUELS_PER_DAY - used - 1,
+    bossDealt,
   };
 }
 
@@ -2109,6 +2141,193 @@ async function dailyAction(request, env, cors) {
   return json({ ...result, points: w ? w.points : 0, state: await dailyState(env, user) }, 200, cors);
 }
 
+// ---------- Weekly world boss ----------
+// A new boss every Monday (UTC) for the whole community. Its HP is set when the week's first visitor
+// sees it, from how many adventurers exist. Every adventure, duel and Strike (once every 4 hours)
+// damages it. If it falls, everyone who hit it can claim a chest, and the top 3 get extra coins and
+// gear; if it survives the week, helpers still get a small reward. Last week's rewards can be claimed
+// until the end of this week.
+
+const BOSSES = [
+  { name: "Abyssal Leviathan", emoji: "🐉" },
+  { name: "Crimson Titan", emoji: "🔥" },
+  { name: "Lord of Sins", emoji: "👁️" },
+  { name: "Bone Colossus", emoji: "💀" },
+  { name: "Storm Wyrm", emoji: "⚡" },
+  { name: "Broodmother", emoji: "🕷️" },
+];
+const BOSS_MIN_HP = 15000;
+const BOSS_HP_PER_HERO = 4000;
+const STRIKE_COOLDOWN_MS = 4 * 3600000;
+const BOSS_TOP_REWARDS = [
+  { coins: 500, rarity: "epic" },
+  { coins: 300, rarity: "rare" },
+  { coins: 200, rarity: "rare" },
+];
+
+// Monday of the given UTC week, e.g. "2026-10-19"
+function weekOf(time = Date.now()) {
+  const d = new Date(time);
+  const day = (d.getUTCDay() + 6) % 7; // Monday = 0
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day)).toISOString().slice(0, 10);
+}
+const weekEnds = (week) => Date.parse(week + "T00:00:00Z") + 7 * 86400000;
+
+async function bossOf(env, week = weekOf()) {
+  let boss = await env.DB.prepare("SELECT week, name, emoji, hp_max AS hpMax, hp_left AS hpLeft, defeated_at AS defeatedAt FROM bosses WHERE week = ?")
+    .bind(week)
+    .first();
+  if (!boss && week === weekOf()) {
+    const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM heroes").first();
+    const pick = BOSSES[Math.floor(Date.parse(week + "T00:00:00Z") / (7 * 86400000)) % BOSSES.length];
+    const hp = Math.max(BOSS_MIN_HP, n * BOSS_HP_PER_HERO);
+    await env.DB.prepare("INSERT INTO bosses (week, name, emoji, hp_max, hp_left) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING")
+      .bind(week, pick.name, pick.emoji, hp, hp)
+      .run();
+    boss = await env.DB.prepare("SELECT week, name, emoji, hp_max AS hpMax, hp_left AS hpLeft, defeated_at AS defeatedAt FROM bosses WHERE week = ?")
+      .bind(week)
+      .first();
+  }
+  return boss;
+}
+
+// Deals damage to this week's boss; returns the damage done (0 if it's already down)
+async function bossDamage(env, user, amount, ctx) {
+  amount = Math.max(1, Math.round(amount));
+  const boss = await bossOf(env);
+  if (!boss || boss.hpLeft <= 0) return 0;
+  const hit = await env.DB.prepare("UPDATE bosses SET hp_left = MAX(0, hp_left - ?) WHERE week = ? AND hp_left > 0").bind(amount, boss.week).run();
+  if (!hit.meta || hit.meta.changes !== 1) return 0;
+  const dealt = Math.min(amount, boss.hpLeft);
+  await env.DB.prepare(
+    "INSERT INTO boss_hits (week, user_id, name, damage, hits) VALUES (?, ?, ?, ?, 1) " +
+      "ON CONFLICT(week, user_id) DO UPDATE SET damage = damage + excluded.damage, hits = hits + 1, name = excluded.name"
+  )
+    .bind(boss.week, user.id, user.name, dealt)
+    .run();
+  // The final blow: mark it defeated (once) and tell Discord
+  const down = await env.DB.prepare("UPDATE bosses SET defeated_at = ? WHERE week = ? AND hp_left = 0 AND defeated_at IS NULL").bind(Date.now(), boss.week).run();
+  if (down.meta && down.meta.changes === 1) {
+    later(ctx, discordNotify(env, {
+      title: `${boss.emoji} The ${boss.name} has fallen!`,
+      description: `${user.name} dealt the final blow. Everyone who fought can claim their rewards on their Profile or with \`/boss status\`.`,
+      url: `${SITE_URL}/profile#boss`,
+    }));
+  }
+  return dealt;
+}
+
+async function bossState(env, user) {
+  const week = weekOf();
+  const boss = await bossOf(env, week);
+  const { results: top } = await env.DB.prepare("SELECT user_id AS userId, name, damage, hits FROM boss_hits WHERE week = ? ORDER BY damage DESC LIMIT 10")
+    .bind(week)
+    .all();
+  const { n: fighters } = await env.DB.prepare("SELECT COUNT(*) AS n FROM boss_hits WHERE week = ?").bind(week).first();
+  const out = { boss: { ...boss, endsAt: weekEnds(week) }, top, fighters, strikeCooldown: STRIKE_COOLDOWN_MS };
+  if (user) {
+    const mine = await env.DB.prepare("SELECT damage, hits, last_strike AS lastStrike, claimed FROM boss_hits WHERE week = ? AND user_id = ?").bind(week, user.id).first();
+    const rank = mine ? (await env.DB.prepare("SELECT COUNT(*) AS n FROM boss_hits WHERE week = ? AND damage > ?").bind(week, mine.damage).first()).n + 1 : null;
+    out.me = {
+      damage: mine ? mine.damage : 0,
+      hits: mine ? mine.hits : 0,
+      rank,
+      nextStrike: mine && mine.lastStrike ? mine.lastStrike + STRIKE_COOLDOWN_MS : 0,
+      canClaim: !!(mine && boss.defeatedAt && !mine.claimed && mine.damage > 0),
+      claimed: !!(mine && mine.claimed),
+    };
+    // Last week's rewards that weren't claimed yet
+    const lastWeek = weekOf(Date.parse(week + "T00:00:00Z") - 86400000);
+    const old = await env.DB.prepare("SELECT damage, claimed FROM boss_hits WHERE week = ? AND user_id = ?").bind(lastWeek, user.id).first();
+    if (old && !old.claimed && old.damage > 0) out.me.lastWeek = lastWeek;
+  }
+  return out;
+}
+
+async function bossStrike(env, user, ctx) {
+  const hero = await heroOf(env, user);
+  const week = weekOf();
+  const boss = await bossOf(env, week);
+  if (boss.hpLeft <= 0) fail(`The ${boss.name} is already defeated. Claim your rewards!`, 409);
+  const mine = await env.DB.prepare("SELECT last_strike AS lastStrike FROM boss_hits WHERE week = ? AND user_id = ?").bind(week, user.id).first();
+  const now = Date.now();
+  if (mine && mine.lastStrike && now - mine.lastStrike < STRIKE_COOLDOWN_MS) {
+    fail(`You can strike again in ${Math.ceil((mine.lastStrike + STRIKE_COOLDOWN_MS - now) / 60000)} min.`, 429);
+  }
+  // Mark the strike first, so two clicks at once count once
+  await env.DB.prepare("INSERT INTO boss_hits (week, user_id, name) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(week, user.id, user.name).run();
+  const mark = await env.DB.prepare("UPDATE boss_hits SET last_strike = ? WHERE week = ? AND user_id = ? AND COALESCE(last_strike, 0) = ?")
+    .bind(now, week, user.id, (mine && mine.lastStrike) || 0)
+    .run();
+  if (!mark.meta || mark.meta.changes !== 1) fail("Too fast! Try again in a moment.", 429);
+  const stats = heroStats(hero, await heroItems(env, user.id), true);
+  const crit = Math.random() < 0.15;
+  const dmg = (100 + powerOf(stats) * 2) * (0.8 + Math.random() * 0.4) * (crit ? 2 : 1);
+  const dealt = await bossDamage(env, user, dmg, ctx);
+  return { dealt, crit, nextStrike: now + STRIKE_COOLDOWN_MS };
+}
+
+async function bossClaim(env, user, week) {
+  week = week || weekOf();
+  const boss = await bossOf(env, week);
+  if (!boss) fail("No boss that week.", 404);
+  const current = week === weekOf();
+  if (current && !boss.defeatedAt) fail(`The ${boss.name} is still standing. Keep fighting!`, 409);
+  const mine = await env.DB.prepare("SELECT damage FROM boss_hits WHERE week = ? AND user_id = ?").bind(week, user.id).first();
+  if (!mine || mine.damage <= 0) fail("You didn't fight this boss.", 409);
+  const mark = await env.DB.prepare("UPDATE boss_hits SET claimed = 1 WHERE week = ? AND user_id = ? AND claimed = 0").bind(week, user.id).run();
+  if (!mark.meta || mark.meta.changes !== 1) fail("You already claimed these rewards.", 409);
+
+  const hero = await heroOf(env, user);
+  await wallet(env, user);
+  const out = { boss: { name: boss.name, emoji: boss.emoji }, defeated: !!boss.defeatedAt };
+  if (!boss.defeatedAt) {
+    // It survived the week: a small thank-you
+    out.coins = 50;
+  } else {
+    const rank = (await env.DB.prepare("SELECT COUNT(*) AS n FROM boss_hits WHERE week = ? AND damage > ?").bind(week, mine.damage).first()).n + 1;
+    const top = BOSS_TOP_REWARDS[rank - 1];
+    out.rank = rank;
+    out.coins = Math.round(150 * levelScale(hero.level)) + (top ? top.coins : 0);
+    out.potion = await giveRandomBuff(env, user, 3);
+    if (top) {
+      const tier = TIER_LEVELS.filter((l) => hero.level >= l).length;
+      const base = lootItem(tier);
+      const r = rarityOf(top.rarity);
+      const item = { ...base, rarity: r.id, ...itemStats(base.slot, tier, r.id), name: `${r.word}${MATERIALS[tier - 1]} ${SLOT_NOUNS[base.slot][0]}`, sell: r.sell * tier };
+      if ((await bagCount(env, user.id)) < BAG_SIZE) {
+        await env.DB.prepare(
+          "INSERT INTO hero_items (user_id, slot, name, rarity, power, atk, def, hp, tier, source, sell, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'boss', ?, ?)"
+        )
+          .bind(user.id, item.slot, item.name, item.rarity, item.power, item.atk, item.def, item.hp, item.tier, item.sell, Date.now())
+          .run();
+        out.item = item;
+      } else {
+        out.coins += item.sell;
+        out.item = { ...item, soldFor: item.sell };
+      }
+    }
+  }
+  await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(out.coins, user.id).run();
+  return out;
+}
+
+async function bossGet(request, env, cors) {
+  const user = request.headers.get("Authorization") ? await optionalUser(request, env) : null;
+  return json(await bossState(env, user), 200, cors);
+}
+
+async function bossAction(request, env, cors, ctx) {
+  const user = await requireUser(request, env);
+  const body = await readJson(request);
+  let result;
+  if (body.action === "strike") result = await bossStrike(env, user, ctx);
+  else if (body.action === "claim") result = await bossClaim(env, user, body.week);
+  else fail("Unknown action", 400);
+  const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
+  return json({ ...result, points: w ? w.points : 0, state: await bossState(env, user) }, 200, cors);
+}
+
 // ---------- Site stats ----------
 // Every open tab sends a heartbeat once a minute (only while it's visible), plus one "view" per page
 // opened. A visitor is a random ID the browser makes for itself; no IP, account or device data is kept.
@@ -2242,6 +2461,14 @@ const BOARD_INTERVALS = [
 ];
 
 const BOT_COMMANDS = [
+  {
+    name: "boss",
+    description: "This week's world boss: see it, strike it, claim rewards",
+    options: [
+      { type: 1, name: "status", description: "The boss, its HP, top damage dealers (and claims your rewards if it's down)" },
+      { type: 1, name: "strike", description: "Hit the boss (once every 4 hours)" },
+    ],
+  },
   { name: "daily", description: "Claim your daily streak reward and finished quests, and see today's quests" },
   {
     name: "duel",
@@ -2350,21 +2577,27 @@ async function discordInteraction(request, env, ctx) {
     return json({ type: 7, data: helpMessage(interaction.data.custom_id.slice(5), isAdmin(interaction)) }, 200, {});
   }
   if (interaction.type !== 2) return botReply("Unknown interaction.", { ephemeral: true });
-  try {
-    if (!env.DB) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
-    await ensureSchema(env);
-    if (interaction.data.name === "stats-live" || interaction.data.name === "stats-live-off") return await statsLiveCommand(interaction, env, ctx);
-    if (interaction.data.name === "help") return json({ type: 4, data: helpMessage("home", isAdmin(interaction)) }, 200, {});
-    if (interaction.data.name === "stats") {
-      if (!isAdmin(interaction)) return botReply("🔒 Only server admins can see the site report.", { ephemeral: true });
-      // Lots to gather: say "thinking…" now, then fill in the message (Discord allows 3 s for a first answer)
-      later(ctx, editOriginal(env, interaction, () => statsReport(env, interaction)));
-      return json({ type: 5 }, 200, {});
-    }
-    return await botCommand(interaction, env, new URL(request.url).origin);
-  } catch (err) {
-    return botReply(`Something went wrong: ${err.message}`, { ephemeral: true });
-  }
+  const name = interaction.data.name;
+  if (name === "help") return json({ type: 4, data: helpMessage("home", isAdmin(interaction)) }, 200, {});
+  if (!env.DB) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
+  const adminOnly = ["stats", "stats-live", "stats-live-off", "notify-here", "notify-off"].includes(name);
+  if (adminOnly && !isAdmin(interaction)) return botReply("🔒 Only server admins can do that.", { ephemeral: true });
+
+  // Discord needs an answer within 3 seconds: say "thinking…" right away, then fill in the real
+  // message when it's ready (database work can take longer, especially on a cold start)
+  const origin = new URL(request.url).origin;
+  later(
+    ctx,
+    editOriginal(env, interaction, async () => {
+      await ensureSchema(env);
+      if (name === "stats") return statsReport(env, interaction);
+      const res = name === "stats-live" || name === "stats-live-off" ? await statsLiveCommand(interaction, env, ctx) : await botCommand(interaction, env, origin);
+      const { data } = await res.json();
+      delete data.flags; // a follow-up can't change who sees the message
+      return data;
+    })
+  );
+  return json({ type: 5, data: adminOnly ? { flags: 64 } : {} }, 200, {});
 }
 
 async function botCommand(interaction, env, origin) {
@@ -2438,6 +2671,66 @@ async function botCommand(interaction, env, origin) {
           { name: "Regions", value: s.dungeons.map((d) => `${d.open ? d.emoji : "🔒"} ${d.name}${d.open ? ` · ${d.chance}%` : ` · level ${d.level}`}`).join("\n"), inline: true },
         ],
       })],
+    });
+  }
+
+  if (name === "boss") {
+    if (!caller.id) return botReply("Use this in a server or DM with me.", { ephemeral: true });
+    const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(caller.id).first();
+    if (banned && banned.banned) return botReply("Your account is banned from Sinners.", { ephemeral: true });
+    const user = {
+      id: caller.id,
+      name: caller.global_name || caller.username || "Adventurer",
+      avatar: caller.avatar ? `https://cdn.discordapp.com/avatars/${caller.id}/${caller.avatar}.png?size=64` : "",
+    };
+    await wallet(env, user);
+    const lines = [];
+    const sub = (options[0] || {}).name || "status";
+    try {
+      if (sub === "strike") {
+        const r = await bossStrike(env, user);
+        lines.push(`⚔️ ${user.name} strikes for **${r.dealt.toLocaleString()}** damage${r.crit ? " (critical!)" : ""}! Next strike <t:${Math.floor(r.nextStrike / 1000)}:R>.`);
+      }
+    } catch (err) {
+      lines.push(`⚠️ ${err.message}`);
+    }
+    let s = await bossState(env, user);
+    // Claim rewards (this week's if it's down, and last week's if they were left)
+    for (const week of [s.me.lastWeek, s.me.canClaim ? s.boss.week : null].filter(Boolean)) {
+      try {
+        const c = await bossClaim(env, user, week);
+        lines.push(
+          `🎁 ${c.boss.emoji} ${c.boss.name} rewards: +${c.coins} 🪙` +
+            (c.rank ? ` (#${c.rank} damage)` : "") +
+            (c.potion ? ` · ${c.potion.emoji} ${c.potion.name} ×${c.potion.uses}` : "") +
+            (c.item ? ` · ${c.item.name}${c.item.soldFor ? " (sold, bag full)" : ""}` : "")
+        );
+      } catch (err) {}
+    }
+    s = await bossState(env, user);
+    const b = s.boss;
+    const pct = b.hpLeft / b.hpMax;
+    const bar = "█".repeat(Math.round(pct * 14)).padEnd(14, "░");
+    const medals = ["🥇", "🥈", "🥉"];
+    return botReply(null, {
+      embeds: [
+        embed({
+          title: `${b.emoji} ${b.name}${b.defeatedAt ? " · DEFEATED" : ""}`,
+          url: `${SITE_URL}/profile#boss`,
+          description:
+            (lines.length ? `${lines.join("\n")}\n\n` : "") +
+            `\`${bar}\` ${b.hpLeft.toLocaleString()} / ${b.hpMax.toLocaleString()} HP\n` +
+            (b.defeatedAt ? "Everyone who fought can claim rewards." : `${s.fighters} fighters · escapes <t:${Math.floor(b.endsAt / 1000)}:R>`) +
+            `\nYour damage: **${s.me.damage.toLocaleString()}**${s.me.rank ? ` (#${s.me.rank})` : ""}` +
+            (!b.defeatedAt ? (s.me.nextStrike > Date.now() ? ` · next strike <t:${Math.floor(s.me.nextStrike / 1000)}:R>` : " · `/boss strike` is ready!") : ""),
+          fields: [
+            {
+              name: "Top damage",
+              value: s.top.length ? s.top.slice(0, 5).map((p, i) => `${medals[i] || `${i + 1}.`} ${p.name} · ${p.damage.toLocaleString()}`).join("\n") : "Nobody has hit it yet. Be the first!",
+            },
+          ],
+        }),
+      ],
     });
   }
 
@@ -2670,6 +2963,7 @@ const HELP_TOPICS = {
         value: [
           "`/help` this guide",
           "`/daily` streak reward and daily quests",
+          "`/boss status | strike` the weekly world boss",
           "`/dungeon status | go | collect` your adventurer",
           "`/duel [@player]` fight in the arena",
           "`/points [@player]` points and rank",
@@ -2711,6 +3005,10 @@ const HELP_TOPICS = {
       { name: "Winning", value: "Each region has a boss. Your **Attack, Defense and HP** decide the chance to win (shown before you go). A loss still gives some XP." },
       { name: "Getting stronger", value: "Level up (base stats grow), wear better gear (8 slots, rarer = stronger), and drink potions for +25% on the next 3 fights." },
       { name: "On the website", value: `${SITE_URL}/profile has the world map, your bag and a live replay of every fight.` },
+      {
+        name: "👹 Weekly world boss",
+        value: "A new boss every Monday for everyone. Every adventure and duel hits it, and `/boss strike` (every 4 hours) hits hard. When it falls, everyone who fought gets a chest; the top 3 also get gear.",
+      },
     ],
   },
   arena: {

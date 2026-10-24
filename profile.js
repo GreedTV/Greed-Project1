@@ -373,6 +373,7 @@ async function collect() {
       lines.push(r.soldFor ? `Found a ${label} ${r.item.name}, but your bag was full, so it was sold for ${r.soldFor} 🪙.` : `🎁 Found: ${r.item.name} (${label}, ${statText(r.item)}). It's in your bag.`);
     } else if (r.won) lines.push("No loot this time.");
     if (r.levels.length) lines.push(`⬆️ Level up! You're level ${r.level} now (+${r.reward} 🪙).`);
+    if (r.bossDealt) lines.push(`👹 It also hit the world boss for ${r.bossDealt.toLocaleString()}.`);
     await playFight({
       title: `${r.dungeon.emoji} ${r.dungeon.name}`,
       a: { name: before.hero.name, look: before.hero.look, worn: wornFrom(before), ...r.me },
@@ -386,6 +387,7 @@ async function collect() {
     renderAll();
     loadProfile();
     loadDaily();
+    loadBoss();
   } catch (err) {
     showResult(`⚠️ ${err.message}`);
   } finally {
@@ -531,7 +533,8 @@ async function fightDuel(opponent) {
       `Rating ${r.ratingChange > 0 ? "+" : ""}${r.ratingChange} → ${r.rating}`,
       `${r.pointsEarned ? `+${r.pointsEarned} 🪙 · ` : ""}+${r.xp} XP${r.levels.length ? ` · ⬆️ level ${r.level}!` : ""}`,
       `${r.duelsLeft} duels left today`,
-    ];
+      r.bossDealt && `👹 +${r.bossDealt.toLocaleString()} damage to the world boss`,
+    ].filter(Boolean);
     await playFight({
       title: `🏟️ ${r.me.name} vs ${r.foe.name}`,
       a: { ...r.me, worn: wornFrom(before) },
@@ -546,6 +549,7 @@ async function fightDuel(opponent) {
     loadArena();
     loadProfile();
     loadDaily();
+    loadBoss();
   } catch (err) {
     showResult(`⚠️ ${err.message}`);
   } finally {
@@ -677,6 +681,109 @@ document.addEventListener("sinners:daily", (e) => {
   }
 });
 
+// ---------- World boss ----------
+
+let boss = null;
+
+function renderBoss() {
+  if (!boss) return;
+  const b = boss.boss;
+  const me = boss.me || { damage: 0 };
+  const pct = Math.max(0, (b.hpLeft / b.hpMax) * 100);
+  const main = $("boss-main");
+  const head = el("div", "boss-head");
+  head.append(el("span", "boss-emoji" + (b.defeatedAt ? " defeated" : ""), b.emoji), el("div", "boss-name"));
+  head.lastChild.append(el("strong", null, b.name), el("span", "hint", b.defeatedAt ? "Defeated! 🎉" : `${boss.fighters} fighters so far`));
+  const bar = el("div", "boss-hp");
+  const fill = el("span");
+  fill.style.width = `${pct}%`;
+  bar.append(fill);
+  const parts = [head, bar, el("span", "hint", `${b.hpLeft.toLocaleString()} / ${b.hpMax.toLocaleString()} HP`)];
+  parts.push(el("p", "boss-me", `Your damage: ${me.damage.toLocaleString()}${me.rank ? ` (#${me.rank})` : ""}`));
+
+  const actions = el("div", "boss-actions");
+  const claimWeek = (week, label) => {
+    const c = el("button", "button", label);
+    c.type = "button";
+    c.addEventListener("click", async () => {
+      c.disabled = true;
+      try {
+        const r = await api("/boss", { action: "claim", week });
+        boss = r.state;
+        renderBoss();
+        showResult(
+          [
+            `🎁 ${r.boss.emoji} ${r.boss.name} rewards: +${r.coins} 🪙${r.rank ? ` (#${r.rank} in damage)` : ""}`,
+            r.potion && `${r.potion.emoji} ${r.potion.name} ×${r.potion.uses}`,
+            r.item && `${r.item.name} (${r.item.rarity})${r.item.soldFor ? ", sold because your bag was full" : " is in your bag"}`,
+          ].filter(Boolean)
+        );
+        loadHero();
+        loadProfile();
+      } catch (err) {
+        showResult(`⚠️ ${err.message}`);
+        c.disabled = false;
+      }
+    });
+    actions.append(c);
+  };
+  if (me.lastWeek) claimWeek(me.lastWeek, "🎁 Claim last week's rewards");
+  if (b.defeatedAt) {
+    if (me.canClaim) claimWeek(undefined, "🎁 Claim boss rewards");
+    else if (me.claimed) actions.append(el("span", "hint", "✅ Rewards claimed. A new boss arrives Monday."));
+    else actions.append(el("span", "hint", "You didn't fight this one. A new boss arrives Monday!"));
+  } else {
+    const wait = (me.nextStrike || 0) - (Date.now() + clockSkew);
+    const strike = el("button", "button", wait > 0 ? `⚔️ Strike again in ${fmtTime(wait)}` : "⚔️ Strike the boss");
+    strike.type = "button";
+    strike.disabled = wait > 0 || busy;
+    strike.addEventListener("click", async () => {
+      strike.disabled = true;
+      try {
+        const r = await api("/boss", { action: "strike" });
+        boss = r.state;
+        renderBoss();
+        const emoji = $("boss-main").querySelector(".boss-emoji");
+        emoji.classList.add("hit");
+        showResult(`⚔️ You hit the ${b.name} for ${r.dealt.toLocaleString()} damage${r.crit ? " (critical!)" : ""}!`);
+      } catch (err) {
+        showResult(`⚠️ ${err.message}`);
+        strike.disabled = false;
+      }
+    });
+    actions.append(strike);
+    actions.append(el("span", "hint", "Every adventure and duel hits it too."));
+  }
+  parts.push(actions);
+  main.replaceChildren(...parts);
+
+  const medals = ["🥇", "🥈", "🥉"];
+  const myId = SinnersAuth.user && SinnersAuth.user.id;
+  $("boss-top").replaceChildren(
+    ...(boss.top.length
+      ? boss.top.map((p, i) => {
+          const li = el("li", "arena-row" + (p.userId === myId ? " me" : ""));
+          li.append(el("span", "lb-rank", medals[i] || `${i + 1}`), el("span", "lb-name", p.name), el("span", "lb-score", p.damage.toLocaleString()), el("span", "hint", i < 3 ? (i ? "rare" : "epic") : ""));
+          return li;
+        })
+      : [el("li", "lb-empty", "Nobody has hit it yet. Be the first!")])
+  );
+  renderBossTime();
+}
+
+function renderBossTime() {
+  if (!boss) return;
+  const b = boss.boss;
+  $("boss-ends").textContent = b.defeatedAt ? "New boss on Monday" : `Escapes in ${fmtTime(b.endsAt - Date.now() - clockSkew)}`;
+}
+
+async function loadBoss() {
+  try {
+    boss = await api("/boss");
+    renderBoss();
+  } catch (e) {}
+}
+
 // ---------- Profile numbers ----------
 
 const GAME_FORMAT = {
@@ -733,7 +840,8 @@ async function start() {
     loadProfile();
     loadArena();
     loadDaily();
-    if (location.hash === "#arena" || location.hash === "#daily") $(location.hash.slice(1)).scrollIntoView();
+    loadBoss();
+    if (["#arena", "#daily", "#boss"].includes(location.hash)) $(location.hash.slice(1)).scrollIntoView();
   } catch (err) {
     $("profile-head").replaceChildren(el("p", "hint", `Couldn't load your profile: ${err.message}`));
   }
@@ -744,7 +852,10 @@ start();
 const stopAuthWatch = SinnersAuth.onChange(start);
 // Count down while away; when the adventurer is back, show the Collect button
 const ticker = setInterval(() => {
-  if (!document.hidden && daily && Date.now() % 30000 < 1000) renderReset();
+  if (!document.hidden && Date.now() % 30000 < 1000) {
+    renderReset();
+    renderBoss(); // strike cooldown and time left
+  }
   if (!state || !state.expedition || document.hidden) return;
   renderTrip();
   const done = Date.now() + clockSkew >= state.expedition.end;

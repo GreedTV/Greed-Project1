@@ -22,6 +22,7 @@ const SinnersNav = (() => {
     stats: "stats.js",
     profile: "profile.js",
     shop: "shop.js",
+    index: "home.js",
   };
 
   // "/watch", "/watch.html" -> "watch"; "/", "/index.html" -> "index"

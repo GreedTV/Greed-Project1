@@ -5394,3 +5394,143 @@ img {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- World boss ---------- */
+.boss-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.boss-main {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 15% 20%, rgba(239, 68, 68, 0.18), transparent 60%), var(--bg);
+}
+
+.boss-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.boss-emoji {
+  font-size: 3.6rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.6));
+}
+
+.boss-emoji.defeated {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+
+.boss-emoji.hit {
+  animation: hurt 0.4s;
+}
+
+.boss-name {
+  display: grid;
+}
+
+.boss-name strong {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.7rem;
+  line-height: 1.1;
+}
+
+.boss-hp {
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  overflow: hidden;
+}
+
+.boss-hp span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #7f1d1d, #ef4444, #f59e0b);
+  transition: width 0.5s;
+}
+
+.boss-me {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+
+.boss-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.boss-actions .button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.boss-top {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+/* Home page banner */
+.boss-strip-section {
+  padding: 0 0 8px;
+}
+
+.boss-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  text-decoration: none;
+  color: var(--text);
+  background: linear-gradient(110deg, rgba(127, 29, 29, 0.55), var(--surface) 70%);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.boss-strip:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.2);
+}
+
+.boss-strip.defeated {
+  background: linear-gradient(110deg, rgba(120, 53, 15, 0.5), var(--surface) 70%);
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.boss-strip-emoji {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.boss-strip-text {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.boss-strip .button {
+  flex: none;
+}
+
+@media (max-width: 800px) {
+  .boss-grid {
+    grid-template-columns: 1fr;
+  }
+  .boss-strip .button {
+    display: none;
+  }
+}
