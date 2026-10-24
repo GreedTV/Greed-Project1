@@ -64,107 +64,8 @@ async function api(path, body) {
   return data;
 }
 
-// ---------- Pixel adventurer ----------
-// A 16 x 22 pixel character drawn as SVG squares. Gear is drawn over the body in its rarity color.
-
-function heroSvg(look, worn) {
-  const px = [];
-  const put = (x, y, w, h, color) => px.push([x, y, w, h, color]);
-  const shade = (slot) => RARITY[(worn[slot] || {}).rarity || "common"];
-
-  // Body
-  put(5, 2, 6, 6, look.skin); // head
-  put(6, 4, 1, 1, look.eyes);
-  put(9, 4, 1, 1, look.eyes);
-  put(7, 6, 2, 1, "rgba(0,0,0,0.25)"); // mouth
-  put(7, 8, 2, 1, look.skin); // neck
-  put(4, 9, 8, 5, look.shirt); // shirt
-  put(2, 9, 2, 2, look.shirt); // sleeves
-  put(12, 9, 2, 2, look.shirt);
-  put(2, 11, 2, 3, look.skin); // arms
-  put(12, 11, 2, 3, look.skin);
-  put(2, 14, 2, 1, look.skin); // hands
-  put(12, 14, 2, 1, look.skin);
-  put(4, 14, 8, 1, "#3f2d20"); // belt
-  put(5, 15, 3, 4, look.pants); // legs
-  put(8, 15, 3, 4, look.pants);
-  put(4, 19, 4, 1, "#2b1d14"); // feet
-  put(8, 19, 4, 1, "#2b1d14");
-
-  // Hair (hidden under a helmet)
-  if (!worn.helmet) {
-    const h = look.hair;
-    if (look.style === 2) [5, 7, 9].forEach((x) => put(x, 0, 1, 1, h));
-    if (look.style === 3) {
-      put(7, 0, 2, 2, h);
-      put(6, 2, 4, 1, h);
-    } else {
-      put(5, 1, 6, 1, h);
-      put(4, 2, 8, 1, h);
-      put(4, 3, 1, 1, h);
-      put(11, 3, 1, 1, h);
-      if (look.style === 1) {
-        put(4, 3, 1, 6, h);
-        put(11, 3, 1, 6, h);
-      }
-    }
-  }
-
-  // Gear
-  if (worn.legs) {
-    const [, c, d] = shade("legs");
-    put(5, 15, 3, 4, c);
-    put(8, 15, 3, 4, c);
-    put(7, 15, 1, 4, d);
-  }
-  if (worn.chest) {
-    const [, c, d] = shade("chest");
-    put(4, 9, 8, 5, c);
-    put(2, 9, 2, 2, c);
-    put(12, 9, 2, 2, c);
-    put(7, 10, 2, 3, d);
-  }
-  if (worn.shoes) {
-    const [, c] = shade("shoes");
-    put(4, 18, 4, 2, c);
-    put(8, 18, 4, 2, c);
-  }
-  if (worn.gloves) {
-    const [, c] = shade("gloves");
-    put(2, 13, 2, 2, c);
-    put(12, 13, 2, 2, c);
-  }
-  if (worn.helmet) {
-    const [, c, d] = shade("helmet");
-    put(5, 0, 6, 1, c);
-    put(4, 1, 8, 2, c);
-    put(4, 3, 1, 3, c);
-    put(11, 3, 1, 3, c);
-    put(7, 1, 2, 1, d);
-  }
-  if (worn.ring) {
-    const [, c] = shade("ring");
-    put(3, 14, 1, 1, c);
-    put(2, 15, 1, 1, "rgba(255,255,255,0.8)"); // sparkle
-  }
-  if (worn.weapon) {
-    const [, c, d] = shade("weapon");
-    put(14, 4, 1, 9, c); // blade
-    put(15, 5, 1, 7, "rgba(255,255,255,0.35)");
-    put(13, 13, 3, 1, d); // guard
-    put(14, 14, 1, 2, "#5b3a1e"); // grip
-  }
-  if (worn.shield) {
-    const [, c, d] = shade("shield");
-    put(0, 10, 3, 5, c);
-    put(1, 11, 1, 3, d);
-  }
-
-  const root = svg("svg", { viewBox: "-1 -1 18 23", class: "hero-sprite", "shape-rendering": "crispEdges", role: "img" });
-  root.setAttribute("aria-label", "Your adventurer");
-  px.forEach(([x, y, w, h, fill]) => root.append(svg("rect", { x, y, width: w, height: h, fill })));
-  return root;
-}
+// The pixel adventurer and gear icons come from gear-art.js (shared with the Shop page)
+const heroSvg = SinnersArt.heroSvg;
 
 // ---------- Rendering ----------
 
@@ -180,7 +81,8 @@ function itemIcon(item, big) {
     img.loading = "lazy";
     img.onerror = () => img.replaceWith(document.createTextNode(SLOT_INFO[item.slot][0]));
     box.append(img);
-  } else box.append(SLOT_INFO[item.slot][0]);
+  } else box.append(SinnersArt.gearIcon(item));
+  box.classList.add(`tier-${item.tier || 1}`);
   return box;
 }
 
@@ -286,7 +188,7 @@ function selectItem(item) {
     const b = el("button", cls, text);
     b.type = "button";
     b.addEventListener("click", async () => {
-      if (confirmText && !confirm(confirmText)) return;
+      if (confirmText && !(await SinnersDialog.confirm(confirmText, { title: "Sell this item?", yes: "Sell", icon: "🪙" }))) return;
       b.disabled = true;
       try {
         const res = await api("/hero", body);
@@ -307,7 +209,7 @@ function selectItem(item) {
   if (item.equipped) act("Take off", "button ghost", { action: "unequip", slot: item.slot });
   else {
     act("Equip", "button", { action: "equip", item: item.id });
-    act(`Sell for ${item.sell} 🪙`, "button ghost", { action: "sell", item: item.id }, `Sell ${item.name} for ${item.sell} points?`);
+    act(`Sell for ${item.sell} 🪙`, "button ghost", { action: "sell", item: item.id }, `You get 🪙 ${item.sell} points for ${item.name}.`);
   }
   panel.replaceChildren(head, compare, actions, msg);
 }

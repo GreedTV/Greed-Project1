@@ -117,5 +117,5 @@ const SinnersAuth = (() => {
 
   render(SinnersAuth.user);
   SinnersAuth.onChange(render);
-  if (SinnersAuth.notice) alert(SinnersAuth.notice);
+  if (SinnersAuth.notice) SinnersDialog.alert(SinnersAuth.notice, { title: "Discord login", icon: "⚠️" });
 })();

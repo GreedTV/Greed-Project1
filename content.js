@@ -221,8 +221,8 @@ form.addEventListener("submit", async (e) => {
   showMsg(added ? `Added "${item.title}".` : "That's already in your queue.", added ? "ok" : "error");
 });
 
-document.getElementById("clear-queue").addEventListener("click", () => {
-  if (!queue.length || !confirm("Clear your whole queue?")) return;
+document.getElementById("clear-queue").addEventListener("click", async () => {
+  if (!queue.length || !(await SinnersDialog.confirm("Every video in your queue will be removed.", { title: "Clear your queue?", yes: "Clear", icon: "🗑️", danger: true }))) return;
   queue = [];
   current = -1;
   save();

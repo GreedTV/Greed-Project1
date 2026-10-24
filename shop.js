@@ -97,17 +97,19 @@ function renderGear() {
   if (!adv) return box.replaceChildren(el("p", "shop-empty", "The adventure shop is unavailable right now."));
   box.replaceChildren(
     ...adv.gear.flatMap((tier) => {
-      const head = el("div", "shop-tier-head" + (tier.open ? "" : " locked"));
+      const head = el("div", `shop-tier-head tier-${tier.tier}` + (tier.open ? "" : " locked"));
       head.append(
-        el("strong", null, `${tier.open ? "" : "🔒 "}Tier ${tier.tier}`),
+        el("strong", null, `${tier.open ? "" : "🔒 "}Tier ${tier.tier} · ${SinnersArt.tiers[tier.tier].name}`),
         el("span", "hint", tier.open ? (tier.tier === 1 ? "Open to everyone" : `Unlocked at adventurer level ${tier.level}`) : `Unlocks at adventurer level ${tier.level} (you're level ${adv.level})`)
       );
       const grid = el("div", "gear-grid");
       tier.items.forEach((item) => {
-        const card = el("article", "gear-card" + (tier.open ? "" : " locked"));
+        const card = el("article", `gear-card tier-${tier.tier}` + (tier.open ? "" : " locked"));
         card.style.setProperty("--rarity", RARITY_COLOR[item.rarity]);
         const top = el("div", "gear-top");
-        top.append(el("span", "gear-icon", SLOT_ICON[item.slot]), el("div", "gear-name"));
+        const icon = el("span", "gear-icon");
+        icon.append(SinnersArt.gearIcon(item));
+        top.append(icon, el("div", "gear-name"));
         top.lastChild.append(el("strong", null, item.name), el("span", "hint", `${item.slot} · power ${item.power}`));
         const msg = el("p", "form-msg");
         const foot = el("div", "shop-foot");
@@ -151,7 +153,7 @@ function renderExtras() {
 }
 
 async function buyAdventure(item, button, msg) {
-  if (!confirm(`Buy ${item.name} for ${item.price} points?`)) return;
+  if (!(await SinnersDialog.confirm(`It costs 🪙 ${item.price} points.${item.slot ? ` It goes into your bag and sells back for ${item.sell}.` : ` Active for your next ${adv.buffUses} fights.`}`, { title: `Buy ${item.name}?`, yes: "Buy", icon: item.emoji || SLOT_ICON[item.slot] }))) return;
   button.disabled = true;
   try {
     const r = await post("/shop/adventure", { item: item.id });
@@ -219,7 +221,7 @@ function renderRedeem() {
 }
 
 async function buyRedeem(item, button, msg) {
-  if (!confirm(`Buy "${item.name}" for ${item.price} points?`)) return;
+  if (!(await SinnersDialog.confirm(`It costs 🪙 ${item.price} points. The Sinners team hands it out after you buy it.`, { title: `Buy ${item.name}?`, yes: "Buy", icon: "🎁" }))) return;
   button.disabled = true;
   try {
     const r = await post("/shop/buy", { id: item.id });

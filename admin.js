@@ -250,14 +250,14 @@ shopForm.addEventListener("submit", async (e) => {
 });
 
 async function shopAction(body, confirmText, button) {
-  if (confirmText && !confirm(confirmText)) return;
+  if (confirmText && !(await SinnersDialog.confirm(confirmText, { title: "Are you sure?", yes: "Yes, do it", icon: "⚠️", danger: true }))) return;
   button.disabled = true;
   try {
     await api("/shop-admin", { method: "POST", body: JSON.stringify(body) });
     await refreshShop();
   } catch (err) {
     button.disabled = false;
-    alert(err.message);
+    SinnersDialog.alert(err.message, { title: "That didn't work", icon: "⚠️" });
   }
 }
 
@@ -335,14 +335,14 @@ const GAME_NAMES = {
 };
 
 async function gameAction(body, confirmText, button) {
-  if (confirmText && !confirm(confirmText)) return;
+  if (confirmText && !(await SinnersDialog.confirm(confirmText, { title: "Are you sure?", yes: "Yes, do it", icon: "⚠️", danger: true }))) return;
   button.disabled = true;
   try {
     await api("/games-admin", { method: "POST", body: JSON.stringify(body) });
     await refreshGames();
   } catch (err) {
     button.disabled = false;
-    alert(err.message);
+    SinnersDialog.alert(err.message, { title: "That didn't work", icon: "⚠️" });
   }
 }
 
@@ -433,14 +433,14 @@ async function refreshChat() {
 
 function chatAction(body, confirmText) {
   return async (e) => {
-    if (confirmText && !confirm(confirmText)) return;
+    if (confirmText && !(await SinnersDialog.confirm(confirmText, { title: "Are you sure?", yes: "Yes, do it", icon: "⚠️", danger: true }))) return;
     e.target.disabled = true;
     try {
       await api("/chat-admin", { method: "POST", body: JSON.stringify(body) });
       await refreshChat();
     } catch (err) {
       e.target.disabled = false;
-      alert(err.message);
+      SinnersDialog.alert(err.message, { title: "That didn't work", icon: "⚠️" });
     }
   };
 }
@@ -529,14 +529,14 @@ function renderList(which, list) {
         const btn = el("button", cls, label);
         btn.type = "button";
         btn.addEventListener("click", async () => {
-          if (action === "delete" && !confirm("Remove this from the gallery?")) return;
+          if (action === "delete" && !(await SinnersDialog.confirm("It will disappear from the gallery for everyone.", { title: "Remove this?", yes: "Remove", icon: "🗑️", danger: true }))) return;
           btn.disabled = true;
           try {
             await api("/gallery/moderate", { method: "POST", body: JSON.stringify({ id: item.id, action }) });
             await refresh();
           } catch (err) {
             btn.disabled = false;
-            alert(err.message);
+            SinnersDialog.alert(err.message, { title: "That didn't work", icon: "⚠️" });
           }
         });
         actions.append(btn);
