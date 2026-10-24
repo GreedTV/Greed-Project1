@@ -21,6 +21,7 @@ const SinnersNav = (() => {
     admin: "admin.js",
     stats: "stats.js",
     profile: "profile.js",
+    shop: "shop.js",
   };
 
   // "/watch", "/watch.html" -> "watch"; "/", "/index.html" -> "index"

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shop — Sinners</title>
+  <meta name="description" content="Spend your points: gear for your adventurer, potions and scrolls, and rewards to redeem.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0c0a0d">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sinners">
+  <meta property="og:title" content="Shop — Sinners">
+  <meta property="og:description" content="Spend your points: gear for your adventurer, potions and scrolls, and rewards to redeem.">
+  <meta property="og:url" content="https://sinnerstv.com/shop">
+  <meta property="og:image" content="https://sinnerstv.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
+  <link rel="stylesheet" href="styles.css?v=202610242311">
+  <script src="theme.js?v=202610242311"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a href="/" class="logo"><span class="logo-mark" aria-hidden="true">S</span><span>SINNERS<span class="logo-dot">.</span></span></a>
+      <nav>
+        <ul id="nav-links">
+          <li><a href="/">Home</a></li>
+          <li><a href="/watch">Watch</a></li>
+          <li><a href="/content">Content</a></li>
+          <li><a href="/games">Games</a></li>
+          <li><a href="/shop">Shop</a></li>
+          <li><a href="/gallery">Gallery</a></li>
+          <li><a href="/about">About</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions" id="nav-actions"></div>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container reveal">
+        <h1>The <span class="gradient-text">Shop</span></h1>
+        <p>Gear for your adventurer, potions and scrolls, and rewards to redeem. Paid with the points you earn.</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:24px">
+      <div class="container wide">
+        <div class="points-bar" id="shop-bar"></div>
+        <div class="game-picker shop-tabs" role="tablist" id="shop-tabs">
+          <button class="game-tab" type="button" role="tab" data-tab="adventure">⚔️ Adventure</button>
+          <button class="game-tab" type="button" role="tab" data-tab="extras">🧪 Extras</button>
+          <button class="game-tab" type="button" role="tab" data-tab="redeem">🎁 Redeem</button>
+        </div>
+
+        <div class="shop-panel" id="tab-adventure" hidden>
+          <p class="shop-intro">Gear for your adventurer. A tier opens when your adventurer reaches its level, and nothing here sells out. Gear goes straight into your bag on your <a href="/profile">Profile</a>, and sells back for half the price.</p>
+          <div id="gear-tiers"></div>
+        </div>
+
+        <div class="shop-panel" id="tab-extras" hidden>
+          <p class="shop-intro">Potions and scrolls give a boost for the next 3 fights or adventures. You can hold up to 9 uses of each.</p>
+          <div class="extras-grid" id="extras"></div>
+        </div>
+
+        <div class="shop-panel" id="tab-redeem" hidden>
+          <p class="shop-intro">Special rewards from the Sinners team. After you buy one, the team hands it out to you.</p>
+          <div class="shop-grid" id="shop-grid"></div>
+          <div class="side-box shop-mine" id="shop-mine" hidden>
+            <h3>Your purchases</h3>
+            <ul id="shop-mine-list"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span id="year"></span> Sinners</p>
+      <p><a href="/watch">Watch</a><a href="/content">Content</a><a href="/games">Games</a><a href="/shop">Shop</a><a href="/gallery">Gallery</a><a href="/about">About</a><a href="/stats">Stats</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></p>
+    </div>
+  </footer>
+
+  <script src="script.js?v=202610242311"></script>
+  <script src="config.js?v=202610242311"></script>
+  <script src="presence.js?v=202610242311"></script>
+  <script src="auth.js?v=202610242311"></script>
+  <script src="alerts.js?v=202610242311"></script>
+  <script src="chat.js?v=202610242311"></script>
+  <script src="mini.js?v=202610242311"></script>
+  <script src="nav.js?v=202610242311"></script>
+</body>
+</html>

@@ -125,13 +125,7 @@ const shopPreview = document.getElementById("shop-preview");
 const shopDropText = document.getElementById("shop-drop-text");
 const shopMsg = document.getElementById("shop-msg");
 const shopFields = ["name", "desc", "price", "stock"].map((f) => document.getElementById(`shop-${f}`));
-const shopExtra = Object.fromEntries(["tier", "kind", "slot", "rarity", "power"].map((f) => [f, document.getElementById(`shop-${f}`)]));
-const showGearFields = () => {
-  const gear = shopExtra.kind.value === "gear";
-  document.getElementById("shop-gear").hidden = !gear;
-  document.getElementById("shop-gear-hint").hidden = !gear;
-};
-shopExtra.kind.addEventListener("change", showGearFields);
+
 let shopImage = ""; // data URL of the picked picture
 let editingItem = null;
 
@@ -202,10 +196,9 @@ function resetShopForm() {
   shopPreview.hidden = true;
   shopPreview.removeAttribute("src");
   shopDropText.hidden = false;
-  document.getElementById("shop-form-title").textContent = "Add an item";
+  document.getElementById("shop-form-title").textContent = "Add a reward";
   document.getElementById("shop-save").textContent = "Add to shop";
   document.getElementById("shop-cancel").hidden = true;
-  showGearFields();
 }
 
 function editItem(item) {
@@ -216,12 +209,7 @@ function editItem(item) {
   desc.value = item.description;
   price.value = item.price;
   stock.value = item.stock == null ? "" : item.stock;
-  shopExtra.tier.value = item.tier || 1;
-  shopExtra.kind.value = item.kind || "reward";
-  shopExtra.slot.value = item.slot || "helmet";
-  shopExtra.rarity.value = item.rarity || "common";
-  shopExtra.power.value = item.power || "";
-  showGearFields();
+
   shopPreview.src = API + item.image;
   shopPreview.hidden = false;
   shopDropText.hidden = true;
@@ -242,7 +230,7 @@ shopForm.addEventListener("submit", async (e) => {
   if (!editingItem && !shopImage) return setShopMsg("Choose a picture for the item.", "error");
   const [name, desc, price, stock] = shopFields.map((f) => f.value.trim());
   const body = { action: editingItem ? "update" : "add", name, description: desc, price, stock };
-  Object.entries(shopExtra).forEach(([k, input]) => (body[k] = input.value));
+
   if (editingItem) body.id = editingItem.id;
   if (shopImage) body.image = shopImage;
   const save = document.getElementById("shop-save");
@@ -303,8 +291,7 @@ async function refreshShop() {
           el(
             "small",
             null,
-            `🪙 ${item.price} · ${item.stock == null ? "unlimited" : `${item.stock} left`} · tier ${item.tier || 1} · ` +
-              (item.kind === "gear" ? `gear: ${item.rarity} ${item.slot}, +${item.power} power` : "reward")
+            `🪙 ${item.price} · ${item.stock == null ? "unlimited" : `${item.stock} left`}`
           )
         );
         const actions = el("div", "review-actions");

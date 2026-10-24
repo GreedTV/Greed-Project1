@@ -20,8 +20,7 @@
 //   GET  /shop/mine                    -> your purchases   (logged in)
 //   POST /shop/buy                     -> { id }   (logged in)
 //   GET  /shop-admin                   -> items and recent purchases   (admin)
-//   POST /shop-admin                   -> { action: "add", name, description, price, stock?, tier, kind: "reward" | "gear",
-//                                           slot?, rarity?, power?, image: <data URL> }
+//   POST /shop-admin                   -> { action: "add", name, description, price, stock?, image: <data URL> }
 //                                         | { action: "update", id, ...same fields, image optional } | { action: "delete", id }
 //                                         | { action: "deliver", purchaseId, delivered }   (admin)
 //
@@ -41,15 +40,18 @@
 // Adventure (Profile page): an adventurer with gear, a bag and dungeon runs
 //   GET  /hero                         -> your adventurer, items, regions and the current run   (logged in)
 //   POST /hero                         -> { action: "dungeon", dungeon } | { action: "collect" } | { action: "equip" | "sell", item }
-//                                         | { action: "unequip", slot } | { action: "look" }   (logged in)
+//                                         | { action: "unequip", slot } | { action: "look" } | { action: "duel", opponent? }   (logged in)
 //   GET  /profile                      -> your profile numbers   (logged in)
+//   GET  /arena                        -> top adventurers by arena rating
+//   GET  /shop/adventure               -> gear for each tier, potions and scrolls (and your level and boosts if logged in)
+//   POST /shop/adventure               -> { item }  buy gear (into the bag) or a potion / scroll   (logged in)
 //
 // Site stats (anonymous: a random ID kept in the visitor's browser, no IPs or accounts)
 //   POST /presence                     -> { visitor, page, view? }  heartbeat every minute; returns { online }
 //   GET  /stats                        -> online now, visitors and views (today, 7 days), community numbers
 //
 // Discord bot (slash commands arrive here from Discord; set this as the app's Interactions Endpoint URL)
-//   POST /discord/interactions         -> /dungeon, /stats, /stats-live, /stats-live-off, /points, /top, /shop, /round, /sinners,
+//   POST /discord/interactions         -> /dungeon, /duel, /stats, /stats-live, /stats-live-off, /points, /top, /shop, /round, /sinners,
 //                                         /notify-here, /notify-off
 //   (scheduled)                        -> keeps the /stats-live board up to date (needs a Cron Trigger, see Setup)
 //   GET  /discord-admin                -> bot setup status and invite link   (admin)
@@ -127,12 +129,13 @@ export default {
         if (request.method === "POST") return await discordAdminAction(request, env, cors);
       }
 
-      if (path === "/hero" || path === "/profile") {
+      if (path === "/hero" || path === "/profile" || path === "/arena") {
         if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
         await ensureSchema(env);
         if (path === "/hero" && request.method === "GET") return await heroGet(request, env, cors);
         if (path === "/hero" && request.method === "POST") return await heroAction(request, env, cors);
         if (path === "/profile" && request.method === "GET") return await profileGet(request, env, cors);
+        if (path === "/arena" && request.method === "GET") return await arenaGet(request, env, cors);
       }
 
       if (path === "/presence" || path === "/stats") {
@@ -155,6 +158,8 @@ export default {
         if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
         await ensureSchema(env);
         if (path === "/shop" && request.method === "GET") return await shopList(request, env, cors);
+        if (path === "/shop/adventure" && request.method === "GET") return await adventureShopGet(request, env, cors);
+        if (path === "/shop/adventure" && request.method === "POST") return await adventureShopBuy(request, env, cors);
         if (path === "/shop/mine" && request.method === "GET") return await shopMine(request, env, cors);
         if (path === "/shop/buy" && request.method === "POST") return await shopBuy(request, env, cors, ctx);
         if (path === "/shop-admin" && request.method === "GET") return await shopAdminList(request, env, cors);
@@ -708,11 +713,14 @@ async function ensureSchema(env) {
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS heroes (user_id TEXT PRIMARY KEY, name TEXT NOT NULL, look TEXT NOT NULL, level INTEGER NOT NULL DEFAULT 1, " +
         "xp INTEGER NOT NULL DEFAULT 0, runs INTEGER NOT NULL DEFAULT 0, wins INTEGER NOT NULL DEFAULT 0, exp_dungeon TEXT, exp_start INTEGER, " +
-        "exp_end INTEGER, exp_power INTEGER, created INTEGER NOT NULL)"
+        "exp_end INTEGER, exp_power INTEGER, exp_stats TEXT, buffs TEXT NOT NULL DEFAULT '{}', rating INTEGER NOT NULL DEFAULT 1000, " +
+        "duel_wins INTEGER NOT NULL DEFAULT 0, duel_losses INTEGER NOT NULL DEFAULT 0, duel_day TEXT NOT NULL DEFAULT '', duel_count INTEGER NOT NULL DEFAULT 0, " +
+        "created INTEGER NOT NULL)"
     ),
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS hero_items (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, slot TEXT NOT NULL, name TEXT NOT NULL, " +
-        "rarity TEXT NOT NULL, power INTEGER NOT NULL, tier INTEGER NOT NULL DEFAULT 1, source TEXT NOT NULL, icon TEXT, sell INTEGER NOT NULL DEFAULT 0, " +
+        "rarity TEXT NOT NULL, power INTEGER NOT NULL, atk INTEGER NOT NULL DEFAULT 0, def INTEGER NOT NULL DEFAULT 0, hp INTEGER NOT NULL DEFAULT 0, " +
+        "tier INTEGER NOT NULL DEFAULT 1, source TEXT NOT NULL, icon TEXT, sell INTEGER NOT NULL DEFAULT 0, " +
         "equipped INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)"
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS hero_items_user ON hero_items (user_id, equipped)"),
@@ -726,6 +734,16 @@ async function ensureSchema(env) {
     "ALTER TABLE shop_items ADD COLUMN rarity TEXT",
     "ALTER TABLE shop_items ADD COLUMN power INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE shop_items ADD COLUMN tier INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE heroes ADD COLUMN exp_stats TEXT",
+    "ALTER TABLE heroes ADD COLUMN buffs TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE heroes ADD COLUMN rating INTEGER NOT NULL DEFAULT 1000",
+    "ALTER TABLE heroes ADD COLUMN duel_wins INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE heroes ADD COLUMN duel_losses INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE heroes ADD COLUMN duel_day TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE heroes ADD COLUMN duel_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE hero_items ADD COLUMN atk INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE hero_items ADD COLUMN def INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE hero_items ADD COLUMN hp INTEGER NOT NULL DEFAULT 0",
   ]) {
     try {
       await env.DB.prepare(sql).run();
@@ -1149,10 +1167,10 @@ async function shopImageGet(id, env, cors) {
   });
 }
 
+// The Redeem section: rewards the admin adds and hands out (adventure gear is in /shop/adventure)
 async function shopList(request, env, cors) {
-  const { results } = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items ORDER BY tier, price, id`).all();
-  const user = request.headers.get("Authorization") ? await optionalUser(request, env) : null;
-  return json({ items: results.map(shopItemOut), tiers: TIER_LEVELS, myLevel: user ? await heroLevel(env, user.id) : null }, 200, cors);
+  const { results } = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items ORDER BY price, id`).all();
+  return json({ items: results.map(shopItemOut) }, 200, cors);
 }
 
 async function shopMine(request, env, cors) {
@@ -1171,13 +1189,6 @@ async function shopBuy(request, env, cors, ctx) {
   const item = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items WHERE id = ?`).bind(Math.floor(Number(id)) || 0).first();
   if (!item) fail("That item isn't in the shop anymore.", 404);
   await wallet(env, user);
-  if (!tierOpen(await heroLevel(env, user.id), item.tier)) fail(`Tier ${item.tier} unlocks at adventurer level ${TIER_LEVELS[item.tier - 1]}.`, 409);
-  const gear = item.kind === "gear";
-  if (gear) {
-    await heroOf(env, user);
-    const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM hero_items WHERE user_id = ? AND equipped = 0").bind(user.id).first();
-    if (n >= BAG_SIZE) fail("Your bag is full. Sell something on your Profile first.", 409);
-  }
 
   // Hold one from the stock first (no limit when stock is empty), then take the points
   const hold = await env.DB.prepare("UPDATE shop_items SET stock = stock - 1 WHERE id = ? AND (stock IS NULL OR stock > 0)").bind(item.id).run();
@@ -1190,31 +1201,23 @@ async function shopBuy(request, env, cors, ctx) {
     fail("You don't have enough points for that.", 400);
   }
   await env.DB.prepare(
-    "INSERT INTO purchases (item_id, item_name, user_id, name, avatar, price, delivered, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO purchases (item_id, item_name, user_id, name, avatar, price, created) VALUES (?, ?, ?, ?, ?, ?, ?)"
   )
-    .bind(item.id, item.name, user.id, user.name, user.avatar, item.price, gear ? 1 : 0, Date.now())
+    .bind(item.id, item.name, user.id, user.name, user.avatar, item.price, Date.now())
     .run();
-  // Gear goes straight into the adventurer's bag; it sells back for a quarter of the price
-  if (gear) {
-    await env.DB.prepare(
-      "INSERT INTO hero_items (user_id, slot, name, rarity, power, tier, source, icon, sell, created) VALUES (?, ?, ?, ?, ?, ?, 'shop', ?, ?, ?)"
-    )
-      .bind(user.id, item.slot, item.name, item.rarity || "common", item.power, item.tier, shopItemOut(item).image, Math.floor(item.price / 4), Date.now())
-      .run();
-  }
   const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
   const left = await env.DB.prepare("SELECT stock FROM shop_items WHERE id = ?").bind(item.id).first();
-  if (!gear) later(ctx, discordNotify(env, {
+  later(ctx, discordNotify(env, {
     title: "🛒 New shop purchase",
     description: `<@${user.id}> (${user.name}) bought **${item.name}** for ${item.price} 🪙.\nHand it out, then mark it delivered on the admin page.`,
     url: `${SITE_URL}/admin`,
   }));
-  return json({ ok: true, points: w.points, stock: left ? left.stock : null, gear }, 200, cors);
+  return json({ ok: true, points: w.points, stock: left ? left.stock : null }, 200, cors);
 }
 
 async function shopAdminList(request, env, cors) {
   checkAdmin(request, env);
-  const { results: items } = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items ORDER BY tier, price, id`).all();
+  const { results: items } = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items ORDER BY price, id`).all();
   const { results: purchases } = await env.DB.prepare(
     "SELECT id, item_name AS item, user_id AS userId, name, price, delivered, created FROM purchases ORDER BY id DESC LIMIT 100"
   ).all();
@@ -1240,18 +1243,7 @@ function shopFields(body) {
     stock = Math.floor(Number(body.stock));
     if (!Number.isFinite(stock) || stock < 0 || stock > 100000) fail("Stock must be a number (leave it empty for unlimited).");
   }
-  const tier = Math.floor(Number(body.tier)) || 1;
-  if (tier < 1 || tier > 5) fail("Tier must be 1 to 5.");
-  const kind = body.kind === "gear" ? "gear" : "reward";
-  let slot = null, rarity = null, power = 0;
-  if (kind === "gear") {
-    if (!SLOTS.includes(body.slot)) fail("Pick which slot the gear goes in.");
-    slot = body.slot;
-    rarity = RARITIES.some((r) => r.id === body.rarity) ? body.rarity : "common";
-    power = Math.floor(Number(body.power));
-    if (!Number.isFinite(power) || power < 1 || power > 1000) fail("Power must be between 1 and 1000.");
-  }
-  return { name, description: clean(body.description, 300), price, stock, tier, kind, slot, rarity, power };
+  return { name, description: clean(body.description, 300), price, stock, tier: 1, kind: "reward", slot: null, rarity: null, power: 0 };
 }
 
 async function shopAdminAction(request, env, cors) {
@@ -1300,13 +1292,16 @@ async function shopAdminAction(request, env, cors) {
   fail("Unknown action", 400);
 }
 
-// ---------- Adventure (Profile page and /dungeon) ----------
-// Every player gets an adventurer the first time they open their inventory: a small pixel character
-// with a random look, a level, XP, 8 equipment slots and a bag. Adventurers are sent to a region of
-// the world map for real time and come back with XP and sometimes loot. Equipped gear adds power,
-// and more power means a better chance to win. Shop items have a tier (1-5) that unlocks with level.
+// ---------- Adventure (Profile page, Shop page, /dungeon and /duel) ----------
+// Every player gets an adventurer the first time they open their profile: a small pixel character
+// with a random look, a level, Attack / Defense / HP, 8 equipment slots and a bag. Levels raise the
+// base stats; gear adds more (rarer gear adds more). Adventurers are sent to a region of the world map
+// for real time and fight its monster when they arrive; the Arena pits them against other players'
+// adventurers. Win chances come from a power score (attack + 0.8 x defense + 0.25 x HP): being a bit
+// stronger gives a good chance, being much stronger an almost sure win. The fight shown to the player
+// is played out to match the result.
 
-const TIER_LEVELS = [1, 5, 10, 20, 30]; // adventurer level that unlocks tier 1-5 (shop items and regions)
+const TIER_LEVELS = [1, 5, 10, 20, 30]; // adventurer level that unlocks tier 1-5 (shop gear and regions)
 const MAX_LEVEL = 50;
 const BAG_SIZE = 30;
 const SLOTS = ["helmet", "chest", "legs", "shoes", "gloves", "weapon", "shield", "ring"];
@@ -1317,14 +1312,25 @@ const RARITIES = [
   { id: "epic", chance: 4, mult: 2.2, sell: 30, word: "Cursed " },
   { id: "legendary", chance: 1, mult: 3, sell: 75, word: "Sinful " },
 ];
+const TIER_STAT = [3, 8, 16, 30, 50]; // stat budget of a common item in each tier
+// What each slot gives: [attack, defense, hp] per point of budget
+const SLOT_PROFILE = {
+  weapon: [1.5, 0, 0],
+  gloves: [0.6, 0.3, 0],
+  ring: [0.5, 0, 3],
+  shield: [0, 1.2, 2.25],
+  helmet: [0, 0.7, 3],
+  chest: [0, 1, 4.5],
+  legs: [0, 0.8, 3],
+  shoes: [0, 0.5, 1.5],
+};
 const DUNGEONS = [
-  { id: "forest", name: "Whispering Forest", emoji: "🌲", tier: 1, minutes: 10, xp: [40, 60], power: 4, loot: 0.25 },
-  { id: "caves", name: "Goblin Caves", emoji: "🕳️", tier: 2, minutes: 30, xp: [150, 210], power: 25, loot: 0.3 },
-  { id: "swamp", name: "Rotting Swamp", emoji: "🐸", tier: 3, minutes: 60, xp: [340, 460], power: 60, loot: 0.35 },
-  { id: "mountains", name: "Frostpeak Mountains", emoji: "🏔️", tier: 4, minutes: 120, xp: [750, 1000], power: 120, loot: 0.4 },
-  { id: "abyss", name: "Abyss of Sinners", emoji: "😈", tier: 5, minutes: 240, xp: [1700, 2300], power: 220, loot: 0.45 },
+  { id: "forest", name: "Whispering Forest", emoji: "🌲", tier: 1, minutes: 10, xp: [40, 60], loot: 0.25, monster: { name: "Dire Wolf", emoji: "🐺", atk: 4, def: 5, hp: 20 } },
+  { id: "caves", name: "Goblin Caves", emoji: "🕳️", tier: 2, minutes: 30, xp: [150, 210], loot: 0.3, monster: { name: "Goblin Chief", emoji: "👺", atk: 22, def: 24, hp: 98 } },
+  { id: "swamp", name: "Rotting Swamp", emoji: "🐸", tier: 3, minutes: 60, xp: [340, 460], loot: 0.35, monster: { name: "Bog Witch", emoji: "🧙", atk: 48, def: 52, hp: 214 } },
+  { id: "mountains", name: "Frostpeak Mountains", emoji: "🏔️", tier: 4, minutes: 120, xp: [750, 1000], loot: 0.4, monster: { name: "Frost Giant", emoji: "🧊", atk: 93, def: 102, hp: 419 } },
+  { id: "abyss", name: "Abyss of Sinners", emoji: "😈", tier: 5, minutes: 240, xp: [1700, 2300], loot: 0.45, monster: { name: "Sin Demon", emoji: "👹", atk: 162, def: 179, hp: 730 } },
 ];
-const TIER_POWER = [3, 8, 16, 30, 50]; // a common item's power in each tier
 const MATERIALS = ["Wooden", "Iron", "Bogsteel", "Frost", "Abyssal"];
 const SLOT_NOUNS = {
   helmet: ["Helmet", "Hood", "Cap"],
@@ -1336,6 +1342,20 @@ const SLOT_NOUNS = {
   shield: ["Shield", "Buckler", "Aegis"],
   ring: ["Ring", "Bracelet", "Band"],
 };
+// Adventure shop: one uncommon item per slot in each tier, never sold out; sells back for half
+const GEAR_PRICES = [25, 90, 250, 600, 1200];
+// Potions and scrolls: each purchase adds 3 uses (up to 9), used up by fights / adventures
+const EXTRAS = [
+  { id: "strength", name: "Potion of Strength", emoji: "🧪", buff: "atk", text: "+25% Attack", price: 30 },
+  { id: "ironskin", name: "Iron Skin Potion", emoji: "🪨", buff: "def", text: "+25% Defense", price: 30 },
+  { id: "vitality", name: "Vitality Potion", emoji: "❤️", buff: "hp", text: "+25% HP", price: 30 },
+  { id: "wisdom", name: "Scroll of Wisdom", emoji: "📜", buff: "xp", text: "+50% XP from adventures", price: 45 },
+  { id: "fortune", name: "Scroll of Fortune", emoji: "🍀", buff: "luck", text: "+15% loot chance on adventures", price: 45 },
+];
+const BUFF_EFFECT = { atk: 0.25, def: 0.25, hp: 0.25, xp: 0.5, luck: 0.15 };
+const BUFF_USES = 3;
+const BUFF_MAX = 9;
+const DUELS_PER_DAY = 10;
 const LOOKS = {
   skin: ["#f5d0b5", "#e0ac87", "#c68642", "#8d5524", "#5c3a21"],
   hair: ["#2b1b17", "#6b3f1f", "#d9a441", "#b23b2e", "#e5e7eb", "#3b5bdb", "#db2777"],
@@ -1349,14 +1369,34 @@ const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const between = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 const xpToNext = (level) => Math.round(80 * Math.pow(level, 1.6));
 const tierOpen = (level, tier) => level >= TIER_LEVELS[(tier || 1) - 1];
+const rarityOf = (id) => RARITIES.find((r) => r.id === id) || RARITIES[0];
+const powerOf = (s) => Math.round(s.atk + 0.8 * s.def + 0.25 * s.hp);
+const baseStats = (level) => ({ atk: 5 + 2 * (level - 1), def: 3 + Math.floor((3 * (level - 1)) / 2), hp: 30 + 6 * (level - 1) });
+// Logistic odds on the power ratio: equal = 50%, 30% stronger = about 82%
+const winChance = (a, b, lo = 0.05, hi = 0.97) => Math.max(lo, Math.min(hi, 1 / (1 + Math.exp(-5 * (powerOf(a) / powerOf(b) - 1)))));
 
 function randomLook() {
   return Object.fromEntries(Object.entries(LOOKS).map(([k, list]) => [k, pick(list)]));
 }
 
+function itemStats(slot, tier, rarity, roll = 1) {
+  const budget = TIER_STAT[tier - 1] * rarityOf(rarity).mult * roll;
+  const [a, d, h] = SLOT_PROFILE[slot];
+  const s = { atk: Math.round(budget * a), def: Math.round(budget * d), hp: Math.round(budget * h) };
+  return { ...s, power: powerOf(s) };
+}
+
 const HERO_COLUMNS =
-  "user_id, name, look, level, xp, runs, wins, exp_dungeon AS expDungeon, exp_start AS expStart, exp_end AS expEnd, exp_power AS expPower";
-const ITEM_COLUMNS = "id, slot, name, rarity, power, tier, source, icon, sell, equipped, created";
+  "user_id AS userId, name, look, level, xp, runs, wins, buffs, rating, duel_wins AS duelWins, duel_losses AS duelLosses, " +
+  "duel_day AS duelDay, duel_count AS duelCount, exp_dungeon AS expDungeon, exp_start AS expStart, exp_end AS expEnd, exp_stats AS expStats";
+const ITEM_COLUMNS = "id, slot, name, rarity, power, atk, def, hp, tier, source, icon, sell, equipped, created";
+
+function parseHero(hero) {
+  if (!hero) return hero;
+  hero.look = JSON.parse(hero.look || "{}");
+  hero.buffs = JSON.parse(hero.buffs || "{}");
+  return hero;
+}
 
 async function heroOf(env, user, create = true) {
   let hero = await env.DB.prepare(`SELECT ${HERO_COLUMNS} FROM heroes WHERE user_id = ?`).bind(user.id).first();
@@ -1365,9 +1405,11 @@ async function heroOf(env, user, create = true) {
       .bind(user.id, user.name, JSON.stringify(randomLook()), Date.now())
       .run();
     hero = await env.DB.prepare(`SELECT ${HERO_COLUMNS} FROM heroes WHERE user_id = ?`).bind(user.id).first();
+  } else if (hero && user.name && hero.name !== user.name) {
+    await env.DB.prepare("UPDATE heroes SET name = ? WHERE user_id = ?").bind(user.name, user.id).run();
+    hero.name = user.name;
   }
-  if (hero) hero.look = JSON.parse(hero.look || "{}");
-  return hero;
+  return parseHero(hero);
 }
 
 async function heroLevel(env, userId) {
@@ -1376,18 +1418,76 @@ async function heroLevel(env, userId) {
 }
 
 async function heroItems(env, userId) {
-  return (await env.DB.prepare(`SELECT ${ITEM_COLUMNS} FROM hero_items WHERE user_id = ? ORDER BY equipped DESC, power DESC, id`).bind(userId).all())
-    .results;
+  const { results } = await env.DB.prepare(`SELECT ${ITEM_COLUMNS} FROM hero_items WHERE user_id = ? ORDER BY equipped DESC, power DESC, id`)
+    .bind(userId)
+    .all();
+  // Items from before Attack / Defense / HP existed get their stats now
+  for (const item of results.filter((i) => !i.atk && !i.def && !i.hp)) {
+    Object.assign(item, itemStats(item.slot, item.tier || 1, item.rarity));
+    await env.DB.prepare("UPDATE hero_items SET atk = ?, def = ?, hp = ?, power = ? WHERE id = ?")
+      .bind(item.atk, item.def, item.hp, item.power, item.id)
+      .run();
+  }
+  return results;
 }
 
-const heroPower = (hero, items) => hero.level * 2 + items.filter((i) => i.equipped).reduce((s, i) => s + i.power, 0);
-const winChance = (power, dungeon) => Math.max(0.3, Math.min(0.95, 0.3 + 0.55 * (power / dungeon.power)));
+// Level + equipped gear; with buffs = the stats used in a fight (potions active)
+function heroStats(hero, items, withBuffs = false) {
+  const s = baseStats(hero.level);
+  items.filter((i) => i.equipped).forEach((i) => ["atk", "def", "hp"].forEach((k) => (s[k] += i[k])));
+  if (withBuffs) ["atk", "def", "hp"].forEach((k) => hero.buffs[k] > 0 && (s[k] = Math.round(s[k] * (1 + BUFF_EFFECT[k]))));
+  return s;
+}
+
+// Uses up one charge of each listed buff that's active
+async function useBuffs(env, hero, kinds) {
+  let changed = false;
+  kinds.forEach((k) => {
+    if (hero.buffs[k] > 0) {
+      hero.buffs[k] -= 1;
+      if (!hero.buffs[k]) delete hero.buffs[k];
+      changed = true;
+    }
+  });
+  if (changed) await env.DB.prepare("UPDATE heroes SET buffs = ? WHERE user_id = ?").bind(JSON.stringify(hero.buffs), hero.userId).run();
+}
+
+// A blow-by-blow fight that ends the way `aWins` says (the result is decided by winChance first)
+function fightLog(a, b, aWins) {
+  const hit = (atk, def, boost) => {
+    if (Math.random() < 0.1) return { dmg: 0, miss: true };
+    const crit = Math.random() < 0.15;
+    return { dmg: Math.max(1, Math.round(((atk * atk) / (atk + def)) * (0.5 + Math.random()) * (crit ? 2 : 1) * boost)), crit };
+  };
+  for (let attempt = 0; attempt < 60; attempt++) {
+    // After a few tries, tilt the blows toward the decided winner
+    const tilt = attempt < 20 ? 1 : 1 + (attempt - 19) * 0.08;
+    const boostA = aWins ? tilt : 1 / tilt;
+    const boostB = aWins ? 1 / tilt : tilt;
+    let hpA = a.hp;
+    let hpB = b.hp;
+    const log = [];
+    for (let turn = 0; turn < 40 && hpA > 0 && hpB > 0; turn++) {
+      const aTurn = turn % 2 === 0;
+      const h = aTurn ? hit(a.atk, b.def, boostA) : hit(b.atk, a.def, boostB);
+      if (aTurn) hpB = Math.max(0, hpB - h.dmg);
+      else hpA = Math.max(0, hpA - h.dmg);
+      log.push({ by: aTurn ? "a" : "b", dmg: h.dmg, crit: !!h.crit, miss: !!h.miss, hpA, hpB });
+    }
+    if (hpA > 0 && hpB > 0) continue;
+    if (hpB <= 0 === aWins) return log.length > 24 ? log.slice(-24) : log;
+  }
+  // Fallback: one decisive blow
+  return [{ by: aWins ? "a" : "b", dmg: aWins ? b.hp : a.hp, crit: true, miss: false, hpA: aWins ? a.hp : 0, hpB: aWins ? 0 : b.hp }];
+}
 
 async function heroState(env, user) {
   const hero = await heroOf(env, user);
   const items = await heroItems(env, user.id);
-  const power = heroPower(hero, items);
+  const stats = heroStats(hero, items);
+  const fighting = heroStats(hero, items, true);
   const now = Date.now();
+  const day = today();
   return {
     hero: {
       name: hero.name,
@@ -1395,20 +1495,29 @@ async function heroState(env, user) {
       level: hero.level,
       xp: hero.xp,
       next: hero.level >= MAX_LEVEL ? null : xpToNext(hero.level),
-      power,
+      base: baseStats(hero.level),
+      stats,
+      fighting,
+      power: powerOf(stats),
+      buffs: hero.buffs,
       runs: hero.runs,
       wins: hero.wins,
+      rating: hero.rating,
+      duelWins: hero.duelWins,
+      duelLosses: hero.duelLosses,
+      duelsLeft: DUELS_PER_DAY - (hero.duelDay === day ? hero.duelCount : 0),
     },
     items,
-    expedition: hero.expDungeon
-      ? { dungeon: hero.expDungeon, start: hero.expStart, end: hero.expEnd, done: now >= hero.expEnd }
-      : null,
+    expedition: hero.expDungeon ? { dungeon: hero.expDungeon, start: hero.expStart, end: hero.expEnd, done: now >= hero.expEnd } : null,
     dungeons: DUNGEONS.map((d) => ({
       ...d,
       level: TIER_LEVELS[d.tier - 1],
       open: tierOpen(hero.level, d.tier),
-      chance: Math.round(winChance(power, d) * 100),
+      chance: Math.round(winChance(fighting, d.monster) * 100),
+      monsterPower: powerOf(d.monster),
     })),
+    extras: EXTRAS,
+    buffEffect: BUFF_EFFECT,
     tiers: TIER_LEVELS,
     bagSize: BAG_SIZE,
     maxLevel: MAX_LEVEL,
@@ -1419,7 +1528,7 @@ async function heroState(env, user) {
 // Adds XP and handles level-ups (each new level pays 5 x level points). Returns what changed.
 async function addHeroXp(env, userId, amount) {
   const hero = await env.DB.prepare("SELECT level, xp FROM heroes WHERE user_id = ?").bind(userId).first();
-  if (!hero || amount <= 0) return { xp: 0, levels: [], reward: 0 };
+  if (!hero || amount <= 0) return { xp: 0, levels: [], reward: 0, level: hero ? hero.level : 1 };
   let { level, xp } = hero;
   xp += amount;
   const levels = [];
@@ -1440,15 +1549,18 @@ function lootItem(tier) {
   let roll = Math.random() * 100;
   const rarity = RARITIES.find((r) => (roll -= r.chance) < 0) || RARITIES[0];
   const slot = pick(SLOTS);
-  const base = TIER_POWER[tier - 1] * (slot === "weapon" ? 1.5 : 1);
   return {
     slot,
     rarity: rarity.id,
     tier,
-    power: Math.max(1, Math.round(base * rarity.mult * (0.85 + Math.random() * 0.3))),
+    ...itemStats(slot, tier, rarity.id, 0.85 + Math.random() * 0.3),
     name: `${rarity.word}${MATERIALS[tier - 1]} ${pick(SLOT_NOUNS[slot])}`,
     sell: rarity.sell * tier,
   };
+}
+
+async function bagCount(env, userId) {
+  return (await env.DB.prepare("SELECT COUNT(*) AS n FROM hero_items WHERE user_id = ? AND equipped = 0").bind(userId).first()).n;
 }
 
 async function startDungeon(env, user, dungeonId) {
@@ -1457,16 +1569,19 @@ async function startDungeon(env, user, dungeonId) {
   const hero = await heroOf(env, user);
   if (hero.expDungeon) fail("Your adventurer is already away. Collect the rewards first.", 409);
   if (!tierOpen(hero.level, dungeon.tier)) fail(`${dungeon.name} unlocks at adventurer level ${TIER_LEVELS[dungeon.tier - 1]}.`, 409);
-  const power = heroPower(hero, await heroItems(env, user.id));
+  const items = await heroItems(env, user.id);
+  // Stats and boosts are fixed when they set off
+  const snap = { ...heroStats(hero, items, true), xp: hero.buffs.xp > 0 ? BUFF_EFFECT.xp : 0, luck: hero.buffs.luck > 0 ? BUFF_EFFECT.luck : 0 };
   const now = Date.now();
   const end = now + dungeon.minutes * 60000;
   const res = await env.DB.prepare(
-    "UPDATE heroes SET exp_dungeon = ?, exp_start = ?, exp_end = ?, exp_power = ? WHERE user_id = ? AND exp_dungeon IS NULL"
+    "UPDATE heroes SET exp_dungeon = ?, exp_start = ?, exp_end = ?, exp_stats = ? WHERE user_id = ? AND exp_dungeon IS NULL"
   )
-    .bind(dungeon.id, now, end, power, user.id)
+    .bind(dungeon.id, now, end, JSON.stringify(snap), user.id)
     .run();
   if (!res.meta || res.meta.changes !== 1) fail("Your adventurer is already away.", 409);
-  return { dungeon, end, chance: Math.round(winChance(power, dungeon) * 100) };
+  await useBuffs(env, hero, ["atk", "def", "hp", "xp", "luck"]);
+  return { dungeon, end, chance: Math.round(winChance(snap, dungeon.monster) * 100) };
 }
 
 async function collectDungeon(env, user) {
@@ -1481,29 +1596,172 @@ async function collectDungeon(env, user) {
   if (!claim.meta || claim.meta.changes !== 1) fail("Already collected.", 409);
 
   const dungeon = DUNGEONS.find((d) => d.id === hero.expDungeon) || DUNGEONS[0];
-  const won = Math.random() < winChance(hero.expPower || 0, dungeon);
-  const xp = won ? between(...dungeon.xp) : Math.round(between(...dungeon.xp) * 0.4);
+  const snap = JSON.parse(hero.expStats || "null") || baseStats(hero.level);
+  const won = Math.random() < winChance(snap, dungeon.monster);
+  const log = fightLog(snap, dungeon.monster, won);
+  const xp = Math.round((won ? between(...dungeon.xp) : between(...dungeon.xp) * 0.4) * (1 + (snap.xp || 0)));
   await wallet(env, user);
   let item = null;
   let soldFor = 0;
-  if (won && Math.random() < dungeon.loot) {
+  if (won && Math.random() < dungeon.loot + (snap.luck || 0)) {
     item = lootItem(dungeon.tier);
-    const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM hero_items WHERE user_id = ? AND equipped = 0").bind(user.id).first();
-    if (n >= BAG_SIZE) {
+    if ((await bagCount(env, user.id)) >= BAG_SIZE) {
       soldFor = item.sell; // bag full: sold on the spot
       await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(soldFor, user.id).run();
     } else {
       await env.DB.prepare(
-        "INSERT INTO hero_items (user_id, slot, name, rarity, power, tier, source, sell, created) VALUES (?, ?, ?, ?, ?, ?, 'dungeon', ?, ?)"
+        "INSERT INTO hero_items (user_id, slot, name, rarity, power, atk, def, hp, tier, source, sell, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'dungeon', ?, ?)"
       )
-        .bind(user.id, item.slot, item.name, item.rarity, item.power, item.tier, item.sell, now)
+        .bind(user.id, item.slot, item.name, item.rarity, item.power, item.atk, item.def, item.hp, item.tier, item.sell, now)
         .run();
     }
   }
   await env.DB.prepare("UPDATE heroes SET runs = runs + 1, wins = wins + ? WHERE user_id = ?").bind(won ? 1 : 0, user.id).run();
   const gained = await addHeroXp(env, user.id, xp);
-  return { dungeon: { id: dungeon.id, name: dungeon.name, emoji: dungeon.emoji }, won, xp, item, soldFor, levels: gained.levels, level: gained.level, reward: gained.reward };
+  return {
+    dungeon: { id: dungeon.id, name: dungeon.name, emoji: dungeon.emoji, monster: dungeon.monster },
+    me: { name: hero.name, ...snap },
+    log,
+    won,
+    xp,
+    item,
+    soldFor,
+    levels: gained.levels,
+    level: gained.level,
+    reward: gained.reward,
+  };
 }
+
+// ---------- Arena ----------
+// Duel another player's adventurer (they don't need to be online). Ratings use Elo; the attacker's
+// potions count, the defender fights with plain stats. 10 duels a day; wins pay a few points.
+
+async function duel(env, user, opponentId) {
+  const hero = await heroOf(env, user);
+  const day = today();
+  const used = hero.duelDay === day ? hero.duelCount : 0;
+  if (used >= DUELS_PER_DAY) fail(`You've fought ${DUELS_PER_DAY} duels today. The arena opens again tomorrow.`, 429);
+  let foe;
+  if (opponentId) {
+    if (String(opponentId) === user.id) fail("You can't duel yourself.", 400);
+    foe = await env.DB.prepare(`SELECT ${HERO_COLUMNS} FROM heroes WHERE user_id = ?`).bind(String(opponentId)).first();
+    if (!foe) fail("That player doesn't have an adventurer yet.", 404);
+  } else {
+    foe =
+      (await env.DB.prepare(`SELECT ${HERO_COLUMNS} FROM heroes WHERE user_id != ? AND rating BETWEEN ? AND ? ORDER BY RANDOM() LIMIT 1`)
+        .bind(user.id, hero.rating - 250, hero.rating + 250)
+        .first()) ||
+      (await env.DB.prepare(`SELECT ${HERO_COLUMNS} FROM heroes WHERE user_id != ? ORDER BY RANDOM() LIMIT 1`).bind(user.id).first());
+    if (!foe) fail("Nobody else has an adventurer yet. Invite a friend!", 404);
+  }
+  parseHero(foe);
+  const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(foe.userId).first();
+  if (banned && banned.banned) fail("That player can't be challenged.", 403);
+
+  const mine = heroStats(hero, await heroItems(env, user.id), true);
+  const theirs = heroStats(foe, await heroItems(env, foe.userId));
+  const won = Math.random() < winChance(mine, theirs, 0.05, 0.95);
+  const log = fightLog(mine, theirs, won);
+  const expected = 1 / (1 + Math.pow(10, (foe.rating - hero.rating) / 400));
+  const change = Math.max(1, Math.round(24 * Math.abs((won ? 1 : 0) - expected)));
+  const delta = won ? change : -change;
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE heroes SET rating = MAX(0, rating + ?), duel_wins = duel_wins + ?, duel_losses = duel_losses + ?, duel_day = ?, duel_count = ? WHERE user_id = ?`
+    ).bind(delta, won ? 1 : 0, won ? 0 : 1, day, used + 1, user.id),
+    env.DB.prepare("UPDATE heroes SET rating = MAX(0, rating - ?), duel_wins = duel_wins + ?, duel_losses = duel_losses + ? WHERE user_id = ?").bind(
+      delta,
+      won ? 0 : 1,
+      won ? 1 : 0,
+      foe.userId
+    ),
+  ]);
+  await useBuffs(env, hero, ["atk", "def", "hp"]);
+  const earned = won ? await awardPoints(env, user, 10) : { pointsEarned: 0 };
+  const gained = await addHeroXp(env, user.id, won ? 25 : 8);
+  return {
+    me: { name: hero.name, look: hero.look, level: hero.level, ...mine },
+    foe: { userId: foe.userId, name: foe.name, look: foe.look, level: foe.level, rating: foe.rating - delta, ...theirs },
+    won,
+    log,
+    rating: hero.rating + delta,
+    ratingChange: delta,
+    pointsEarned: earned.pointsEarned,
+    xp: gained.xp,
+    levels: gained.levels,
+    level: gained.level,
+    duelsLeft: DUELS_PER_DAY - used - 1,
+  };
+}
+
+async function arenaGet(request, env, cors) {
+  const { results } = await env.DB.prepare(
+    "SELECT h.user_id AS userId, h.name, h.level, h.look, h.rating, h.duel_wins AS wins, h.duel_losses AS losses FROM heroes h " +
+      "LEFT JOIN users u ON u.id = h.user_id WHERE COALESCE(u.banned, 0) = 0 ORDER BY h.rating DESC, h.level DESC LIMIT 15"
+  ).all();
+  return json({ top: results.map((r) => ({ ...r, look: JSON.parse(r.look || "{}") })) }, 200, cors);
+}
+
+// ---------- Adventure shop ----------
+
+function gearCatalog(level) {
+  return TIER_LEVELS.map((lvl, i) => {
+    const tier = i + 1;
+    return {
+      tier,
+      level: lvl,
+      open: level >= lvl,
+      items: SLOTS.map((slot) => {
+        const price = Math.round(GEAR_PRICES[i] * (slot === "weapon" ? 1.4 : 1));
+        return { id: `t${tier}-${slot}`, tier, slot, rarity: "uncommon", name: `${MATERIALS[i]} ${SLOT_NOUNS[slot][0]}`, price, sell: Math.floor(price / 2), ...itemStats(slot, tier, "uncommon") };
+      }),
+    };
+  });
+}
+
+async function adventureShopGet(request, env, cors) {
+  const user = request.headers.get("Authorization") ? await optionalUser(request, env) : null;
+  let level = 1;
+  let buffs = {};
+  let points = null;
+  if (user) {
+    const hero = await heroOf(env, user);
+    level = hero.level;
+    buffs = hero.buffs;
+    points = (await wallet(env, user)).points;
+  }
+  return json({ gear: gearCatalog(level), extras: EXTRAS, buffEffect: BUFF_EFFECT, buffUses: BUFF_USES, buffMax: BUFF_MAX, level, buffs, points, loggedIn: !!user }, 200, cors);
+}
+
+async function adventureShopBuy(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { item: id } = await readJson(request);
+  const hero = await heroOf(env, user);
+  await wallet(env, user);
+  const extra = EXTRAS.find((e) => e.id === id);
+  const gear = extra ? null : gearCatalog(hero.level).flatMap((t) => t.items).find((i) => i.id === id);
+  if (!extra && !gear) fail("That item isn't in the shop.", 404);
+  if (gear && !tierOpen(hero.level, gear.tier)) fail(`Tier ${gear.tier} unlocks at adventurer level ${TIER_LEVELS[gear.tier - 1]}.`, 409);
+  if (gear && (await bagCount(env, user.id)) >= BAG_SIZE) fail("Your bag is full. Sell something on your Profile first.", 409);
+  if (extra && (hero.buffs[extra.buff] || 0) + BUFF_USES > BUFF_MAX) fail(`You can hold at most ${BUFF_MAX} uses of ${extra.name}. Use some first.`, 409);
+  const price = (extra || gear).price;
+  const take = await env.DB.prepare("UPDATE wallets SET points = points - ? WHERE user_id = ? AND points >= ?").bind(price, user.id, price).run();
+  if (!take.meta || take.meta.changes !== 1) fail("You don't have enough points for that.", 400);
+  if (extra) {
+    hero.buffs[extra.buff] = (hero.buffs[extra.buff] || 0) + BUFF_USES;
+    await env.DB.prepare("UPDATE heroes SET buffs = ? WHERE user_id = ?").bind(JSON.stringify(hero.buffs), user.id).run();
+  } else {
+    await env.DB.prepare(
+      "INSERT INTO hero_items (user_id, slot, name, rarity, power, atk, def, hp, tier, source, sell, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'shop', ?, ?)"
+    )
+      .bind(user.id, gear.slot, gear.name, gear.rarity, gear.power, gear.atk, gear.def, gear.hp, gear.tier, gear.sell, Date.now())
+      .run();
+  }
+  const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
+  return json({ ok: true, points: w.points, buffs: hero.buffs, bought: extra ? "extra" : "gear" }, 200, cors);
+}
+
+// ---------- Hero endpoints ----------
 
 async function heroGet(request, env, cors) {
   const user = await requireUser(request, env);
@@ -1519,6 +1777,7 @@ async function heroAction(request, env, cors) {
 
   if (action === "dungeon") result = await startDungeon(env, user, body.dungeon);
   else if (action === "collect") result = await collectDungeon(env, user);
+  else if (action === "duel") result = await duel(env, user, body.opponent);
   else if (action === "look") {
     await heroOf(env, user);
     await env.DB.prepare("UPDATE heroes SET look = ? WHERE user_id = ?").bind(JSON.stringify(randomLook()), user.id).run();
@@ -1542,8 +1801,7 @@ async function heroAction(request, env, cors) {
     }
   } else if (action === "unequip") {
     if (!SLOTS.includes(body.slot)) fail("Unknown slot.", 400);
-    const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM hero_items WHERE user_id = ? AND equipped = 0").bind(user.id).first();
-    if (n >= BAG_SIZE) fail("Your bag is full. Sell something first.", 409);
+    if ((await bagCount(env, user.id)) >= BAG_SIZE) fail("Your bag is full. Sell something first.", 409);
     await env.DB.prepare("UPDATE hero_items SET equipped = 0 WHERE user_id = ? AND slot = ?").bind(user.id, body.slot).run();
   } else fail("Unknown action", 400);
 
@@ -1587,7 +1845,7 @@ async function profileGet(request, env, cors) {
 // "Online" = tabs heard from in the last 90 seconds. Daily totals are kept; the per-visitor rows that
 // make daily unique counts possible are deleted after two days.
 
-const STAT_PAGES = ["index", "watch", "content", "games", "gallery", "about", "stats", "profile", "terms", "privacy", "admin"];
+const STAT_PAGES = ["index", "watch", "content", "games", "gallery", "about", "stats", "profile", "shop", "terms", "privacy", "admin"];
 const ONLINE_MS = 90000;
 const VISITOR_ID = /^[a-f0-9-]{36}$/;
 
@@ -1713,6 +1971,11 @@ const BOARD_INTERVALS = [
 ];
 
 const BOT_COMMANDS = [
+  {
+    name: "duel",
+    description: "Fight another player's adventurer in the Sinners arena",
+    options: [{ type: 6, name: "opponent", description: "Who to fight (a random opponent near your rating if empty)" }],
+  },
   {
     name: "dungeon",
     description: "Your Sinners adventurer: check on them, send them out, collect rewards",
@@ -1852,12 +2115,14 @@ async function botCommand(interaction, env, origin) {
       }
       if (sub.name === "collect") {
         const r = await collectDungeon(env, user);
-        const lines = [r.won ? `🏆 **Victory!** +${r.xp} XP` : `💀 **Defeated…** but learned something: +${r.xp} XP`];
+        const lines = [
+          r.won ? `🏆 **Beat the ${r.dungeon.monster.name}!** +${r.xp} XP` : `💀 **The ${r.dungeon.monster.name} won…** but they learned something: +${r.xp} XP`,
+        ];
         if (r.item)
           lines.push(
             r.soldFor
               ? `Found ${RARITY_DOT[r.item.rarity]} **${r.item.name}**, but the bag was full, so it was sold for ${r.soldFor} 🪙`
-              : `Found ${RARITY_DOT[r.item.rarity]} **${r.item.name}** (${r.item.rarity}, ${r.item.slot}, +${r.item.power} power)`
+              : `Found ${RARITY_DOT[r.item.rarity]} **${r.item.name}** (${r.item.rarity} ${r.item.slot}: ${statText(r.item)})`
           );
         else if (r.won) lines.push("No loot this time.");
         if (r.levels.length) lines.push(`⬆️ **Level ${r.level}!** +${r.reward} 🪙`);
@@ -1869,6 +2134,7 @@ async function botCommand(interaction, env, origin) {
     const s = await heroState(env, user);
     const h = s.hero;
     const worn = s.items.filter((i) => i.equipped);
+    const buffs = Object.entries(h.buffs).map(([k, n]) => `${(s.extras.find((e) => e.buff === k) || {}).emoji || "✨"}×${n}`).join(" ");
     const away = s.expedition && DUNGEONS.find((d) => d.id === s.expedition.dungeon);
     const bar = h.next ? "▰".repeat(Math.round((h.xp / h.next) * 10)).padEnd(10, "▱") : "MAX";
     return botReply(null, {
@@ -1876,17 +2142,57 @@ async function botCommand(interaction, env, origin) {
         title: `⚔️ ${h.name} · level ${h.level}`,
         url: `${SITE_URL}/profile`,
         description:
-          `${bar} ${h.next ? `${h.xp} / ${h.next} XP` : ""}\n💪 Power **${h.power}** · ${h.wins}/${h.runs} adventures won\n` +
+          `${bar} ${h.next ? `${h.xp} / ${h.next} XP` : ""}\n⚔️ **${h.stats.atk}** ATK · 🛡️ **${h.stats.def}** DEF · ❤️ **${h.stats.hp}** HP · 💪 power ${h.power}\n` +
+          `🏆 ${h.wins}/${h.runs} adventures won · 🏟️ arena ${h.rating} (${h.duelWins}W ${h.duelLosses}L)${buffs ? `\nActive boosts: ${buffs}` : ""}\n` +
           (away
             ? s.expedition.done
               ? `${away.emoji} Back from ${away.name}! Use \`/dungeon collect\`.`
               : `${away.emoji} Exploring ${away.name}, back <t:${Math.floor(s.expedition.end / 1000)}:R>`
             : "🏕️ Resting. Send them out with `/dungeon go`."),
         fields: [
-          { name: "Gear", value: worn.length ? worn.map((i) => `${RARITY_DOT[i.rarity] || "⚪"} ${i.name} (+${i.power})`).join("\n") : "Nothing equipped yet", inline: true },
+          { name: "Gear", value: worn.length ? worn.map((i) => `${RARITY_DOT[i.rarity] || "⚪"} ${i.name}`).join("\n") : "Nothing equipped yet", inline: true },
           { name: "Regions", value: s.dungeons.map((d) => `${d.open ? d.emoji : "🔒"} ${d.name}${d.open ? ` · ${d.chance}%` : ` · level ${d.level}`}`).join("\n"), inline: true },
         ],
       })],
+    });
+  }
+
+  if (name === "duel") {
+    if (!caller.id) return botReply("Use this in a server or DM with me.", { ephemeral: true });
+    const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(caller.id).first();
+    if (banned && banned.banned) return botReply("Your account is banned from Sinners.", { ephemeral: true });
+    const user = {
+      id: caller.id,
+      name: caller.global_name || caller.username || "Adventurer",
+      avatar: caller.avatar ? `https://cdn.discordapp.com/avatars/${caller.id}/${caller.avatar}.png?size=64` : "",
+    };
+    await wallet(env, user);
+    let r;
+    try {
+      r = await duel(env, user, opt("opponent"));
+    } catch (err) {
+      return botReply(`⚠️ ${err.message}`, { ephemeral: true });
+    }
+    const crits = r.log.filter((l) => l.crit && l.by === (r.won ? "a" : "b")).length;
+    const last = r.log[r.log.length - 1];
+    return botReply(null, {
+      embeds: [
+        embed({
+          title: `🏟️ ${r.me.name} vs ${r.foe.name}`,
+          url: `${SITE_URL}/profile#arena`,
+          description:
+            `${r.won ? `🏆 **${r.me.name} wins!**` : `💀 **${r.foe.name} wins!**`} after ${r.log.length} blows` +
+            (crits ? ` (${crits} critical hit${crits === 1 ? "" : "s"})` : "") +
+            `, finishing with a ${last.dmg}-damage ${last.crit ? "critical " : ""}hit.\n` +
+            `Rating ${r.ratingChange > 0 ? "+" : ""}${r.ratingChange} → **${r.rating}**` +
+            (r.pointsEarned ? ` · +${r.pointsEarned} 🪙` : "") +
+            ` · +${r.xp} XP${r.levels.length ? ` · ⬆️ level ${r.level}!` : ""}\n${r.duelsLeft} duels left today`,
+          fields: [
+            { name: `⚔️ ${r.me.name} (Lv ${r.me.level})`, value: `${r.me.atk} ATK · ${r.me.def} DEF · ${r.me.hp} HP`, inline: true },
+            { name: `🛡️ ${r.foe.name} (Lv ${r.foe.level})`, value: `${r.foe.atk} ATK · ${r.foe.def} DEF · ${r.foe.hp} HP`, inline: true },
+          ],
+        }),
+      ],
     });
   }
 
@@ -2008,6 +2314,10 @@ async function botCommand(interaction, env, origin) {
     );
   }
   return botReply("Unknown command. The admin may need to press Register commands again.", { ephemeral: true });
+}
+
+function statText(s) {
+  return [s.atk && `+${s.atk} ATK`, s.def && `+${s.def} DEF`, s.hp && `+${s.hp} HP`].filter(Boolean).join(" ");
 }
 
 // Fills in a deferred reply ("Sinners is thinking…") with the real answer

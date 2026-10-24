@@ -1,5 +1,6 @@
-// Profile page: your stats, your pixel adventurer with 8 gear slots and a bag, and a world map to
-// send the adventurer on timed adventures. Everything is decided by the Worker (/hero, /profile).
+// Profile page: your stats, your pixel adventurer (Attack / Defense / HP, 8 gear slots, a bag, potion
+// boosts), a world map to send them on timed adventures, and the Arena for duels with other players.
+// Everything is decided by the Worker (/hero, /profile, /arena); fights are replayed here blow by blow.
 
 const API = WORKER_URL.replace(/\/$/, "");
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -32,6 +33,7 @@ const MAP_SPOTS = {
 };
 
 const $ = (id) => document.getElementById(id);
+const statText = (s) => [s.atk && `⚔️ +${s.atk}`, s.def && `🛡️ +${s.def}`, s.hp && `❤️ +${s.hp}`].filter(Boolean).join("  ");
 let state = null;
 let selectedItem = null;
 let selectedPlace = null;
@@ -192,13 +194,38 @@ function renderHero() {
   const figure = $("hero-figure");
   figure.replaceChildren(heroSvg(h.look, worn));
   figure.classList.toggle("away", !!state.expedition && !state.expedition.done);
+  const stat = (icon, label, key) => {
+    const box = el("div", "hero-stat");
+    const boosted = h.fighting[key] > h.stats[key];
+    box.title = `${label}: ${h.base[key]} from level ${h.level}, +${h.stats[key] - h.base[key]} from gear${boosted ? `, ${h.fighting[key]} with your potion` : ""}`;
+    box.append(el("span", null, icon), el("strong", boosted ? "boosted" : null, String(boosted ? h.fighting[key] : h.stats[key])), el("small", null, label));
+    return box;
+  };
+  $("hero-stats").replaceChildren(stat("⚔️", "Attack", "atk"), stat("🛡️", "Defense", "def"), stat("❤️", "HP", "hp"));
   $("hero-power").textContent = `💪 Power ${h.power} · 🏆 ${h.wins} / ${h.runs} adventures won`;
+  const buffs = Object.entries(h.buffs || {});
+  const boostBox = $("hero-buffs");
+  if (!buffs.length) {
+    const link = el("a", "link-btn", "🧪 Get potions and scrolls");
+    link.href = "/shop#extras";
+    boostBox.replaceChildren(link);
+  } else {
+    boostBox.replaceChildren(
+      el("span", "hint", "Active boosts:"),
+      ...buffs.map(([k, n]) => {
+        const x = state.extras.find((e) => e.buff === k) || { emoji: "✨", name: k, text: "" };
+        const chip = el("span", "buff-chip", `${x.emoji} ×${n}`);
+        chip.title = `${x.name}: ${x.text}, ${n} use${n === 1 ? "" : "s"} left`;
+        return chip;
+      })
+    );
+  }
 
   const slot = (name) => {
     const item = worn[name];
     const b = el("button", "gear-slot" + (item ? " filled" : ""));
     b.type = "button";
-    b.title = item ? `${item.name} (+${item.power})` : `${SLOT_INFO[name][1]}: empty`;
+    b.title = item ? `${item.name}: ${statText(item)}` : `${SLOT_INFO[name][1]}: empty`;
     if (item) {
       b.append(itemIcon(item));
       b.addEventListener("click", () => selectItem(item));
@@ -219,8 +246,8 @@ function renderBag() {
   const cells = bagItems.map((item) => {
     const b = el("button", "bag-cell" + (selectedItem && selectedItem.id === item.id ? " selected" : ""));
     b.type = "button";
-    b.title = `${item.name} (+${item.power})`;
-    b.append(itemIcon(item), el("span", "bag-power", `+${item.power}`));
+    b.title = `${item.name}: ${statText(item)}`;
+    b.append(itemIcon(item), el("span", "bag-power", `⚡${item.power}`));
     b.addEventListener("click", () => selectItem(item));
     return b;
   });
@@ -241,10 +268,18 @@ function selectItem(item) {
   head.append(itemIcon(item, true), info);
 
   const worn = wornMap()[item.slot];
-  const compare =
-    item.equipped || !worn
-      ? `+${item.power} power`
-      : `+${item.power} power (${item.power >= worn.power ? "▲" : "▼"} ${Math.abs(item.power - worn.power)} vs. your ${worn.name})`;
+  const compare = el("div", "item-stats");
+  [["⚔️", "atk", "Attack"], ["🛡️", "def", "Defense"], ["❤️", "hp", "HP"]].forEach(([icon, k, label]) => {
+    if (!item[k] && !(worn && worn[k])) return;
+    const row = el("div", "item-stat");
+    row.append(el("span", null, `${icon} ${label}`), el("strong", null, `+${item[k] || 0}`));
+    if (!item.equipped && worn) {
+      const diff = (item[k] || 0) - (worn[k] || 0);
+      if (diff) row.append(el("span", diff > 0 ? "up" : "down", `${diff > 0 ? "▲" : "▼"} ${Math.abs(diff)}`));
+    }
+    compare.append(row);
+  });
+  if (!item.equipped && worn) compare.append(el("span", "hint", `Compared with your ${worn.name}`));
   const actions = el("div", "item-actions");
   const msg = el("p", "form-msg");
   const act = (text, cls, body, confirmText) => {
@@ -274,7 +309,7 @@ function selectItem(item) {
     act("Equip", "button", { action: "equip", item: item.id });
     act(`Sell for ${item.sell} 🪙`, "button ghost", { action: "sell", item: item.id }, `Sell ${item.name} for ${item.sell} points?`);
   }
-  panel.replaceChildren(head, el("p", "item-power", compare), actions, msg);
+  panel.replaceChildren(head, compare, actions, msg);
 }
 
 // ---------- World map ----------
@@ -335,6 +370,8 @@ function renderMap() {
   map.replaceChildren(root);
 }
 
+const powerOf = (s) => Math.round(s.atk + 0.8 * s.def + 0.25 * s.hp);
+
 const fmtTime = (ms) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   const h = Math.floor(s / 3600);
@@ -368,11 +405,12 @@ function renderTrip() {
   }
   const d = state.dungeons.find((x) => x.id === selectedPlace) || state.dungeons.find((x) => x.open);
   if (!d) return box.replaceChildren();
+  const m = d.monster;
   const facts = el("ul", "trip-facts");
   [
-    ["⏱️", `${d.minutes >= 60 ? `${d.minutes / 60} h` : `${d.minutes} min`}`],
-    ["✨", `${d.xp[0]}–${d.xp[1]} XP`],
-    ["🎯", `${d.chance}% chance to win (power ${state.hero.power} vs. ${d.power} recommended)`],
+    [m.emoji, `Boss: ${m.name} (⚔️ ${m.atk} · 🛡️ ${m.def} · ❤️ ${m.hp})`],
+    ["🎯", `${d.chance}% chance to win (your power ${powerOf(state.hero.fighting)} vs. ${d.monsterPower})`],
+    ["⏱️", `${d.minutes >= 60 ? `${d.minutes / 60} h` : `${d.minutes} min`} · ✨ ${d.xp[0]}–${d.xp[1]} XP`],
     ["🎁", `${Math.round(d.loot * 100)}% chance of loot when you win`],
   ].forEach(([i, t]) => {
     const li = el("li");
@@ -421,14 +459,26 @@ async function collect() {
   busy = true;
   try {
     const r = await api("/hero", { action: "collect" });
+    const before = state;
     state = r.state;
     clockSkew = state.now - Date.now();
-    const lines = [r.won ? `🏆 Victory in ${r.dungeon.name}! +${r.xp} XP` : `💀 Defeated in ${r.dungeon.name}… but you still learned something: +${r.xp} XP`];
+    const m = r.dungeon.monster;
+    const lines = [
+      r.won ? `🏆 Beat the ${m.name} in ${r.dungeon.name}! +${r.xp} XP` : `💀 The ${m.name} won this time… but you still learned something: +${r.xp} XP`,
+    ];
     if (r.item) {
       const [label] = RARITY[r.item.rarity];
-      lines.push(r.soldFor ? `Found a ${label} ${r.item.name}, but your bag was full, so it was sold for ${r.soldFor} 🪙.` : `🎁 Found: ${r.item.name} (${label}, +${r.item.power} power). It's in your bag.`);
+      lines.push(r.soldFor ? `Found a ${label} ${r.item.name}, but your bag was full, so it was sold for ${r.soldFor} 🪙.` : `🎁 Found: ${r.item.name} (${label}, ${statText(r.item)}). It's in your bag.`);
     } else if (r.won) lines.push("No loot this time.");
     if (r.levels.length) lines.push(`⬆️ Level up! You're level ${r.level} now (+${r.reward} 🪙).`);
+    await playFight({
+      title: `${r.dungeon.emoji} ${r.dungeon.name}`,
+      a: { name: before.hero.name, look: before.hero.look, worn: wornFrom(before), ...r.me },
+      b: { name: m.name, emoji: m.emoji, ...m },
+      log: r.log,
+      won: r.won,
+      result: lines,
+    });
     showResult(lines);
     $("adv-result").classList.toggle("win", r.won);
     renderAll();
@@ -448,6 +498,156 @@ $("hero-reroll").addEventListener("click", async () => {
     showResult(`⚠️ ${err.message}`);
   }
 });
+
+// ---------- Fight replay ----------
+
+const wornFrom = (s) => Object.fromEntries(s.items.filter((i) => i.equipped).map((i) => [i.slot, i]));
+let fightDone = null;
+
+function fighterBox(box, f) {
+  const pic = el("div", "fighter-pic");
+  if (f.look) pic.append(heroSvg(f.look, f.worn || {}));
+  else pic.append(el("span", "fighter-emoji", f.emoji || "👾"));
+  const bar = el("div", "hp-bar");
+  const fill = el("span");
+  bar.append(fill);
+  const hp = el("span", "hp-text", `${f.hp} / ${f.hp}`);
+  box.replaceChildren(pic, el("strong", null, f.name), el("span", "hint", `⚔️ ${f.atk} · 🛡️ ${f.def} · ❤️ ${f.hp}`), bar, hp);
+  return {
+    set(value) {
+      fill.style.width = `${Math.max(0, (value / f.hp) * 100)}%`;
+      fill.classList.toggle("low", value / f.hp < 0.3);
+      hp.textContent = `${value} / ${f.hp}`;
+    },
+    hit(text, crit) {
+      pic.classList.remove("hurt");
+      void pic.offsetWidth; // restart the shake
+      pic.classList.add("hurt");
+      const pop = el("span", "dmg-pop" + (crit ? " crit" : ""), text);
+      pic.append(pop);
+      setTimeout(() => pop.remove(), 900);
+    },
+  };
+}
+
+// Plays a fight log (from the Worker) blow by blow; resolves when the player closes it
+function playFight({ title, a, b, log, won, result }) {
+  const overlay = $("fight");
+  $("fight-title").textContent = title;
+  const A = fighterBox($("fighter-a"), a);
+  const B = fighterBox($("fighter-b"), b);
+  A.set(a.hp);
+  B.set(b.hp);
+  $("fight-result").replaceChildren();
+  $("fight-line").textContent = "";
+  $("fight-skip").hidden = false;
+  $("fight-close").hidden = true;
+  overlay.hidden = false;
+  let i = 0;
+  let timer = null;
+  const finish = () => {
+    clearInterval(timer);
+    const last = log[log.length - 1] || { hpA: a.hp, hpB: b.hp };
+    A.set(last.hpA);
+    B.set(last.hpB);
+    $("fight-result").replaceChildren(el("strong", won ? "win" : "lose", won ? "🏆 Victory!" : "💀 Defeat"), ...result.map((line) => el("p", null, line)));
+    $("fight-skip").hidden = true;
+    $("fight-close").hidden = false;
+    $("fight-close").focus();
+  };
+  const step = () => {
+    if (i >= log.length) return finish();
+    const s = log[i++];
+    const attacker = s.by === "a" ? a : b;
+    const target = s.by === "a" ? B : A;
+    if (s.miss) $("fight-line").textContent = `${attacker.name} misses!`;
+    else {
+      target.hit(s.crit ? `${s.dmg}!` : String(s.dmg), s.crit);
+      $("fight-line").textContent = `${attacker.name} hits for ${s.dmg}${s.crit ? " (critical!)" : ""}`;
+    }
+    A.set(s.hpA);
+    B.set(s.hpB);
+  };
+  timer = setInterval(step, matchMedia("(prefers-reduced-motion: reduce)").matches ? 150 : 550);
+  $("fight-skip").onclick = finish;
+  return new Promise((resolve) => {
+    fightDone = () => {
+      clearInterval(timer);
+      overlay.hidden = true;
+      resolve();
+    };
+    $("fight-close").onclick = fightDone;
+  });
+}
+
+// ---------- Arena ----------
+
+async function loadArena() {
+  let top = [];
+  try {
+    top = (await (await fetch(`${API}/arena`)).json()).top || [];
+  } catch (e) {}
+  const h = state.hero;
+  const me = $("arena-me");
+  const find = el("button", "button", "⚔️ Find an opponent");
+  find.type = "button";
+  find.disabled = h.duelsLeft <= 0 || busy;
+  find.addEventListener("click", () => fightDuel());
+  me.replaceChildren(
+    el("strong", "arena-rating", `🏟️ ${h.rating}`),
+    el("span", "hint", `Arena rating · ${h.duelWins} wins, ${h.duelLosses} losses`),
+    el("span", "hint", `${h.duelsLeft} of 10 duels left today · wins pay 🪙 10 and 25 XP`),
+    find
+  );
+  const myId = SinnersAuth.user && SinnersAuth.user.id;
+  $("arena-top").replaceChildren(
+    ...(top.length ? top : []).map((p, i) => {
+      const li = el("li", "arena-row" + (p.userId === myId ? " me" : ""));
+      li.append(el("span", "lb-rank", ["🥇", "🥈", "🥉"][i] || `${i + 1}`), el("span", "lb-name", `${p.name} · Lv ${p.level}`), el("span", "lb-score", `${p.rating}`));
+      if (p.userId !== myId) {
+        const b = el("button", "link-btn", "Duel");
+        b.type = "button";
+        b.disabled = h.duelsLeft <= 0;
+        b.addEventListener("click", () => fightDuel(p.userId));
+        li.append(b);
+      } else li.append(el("span", "hint", "you"));
+      return li;
+    })
+  );
+  if (!top.length) $("arena-top").replaceChildren(el("li", "lb-empty", "No adventurers yet."));
+}
+
+async function fightDuel(opponent) {
+  if (busy) return;
+  busy = true;
+  try {
+    const before = state;
+    const r = await api("/hero", { action: "duel", opponent });
+    state = r.state;
+    const lines = [
+      `Rating ${r.ratingChange > 0 ? "+" : ""}${r.ratingChange} → ${r.rating}`,
+      `${r.pointsEarned ? `+${r.pointsEarned} 🪙 · ` : ""}+${r.xp} XP${r.levels.length ? ` · ⬆️ level ${r.level}!` : ""}`,
+      `${r.duelsLeft} duels left today`,
+    ];
+    await playFight({
+      title: `🏟️ ${r.me.name} vs ${r.foe.name}`,
+      a: { ...r.me, worn: wornFrom(before) },
+      b: { ...r.foe, worn: {} },
+      log: r.log,
+      won: r.won,
+      result: lines,
+    });
+    showResult([r.won ? `🏟️ You beat ${r.foe.name} in the arena!` : `🏟️ ${r.foe.name} beat you in the arena.`, ...lines]);
+    $("adv-result").classList.toggle("win", r.won);
+    renderAll();
+    loadArena();
+    loadProfile();
+  } catch (err) {
+    showResult(`⚠️ ${err.message}`);
+  } finally {
+    busy = false;
+  }
+}
 
 // ---------- Profile numbers ----------
 
@@ -503,6 +703,8 @@ async function start() {
   try {
     await loadHero();
     loadProfile();
+    loadArena();
+    if (location.hash === "#arena") $("arena").scrollIntoView();
   } catch (err) {
     $("profile-head").replaceChildren(el("p", "hint", `Couldn't load your profile: ${err.message}`));
   }
@@ -524,6 +726,7 @@ const ticker = setInterval(() => {
 }, 1000);
 
 SinnersNav.onLeave(() => {
+  if (fightDone) fightDone();
   clearInterval(ticker);
   stopAuthWatch();
 });
