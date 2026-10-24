@@ -28,6 +28,8 @@
 
 // Websites allowed to use this Worker. Add your own domain here if you get one.
 const ALLOWED_ORIGINS = [
+  "https://sinnerstv.com",
+  "https://www.sinnerstv.com",
   "https://greedtv.github.io",
   "http://localhost:8080",
   "http://127.0.0.1:8080",
