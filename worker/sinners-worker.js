@@ -1330,11 +1330,11 @@ const SLOT_PROFILE = {
   shoes: [0, 0.5, 1.5],
 };
 const DUNGEONS = [
-  { id: "forest", name: "Whispering Forest", emoji: "🌲", tier: 1, minutes: 10, xp: [40, 60], loot: 0.25, coins: [2, 5], monster: { name: "Dire Wolf", emoji: "🐺", atk: 4, def: 5, hp: 20 } },
-  { id: "caves", name: "Goblin Caves", emoji: "🕳️", tier: 2, minutes: 30, xp: [150, 210], loot: 0.3, coins: [6, 12], monster: { name: "Goblin Chief", emoji: "👺", atk: 22, def: 24, hp: 98 } },
-  { id: "swamp", name: "Rotting Swamp", emoji: "🐸", tier: 3, minutes: 60, xp: [340, 460], loot: 0.35, coins: [15, 25], monster: { name: "Bog Witch", emoji: "🧙", atk: 48, def: 52, hp: 214 } },
-  { id: "mountains", name: "Frostpeak Mountains", emoji: "🏔️", tier: 4, minutes: 120, xp: [750, 1000], loot: 0.4, coins: [30, 50], monster: { name: "Frost Giant", emoji: "🧊", atk: 93, def: 102, hp: 419 } },
-  { id: "abyss", name: "Abyss of Sinners", emoji: "😈", tier: 5, minutes: 240, xp: [1700, 2300], loot: 0.45, coins: [60, 100], monster: { name: "Sin Demon", emoji: "👹", atk: 162, def: 179, hp: 730 } },
+  { id: "forest", name: "Whispering Forest", emoji: "🌲", tier: 1, minutes: 10, xp: [40, 60], loot: 0.25, coins: [8, 14], monster: { name: "Dire Wolf", emoji: "🐺", atk: 4, def: 5, hp: 20 } },
+  { id: "caves", name: "Goblin Caves", emoji: "🕳️", tier: 2, minutes: 30, xp: [150, 210], loot: 0.3, coins: [25, 40], monster: { name: "Goblin Chief", emoji: "👺", atk: 22, def: 24, hp: 98 } },
+  { id: "swamp", name: "Rotting Swamp", emoji: "🐸", tier: 3, minutes: 60, xp: [340, 460], loot: 0.35, coins: [60, 90], monster: { name: "Bog Witch", emoji: "🧙", atk: 48, def: 52, hp: 214 } },
+  { id: "mountains", name: "Frostpeak Mountains", emoji: "🏔️", tier: 4, minutes: 120, xp: [750, 1000], loot: 0.4, coins: [150, 220], monster: { name: "Frost Giant", emoji: "🧊", atk: 93, def: 102, hp: 419 } },
+  { id: "abyss", name: "Abyss of Sinners", emoji: "😈", tier: 5, minutes: 240, xp: [1700, 2300], loot: 0.45, coins: [380, 520], monster: { name: "Sin Demon", emoji: "👹", atk: 162, def: 179, hp: 730 } },
 ];
 const MATERIALS = ["Wooden", "Iron", "Bogsteel", "Frost", "Abyssal"];
 const SLOT_NOUNS = {
@@ -1628,7 +1628,7 @@ async function collectDungeon(env, user) {
         .run();
     }
   }
-  // A win also pays a few coins (more in harder regions)
+  // A win also pays coins; longer, harder regions pay more per hour
   const coins = won ? between(...dungeon.coins) : 0;
   await env.DB.batch([
     env.DB.prepare("UPDATE heroes SET runs = runs + 1, wins = wins + ? WHERE user_id = ?").bind(won ? 1 : 0, user.id),
