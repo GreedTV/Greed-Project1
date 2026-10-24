@@ -5200,3 +5200,197 @@ img {
   border-color: #f59e0b;
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
 }
+
+/* ---------- Daily quests and streak ---------- */
+.daily-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 1.6fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.streak-box {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.streak-box .button {
+  justify-self: start;
+}
+
+.streak-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.streak-big {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.streak-track {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.streak-day {
+  display: grid;
+  justify-items: center;
+  padding: 6px 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.streak-day small {
+  font-size: 0.62rem;
+}
+
+.streak-day strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.streak-day.got {
+  border-color: color-mix(in srgb, #f97316 60%, var(--border));
+  background: color-mix(in srgb, #f97316 14%, transparent);
+}
+
+.streak-day.today {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+
+.streak-day.big {
+  border-style: dashed;
+}
+
+.streak-day.big.got {
+  border-style: solid;
+}
+
+.quest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.quest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.quest.done {
+  border-color: color-mix(in srgb, #22c55e 55%, var(--border));
+}
+
+.quest.claimed {
+  opacity: 0.6;
+}
+
+.quest-info {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.quest-bar {
+  margin-top: 0;
+  height: 7px;
+}
+
+.quest .button {
+  padding: 7px 16px;
+}
+
+.quest-state {
+  min-width: 40px;
+  text-align: center;
+}
+
+.quest-bonus {
+  margin-top: 10px;
+}
+
+.quest-bonus .button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Streak card (streak.js), bottom-left on every page */
+.streak-card {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(400px, calc(100% - 32px));
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, #f97316 55%, var(--border));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+  transform: translateY(150%);
+  transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.streak-card.show {
+  transform: translateY(0);
+}
+
+.streak-flame {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.streak-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.streak-text span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.streak-card .button {
+  padding: 8px 16px;
+  flex: none;
+}
+
+.streak-close {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 800px) {
+  .daily-grid {
+    grid-template-columns: 1fr;
+  }
+}

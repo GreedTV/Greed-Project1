@@ -385,6 +385,7 @@ async function collect() {
     $("adv-result").classList.toggle("win", r.won);
     renderAll();
     loadProfile();
+    loadDaily();
   } catch (err) {
     showResult(`⚠️ ${err.message}`);
   } finally {
@@ -544,12 +545,137 @@ async function fightDuel(opponent) {
     renderAll();
     loadArena();
     loadProfile();
+    loadDaily();
   } catch (err) {
     showResult(`⚠️ ${err.message}`);
   } finally {
     busy = false;
   }
 }
+
+// ---------- Daily quests and streak ----------
+
+let daily = null;
+
+async function dailyPost(body) {
+  const r = await api("/daily", body);
+  daily = r.state;
+  renderDaily();
+  document.dispatchEvent(new CustomEvent("sinners:daily", { detail: daily }));
+  return r;
+}
+
+function renderDaily() {
+  if (!daily) return;
+  const s = daily.streak;
+  // Streak: flame, count, and the 7-day cycle (day 7 is the big one)
+  const box = $("streak-box");
+  const head = el("div", "streak-head");
+  head.append(el("span", "streak-big", `🔥 ${s.current}`), el("span", "hint", `day streak · best ${s.best}`));
+  const track = el("div", "streak-track");
+  const cycleStart = Math.floor((s.claimedToday ? s.current - 1 : s.current) / 7) * 7;
+  for (let i = 1; i <= 7; i++) {
+    const n = cycleStart + i;
+    const got = n <= s.current; // days already claimed in this streak
+    const dot = el("div", "streak-day" + (got ? " got" : "") + (n === s.day && !s.claimedToday ? " today" : "") + (i === 7 ? " big" : ""));
+    dot.append(el("small", null, `Day ${n}`), el("span", null, i === 7 ? "🎁" : "🪙"), el("strong", null, String(20 + 10 * Math.min(n - 1, 6) + (n % 7 === 0 ? 100 : 0))));
+    track.append(dot);
+  }
+  const parts = [head, track];
+  if (!s.claimedToday) {
+    const b = el("button", "button", `Claim day ${s.day}: 🪙 ${s.reward.coins}${s.reward.potion ? " + potion" : ""}${s.reward.epic ? " + epic item" : ""}`);
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        const r = await dailyPost({ action: "checkin" });
+        showResult([`🔥 Day ${r.streak} streak! +${r.coins} 🪙`, r.potion && `${r.potion.emoji} ${r.potion.name} ×${r.potion.uses}`, r.item && `🎁 ${r.item.name}${r.item.soldFor ? " (sold, bag was full)" : " is in your bag"}`].filter(Boolean));
+        loadHero();
+        loadProfile();
+      } catch (err) {
+        showResult(`⚠️ ${err.message}`);
+        b.disabled = false;
+      }
+    });
+    parts.push(b);
+  } else parts.push(el("span", "hint", "✅ Claimed today. Come back tomorrow to keep the streak going."));
+  box.replaceChildren(...parts);
+
+  // Quests
+  $("quest-list").replaceChildren(
+    ...daily.quests.map((q) => {
+      const li = el("li", "quest" + (q.claimed ? " claimed" : q.done ? " done" : ""));
+      const info = el("div", "quest-info");
+      const bar = el("div", "xp-bar quest-bar");
+      const fill = el("span");
+      fill.style.width = `${(q.progress / q.target) * 100}%`;
+      bar.append(fill);
+      info.append(el("strong", null, `${q.emoji} ${q.text}`), bar, el("span", "hint", `${q.progress} / ${q.target} · 🪙 ${q.coins} + ${q.xp} XP`));
+      li.append(info);
+      if (q.claimed) li.append(el("span", "quest-state", "✅"));
+      else if (q.done) {
+        const b = el("button", "button", "Claim");
+        b.type = "button";
+        b.addEventListener("click", async () => {
+          b.disabled = true;
+          try {
+            const r = await dailyPost({ action: "claim", index: q.index });
+            showResult([`${q.emoji} Quest done: +${r.coins} 🪙 +${r.xp} XP`, r.levels.length && `⬆️ Level up! You're level ${r.level} now.`].filter(Boolean));
+            loadHero();
+            loadProfile();
+          } catch (err) {
+            showResult(`⚠️ ${err.message}`);
+            b.disabled = false;
+          }
+        });
+        li.append(b);
+      } else li.append(el("span", "quest-state hint", `${Math.round((q.progress / q.target) * 100)}%`));
+      return li;
+    })
+  );
+  const bonus = $("quest-bonus");
+  if (daily.bonus.claimed) bonus.replaceChildren(el("span", "hint", "🎁 Bonus chest opened. New quests tomorrow!"));
+  else {
+    const b = el("button", "button" + (daily.bonus.ready ? "" : " ghost"), `🎁 Bonus chest: 🪙 ${daily.bonus.coins} + a potion`);
+    b.type = "button";
+    b.disabled = !daily.bonus.ready;
+    b.title = daily.bonus.ready ? "Open it!" : "Finish and claim all 3 quests to open it";
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        const r = await dailyPost({ action: "bonus" });
+        showResult(`🎁 Bonus chest: +${r.coins} 🪙 and ${r.potion.emoji} ${r.potion.name} ×${r.potion.uses}`);
+        loadHero();
+        loadProfile();
+      } catch (err) {
+        showResult(`⚠️ ${err.message}`);
+        b.disabled = false;
+      }
+    });
+    bonus.replaceChildren(b);
+  }
+  renderReset();
+}
+
+function renderReset() {
+  if (!daily) return;
+  $("daily-reset").textContent = `New quests in ${fmtTime(daily.resetsAt - Date.now() - clockSkew)}`;
+}
+
+async function loadDaily() {
+  try {
+    daily = await api("/daily");
+    renderDaily();
+  } catch (e) {}
+}
+
+// The streak card (streak.js) was used on this page
+document.addEventListener("sinners:daily", (e) => {
+  if (e.detail && e.detail !== daily) {
+    daily = e.detail;
+    renderDaily();
+  }
+});
 
 // ---------- Profile numbers ----------
 
@@ -606,7 +732,8 @@ async function start() {
     await loadHero();
     loadProfile();
     loadArena();
-    if (location.hash === "#arena") $("arena").scrollIntoView();
+    loadDaily();
+    if (location.hash === "#arena" || location.hash === "#daily") $(location.hash.slice(1)).scrollIntoView();
   } catch (err) {
     $("profile-head").replaceChildren(el("p", "hint", `Couldn't load your profile: ${err.message}`));
   }
@@ -617,6 +744,7 @@ start();
 const stopAuthWatch = SinnersAuth.onChange(start);
 // Count down while away; when the adventurer is back, show the Collect button
 const ticker = setInterval(() => {
+  if (!document.hidden && daily && Date.now() % 30000 < 1000) renderReset();
   if (!state || !state.expedition || document.hidden) return;
   renderTrip();
   const done = Date.now() + clockSkew >= state.expedition.end;

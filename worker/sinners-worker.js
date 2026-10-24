@@ -44,6 +44,8 @@
 //                                         | { action: "watch" }  once a minute while watching streams: a little XP   (logged in)
 //   GET  /profile                      -> your profile numbers   (logged in)
 //   GET  /arena                        -> top adventurers by arena rating
+//   GET  /daily                        -> today's 3 quests with progress, the bonus chest and the login streak   (logged in)
+//   POST /daily                        -> { action: "checkin" } | { action: "claim", index } | { action: "bonus" }   (logged in)
 //   GET  /shop/adventure               -> gear for each tier, potions and scrolls (and your level and boosts if logged in)
 //   POST /shop/adventure               -> { item }  buy gear (into the bag) or a potion / scroll   (logged in)
 //
@@ -130,13 +132,15 @@ export default {
         if (request.method === "POST") return await discordAdminAction(request, env, cors);
       }
 
-      if (path === "/hero" || path === "/profile" || path === "/arena") {
+      if (path === "/hero" || path === "/profile" || path === "/arena" || path === "/daily") {
         if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
         await ensureSchema(env);
         if (path === "/hero" && request.method === "GET") return await heroGet(request, env, cors);
         if (path === "/hero" && request.method === "POST") return await heroAction(request, env, cors);
         if (path === "/profile" && request.method === "GET") return await profileGet(request, env, cors);
         if (path === "/arena" && request.method === "GET") return await arenaGet(request, env, cors);
+        if (path === "/daily" && request.method === "GET") return await dailyGet(request, env, cors);
+        if (path === "/daily" && request.method === "POST") return await dailyAction(request, env, cors);
       }
 
       if (path === "/presence" || path === "/stats") {
@@ -726,6 +730,13 @@ async function ensureSchema(env) {
         "equipped INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)"
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS hero_items_user ON hero_items (user_id, equipped)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS daily (user_id TEXT NOT NULL, day TEXT NOT NULL, games INTEGER NOT NULL DEFAULT 0, dungeons INTEGER NOT NULL DEFAULT 0, " +
+        "dungeon_wins INTEGER NOT NULL DEFAULT 0, duels INTEGER NOT NULL DEFAULT 0, duel_wins INTEGER NOT NULL DEFAULT 0, claimed TEXT NOT NULL DEFAULT '', " +
+        "bonus INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))"
+    ),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS streaks (user_id TEXT PRIMARY KEY, last_day TEXT NOT NULL, streak INTEGER NOT NULL, best INTEGER NOT NULL)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS bets_user ON bets (user_id, created)"),
   ]);
   // Added later: tables made before this need the column (fails harmlessly when it's already there)
   for (const sql of [
@@ -901,6 +912,7 @@ async function gameScore(request, env, cors) {
     .first();
   const earned = await awardPoints(env, user, game.points(score));
   const hero = await addHeroXp(env, user.id, earned.pointsEarned);
+  await bumpDaily(env, user.id, { games: 1 });
   return json({ best: mine.score, rank: ahead.n + 1, newBest: mine.score === score, ...earned, heroXp: hero.xp, heroLevels: hero.levels }, 200, cors);
 }
 
@@ -1635,6 +1647,7 @@ async function collectDungeon(env, user) {
     env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(coins, user.id),
   ]);
   const gained = await addHeroXp(env, user.id, xp);
+  await bumpDaily(env, user.id, { dungeons: 1, dungeon_wins: won ? 1 : 0 });
   return {
     dungeon: { id: dungeon.id, name: dungeon.name, emoji: dungeon.emoji, monster: dungeon.monster },
     me: { name: hero.name, ...snap },
@@ -1695,6 +1708,7 @@ async function duel(env, user, opponentId) {
     ),
   ]);
   await useBuffs(env, hero, ["atk", "def", "hp"]);
+  await bumpDaily(env, user.id, { duels: 1, duel_wins: won ? 1 : 0 });
   const earned = won ? await awardPoints(env, user, 10) : { pointsEarned: 0 };
   const gained = await addHeroXp(env, user.id, won ? 25 : 8);
   return {
@@ -1887,6 +1901,214 @@ async function profileGet(request, env, cors) {
   );
 }
 
+// ---------- Daily quests and login streak ----------
+// Every day (UTC) each player gets 3 quests picked from QUEST_POOL (the same 3 all day, different per
+// player). Progress comes from what they already do: watching (heroes.watch_minutes), games, adventures
+// and duels (the "daily" table), bets and chat messages (counted from their tables). Each finished quest
+// pays coins and adventurer XP; finishing all 3 opens a bonus chest. Opening the site on a new day
+// claims the login streak reward; missing a day starts the streak again.
+
+const QUEST_POOL = [
+  { id: "watch20", family: "watch", kind: "watch", target: 20, emoji: "📺", text: "Watch streams for 20 minutes", coins: 40 },
+  { id: "watch45", family: "watch", kind: "watch", target: 45, emoji: "📺", text: "Watch streams for 45 minutes", coins: 70 },
+  { id: "games3", family: "games", kind: "games", target: 3, emoji: "🎮", text: "Finish 3 mini games", coins: 35 },
+  { id: "games6", family: "games", kind: "games", target: 6, emoji: "🎮", text: "Finish 6 mini games", coins: 60 },
+  { id: "adv3", family: "adventure", kind: "dungeons", target: 3, emoji: "🗺️", text: "Complete 3 adventures", coins: 50 },
+  { id: "advwin2", family: "adventure", kind: "dungeon_wins", target: 2, emoji: "🏆", text: "Win 2 adventures", coins: 50 },
+  { id: "duel2", family: "arena", kind: "duels", target: 2, emoji: "🏟️", text: "Fight 2 arena duels", coins: 40 },
+  { id: "duelwin1", family: "arena", kind: "duel_wins", target: 1, emoji: "⚔️", text: "Win an arena duel", coins: 45 },
+  { id: "bet2", family: "bets", kind: "bets", target: 2, emoji: "🎲", text: "Place 2 bets in Color Clash or Lucky Number", coins: 30 },
+  { id: "chat3", family: "chat", kind: "chats", target: 3, emoji: "💬", text: "Send 3 messages in Sinners chat", coins: 30 },
+];
+const DAILY_COUNTERS = ["games", "dungeons", "dungeon_wins", "duels", "duel_wins"];
+const QUEST_BONUS_COINS = 60;
+const levelScale = (level) => 1 + level / 10; // rewards grow with the adventurer's level
+
+// A small seeded random generator, so a player's quests stay the same all day
+function seeded(text) {
+  let h = 2166136261;
+  for (const c of text) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+}
+
+function questsFor(userId, day) {
+  const rnd = seeded(`${userId}:${day}`);
+  const pool = [...QUEST_POOL].sort(() => rnd() - 0.5);
+  const picked = [];
+  for (const q of pool) {
+    if (picked.length < 3 && !picked.some((p) => p.family === q.family)) picked.push(q);
+  }
+  return picked;
+}
+
+// Adds to today's counters, e.g. bumpDaily(env, id, { games: 1 })
+async function bumpDaily(env, userId, add) {
+  const keys = Object.keys(add).filter((k) => DAILY_COUNTERS.includes(k) && add[k]);
+  if (!keys.length) return;
+  await env.DB.prepare(
+    `INSERT INTO daily (user_id, day, ${keys.join(", ")}) VALUES (?, ?, ${keys.map(() => "?").join(", ")}) ` +
+      `ON CONFLICT(user_id, day) DO UPDATE SET ${keys.map((k) => `${k} = ${k} + excluded.${k}`).join(", ")}`
+  )
+    .bind(userId, today(), ...keys.map((k) => add[k]))
+    .run();
+}
+
+function streakReward(day) {
+  const coins = 20 + 10 * Math.min(day - 1, 6) + (day % 7 === 0 ? 100 : 0);
+  return { coins, potion: day % 7 === 0, epic: day === 30 || (day > 30 && day % 30 === 0) };
+}
+
+async function dailyState(env, user) {
+  const day = today();
+  const startOfDay = Date.parse(day + "T00:00:00Z");
+  const yesterday = new Date(startOfDay - 86400000).toISOString().slice(0, 10);
+  const one = (sql, ...args) => env.DB.prepare(sql).bind(...args).first();
+  const [row, hero, bets, chats, streak] = await Promise.all([
+    one(`SELECT ${DAILY_COUNTERS.join(", ")}, claimed, bonus FROM daily WHERE user_id = ? AND day = ?`, user.id, day),
+    one("SELECT level, watch_day AS watchDay, watch_minutes AS watchMinutes FROM heroes WHERE user_id = ?", user.id),
+    one("SELECT COUNT(*) AS n FROM bets WHERE user_id = ? AND created >= ?", user.id, startOfDay),
+    one("SELECT COUNT(*) AS n FROM messages WHERE user_id = ? AND created >= ? AND deleted = 0", user.id, startOfDay),
+    one("SELECT last_day AS lastDay, streak, best FROM streaks WHERE user_id = ?", user.id),
+  ]);
+  const level = hero ? hero.level : 1;
+  const counts = {
+    ...Object.fromEntries(DAILY_COUNTERS.map((k) => [k, row ? row[k] : 0])),
+    watch: hero && hero.watchDay === day ? hero.watchMinutes : 0,
+    bets: bets.n,
+    chats: chats.n,
+  };
+  const claimed = String((row && row.claimed) || "");
+  const quests = questsFor(user.id, day).map((q, index) => {
+    const progress = Math.min(q.target, counts[q.kind] || 0);
+    return {
+      index,
+      id: q.id,
+      emoji: q.emoji,
+      text: q.text,
+      target: q.target,
+      progress,
+      done: progress >= q.target,
+      claimed: claimed.includes(`,${index},`),
+      coins: Math.round(q.coins * levelScale(level)),
+      xp: Math.round(xpToNext(level) * 0.2),
+    };
+  });
+  const current = streak && (streak.lastDay === day || streak.lastDay === yesterday) ? streak.streak : 0;
+  const claimedToday = !!streak && streak.lastDay === day;
+  const nextDay = claimedToday ? current : current + 1;
+  return {
+    day,
+    resetsAt: startOfDay + 86400000,
+    level,
+    quests,
+    bonus: {
+      coins: Math.round(QUEST_BONUS_COINS * levelScale(level)),
+      ready: quests.every((q) => q.claimed),
+      claimed: !!(row && row.bonus),
+    },
+    streak: { current, best: streak ? streak.best : 0, claimedToday, day: nextDay, reward: streakReward(nextDay), hasHero: !!hero },
+  };
+}
+
+// A random potion or scroll, `uses` times (up to the usual 9)
+async function giveRandomBuff(env, user, uses) {
+  const hero = await heroOf(env, user);
+  const pick = EXTRAS[Math.floor(Math.random() * EXTRAS.length)];
+  hero.buffs[pick.buff] = Math.min(BUFF_MAX, (hero.buffs[pick.buff] || 0) + uses);
+  await env.DB.prepare("UPDATE heroes SET buffs = ? WHERE user_id = ?").bind(JSON.stringify(hero.buffs), user.id).run();
+  return { name: pick.name, emoji: pick.emoji, uses };
+}
+
+async function dailyCheckin(env, user) {
+  const day = today();
+  const yesterday = new Date(Date.parse(day + "T00:00:00Z") - 86400000).toISOString().slice(0, 10);
+  const row = await env.DB.prepare("SELECT last_day AS lastDay, streak, best FROM streaks WHERE user_id = ?").bind(user.id).first();
+  if (row && row.lastDay === day) fail("You already claimed today's reward. Come back tomorrow!", 409);
+  const streak = row && row.lastDay === yesterday ? row.streak + 1 : 1;
+  // Claim the day once, even if two requests arrive together
+  const claim = row
+    ? await env.DB.prepare("UPDATE streaks SET last_day = ?, streak = ?, best = MAX(best, ?) WHERE user_id = ? AND last_day = ?")
+        .bind(day, streak, streak, user.id, row.lastDay)
+        .run()
+    : await env.DB.prepare("INSERT INTO streaks (user_id, last_day, streak, best) VALUES (?, ?, 1, 1) ON CONFLICT DO NOTHING").bind(user.id, day).run();
+  if (!claim.meta || claim.meta.changes !== 1) fail("You already claimed today's reward.", 409);
+
+  const reward = streakReward(streak);
+  await wallet(env, user);
+  await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(reward.coins, user.id).run();
+  const out = { streak, coins: reward.coins };
+  if (reward.potion) out.potion = await giveRandomBuff(env, user, 3);
+  if (reward.epic) {
+    const hero = await heroOf(env, user);
+    const tier = TIER_LEVELS.filter((l) => hero.level >= l).length;
+    let item = lootItem(tier);
+    // force it to epic
+    item = { ...item, rarity: "epic", ...itemStats(item.slot, tier, "epic"), name: `Cursed ${MATERIALS[tier - 1]} ${SLOT_NOUNS[item.slot][0]}`, sell: 30 * tier };
+    if ((await bagCount(env, user.id)) < BAG_SIZE) {
+      await env.DB.prepare(
+        "INSERT INTO hero_items (user_id, slot, name, rarity, power, atk, def, hp, tier, source, sell, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'streak', ?, ?)"
+      )
+        .bind(user.id, item.slot, item.name, item.rarity, item.power, item.atk, item.def, item.hp, item.tier, item.sell, Date.now())
+        .run();
+      out.item = item;
+    } else {
+      await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(item.sell, user.id).run();
+      out.item = { ...item, soldFor: item.sell };
+    }
+  }
+  return out;
+}
+
+async function dailyClaim(env, user, index) {
+  const state = await dailyState(env, user);
+  const q = state.quests[Math.floor(Number(index))];
+  if (!q) fail("Unknown quest.", 400);
+  if (!q.done) fail("That quest isn't finished yet.", 409);
+  if (q.claimed) fail("Already claimed.", 409);
+  await env.DB.prepare("INSERT INTO daily (user_id, day) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(user.id, state.day).run();
+  const mark = await env.DB.prepare("UPDATE daily SET claimed = claimed || ? WHERE user_id = ? AND day = ? AND instr(claimed, ?) = 0")
+    .bind(`,${q.index},`, user.id, state.day, `,${q.index},`)
+    .run();
+  if (!mark.meta || mark.meta.changes !== 1) fail("Already claimed.", 409);
+  await wallet(env, user);
+  await heroOf(env, user);
+  await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(q.coins, user.id).run();
+  const gained = await addHeroXp(env, user.id, q.xp);
+  return { quest: q, coins: q.coins, xp: q.xp, levels: gained.levels, level: gained.level };
+}
+
+async function dailyBonus(env, user) {
+  const state = await dailyState(env, user);
+  if (!state.bonus.ready) fail("Finish and claim all 3 quests first.", 409);
+  if (state.bonus.claimed) fail("You already opened today's chest.", 409);
+  const mark = await env.DB.prepare("UPDATE daily SET bonus = 1 WHERE user_id = ? AND day = ? AND bonus = 0").bind(user.id, state.day).run();
+  if (!mark.meta || mark.meta.changes !== 1) fail("You already opened today's chest.", 409);
+  await wallet(env, user);
+  await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(state.bonus.coins, user.id).run();
+  return { coins: state.bonus.coins, potion: await giveRandomBuff(env, user, 2) };
+}
+
+async function dailyGet(request, env, cors) {
+  const user = await requireUser(request, env);
+  return json(await dailyState(env, user), 200, cors);
+}
+
+async function dailyAction(request, env, cors) {
+  const user = await requireUser(request, env);
+  const body = await readJson(request);
+  let result;
+  if (body.action === "checkin") result = await dailyCheckin(env, user);
+  else if (body.action === "claim") result = await dailyClaim(env, user, body.index);
+  else if (body.action === "bonus") result = await dailyBonus(env, user);
+  else fail("Unknown action", 400);
+  const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
+  return json({ ...result, points: w ? w.points : 0, state: await dailyState(env, user) }, 200, cors);
+}
+
 // ---------- Site stats ----------
 // Every open tab sends a heartbeat once a minute (only while it's visible), plus one "view" per page
 // opened. A visitor is a random ID the browser makes for itself; no IP, account or device data is kept.
@@ -2020,6 +2242,7 @@ const BOARD_INTERVALS = [
 ];
 
 const BOT_COMMANDS = [
+  { name: "daily", description: "Claim your daily streak reward and finished quests, and see today's quests" },
   {
     name: "duel",
     description: "Fight another player's adventurer in the Sinners arena",
@@ -2218,6 +2441,54 @@ async function botCommand(interaction, env, origin) {
     });
   }
 
+  if (name === "daily") {
+    if (!caller.id) return botReply("Use this in a server or DM with me.", { ephemeral: true });
+    const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(caller.id).first();
+    if (banned && banned.banned) return botReply("Your account is banned from Sinners.", { ephemeral: true });
+    const user = {
+      id: caller.id,
+      name: caller.global_name || caller.username || "Adventurer",
+      avatar: caller.avatar ? `https://cdn.discordapp.com/avatars/${caller.id}/${caller.avatar}.png?size=64` : "",
+    };
+    await wallet(env, user);
+    const got = [];
+    // Check in, claim finished quests and the chest, all in one go
+    let s = await dailyState(env, user);
+    if (!s.streak.claimedToday) {
+      const c = await dailyCheckin(env, user);
+      got.push(`🔥 Day ${c.streak} streak: +${c.coins} 🪙${c.potion ? ` and ${c.potion.emoji} ${c.potion.name} ×${c.potion.uses}` : ""}${c.item ? ` and a ${c.item.name}!` : ""}`);
+    }
+    for (const q of s.quests.filter((x) => x.done && !x.claimed)) {
+      const r = await dailyClaim(env, user, q.index);
+      got.push(`${q.emoji} ${q.text}: +${r.coins} 🪙 +${r.xp} XP${r.levels.length ? ` ⬆️ level ${r.level}!` : ""}`);
+    }
+    s = await dailyState(env, user);
+    if (s.bonus.ready && !s.bonus.claimed) {
+      const b = await dailyBonus(env, user);
+      got.push(`🎁 Bonus chest: +${b.coins} 🪙 and ${b.potion.emoji} ${b.potion.name} ×${b.potion.uses}`);
+      s = await dailyState(env, user);
+    }
+    const bar = (q) => "▰".repeat(Math.round((q.progress / q.target) * 8)).padEnd(8, "▱");
+    return botReply(null, {
+      embeds: [
+        embed({
+          title: `📅 ${user.name}'s daily · 🔥 ${s.streak.current} day streak`,
+          url: `${SITE_URL}/profile#daily`,
+          description: (got.length ? `**Claimed just now**\n${got.join("\n")}\n\n` : "") + `Best streak: ${s.streak.best} day${s.streak.best === 1 ? "" : "s"} · new quests <t:${Math.floor(s.resetsAt / 1000)}:R>`,
+          fields: [
+            {
+              name: "Today's quests",
+              value: s.quests
+                .map((q) => `${q.claimed ? "✅" : q.emoji} ${q.text}\n${bar(q)} ${q.progress}/${q.target} · 🪙 ${q.coins} + ${q.xp} XP`)
+                .join("\n"),
+            },
+            { name: "Bonus chest", value: s.bonus.claimed ? "✅ Opened" : `Finish all 3 for 🪙 ${s.bonus.coins} and a potion` },
+          ],
+        }),
+      ],
+    });
+  }
+
   if (name === "duel") {
     if (!caller.id) return botReply("Use this in a server or DM with me.", { ephemeral: true });
     const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(caller.id).first();
@@ -2398,6 +2669,7 @@ const HELP_TOPICS = {
         name: "Commands for everyone",
         value: [
           "`/help` this guide",
+          "`/daily` streak reward and daily quests",
           "`/dungeon status | go | collect` your adventurer",
           "`/duel [@player]` fight in the arena",
           "`/points [@player]` points and rank",
@@ -2417,6 +2689,7 @@ const HELP_TOPICS = {
       { name: "1. Log in", value: `Open ${SITE_URL} and press **Log in** (Discord). You get **🪙 100 points** to start.` },
       { name: "2. Make your adventurer", value: `Open your **Profile** (click your name at the top of the site) or type \`/dungeon status\` here. A pixel adventurer is made for you.` },
       { name: "3. Earn points (🪙)", value: "Play the mini games, win adventures and duels, bet in Color Clash / Lucky Number, and level up. Games and duels earn up to 300 a day." },
+      { name: "Every day", value: "Open the site (or type `/daily`) to claim your **login streak** reward, then do your **3 daily quests** for coins and XP. Finish all 3 for a bonus chest." },
       { name: "4. Spend them", value: `Gear, potions and scrolls in the **Shop** (${SITE_URL}/shop), or special rewards in its Redeem tab.` },
       { name: "Good to know", value: "Points are just for fun: they can't be bought or turned into money." },
     ],
