@@ -11,7 +11,7 @@ const DEFAULT_STREAMERS = [
 
 // Address of the Cloudflare Worker from worker/kick-proxy.js, e.g. "https://sinners-kick.name.workers.dev".
 // When set, Kick streams play in HD with volume and quality controls. When empty, Kick's own player is used.
-const KICK_PROXY = "";
+const KICK_PROXY = "https://sinners-kick.baterdene03253016.workers.dev";
 
 const STORAGE_KEY = "sinners-streamers";
 const MAX_MULTI = 4;
