@@ -2183,7 +2183,7 @@ async function botCommand(interaction, env, origin) {
           description:
             `${r.won ? `🏆 **${r.me.name} wins!**` : `💀 **${r.foe.name} wins!**`} after ${r.log.length} blows` +
             (crits ? ` (${crits} critical hit${crits === 1 ? "" : "s"})` : "") +
-            `, finishing with a ${last.dmg}-damage ${last.crit ? "critical " : ""}hit.\n` +
+            `. Final blow: ${last.dmg} damage${last.crit ? " (critical!)" : ""}.\n` +
             `Rating ${r.ratingChange > 0 ? "+" : ""}${r.ratingChange} → **${r.rating}**` +
             (r.pointsEarned ? ` · +${r.pointsEarned} 🪙` : "") +
             ` · +${r.xp} XP${r.levels.length ? ` · ⬆️ level ${r.level}!` : ""}\n${r.duelsLeft} duels left today`,

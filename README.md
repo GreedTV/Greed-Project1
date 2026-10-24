@@ -16,7 +16,8 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 - `games.html` (`/games`): mini games (Quick Draw, Target Rush, Chat Typer) with leaderboards, plus betting games (Color Clash, Lucky Number) played with points, and a shop where points buy items the admin adds
 - `gallery.html` (`/gallery`): community gallery with Images and Clips sections; visitors share links
 - `about.html` (`/about`): short, plain about page (to be filled in later)
-- `profile.html` (`/profile`): your stats plus your adventurer: a pixel character with 8 gear slots, a 30-slot bag and a world map (Forest, Caves, Swamp, Mountains, Abyss) for timed adventures that earn XP and loot. Also `/dungeon` in Discord
+- `profile.html` (`/profile`): your stats plus your adventurer: a pixel character with Attack / Defense / HP, 8 gear slots, a 30-slot bag, a world map (Forest, Caves, Swamp, Mountains, Abyss) for timed adventures against a boss, and the Arena for duels. Also `/dungeon` and `/duel` in Discord
+- `shop.html` (`/shop`): Adventure gear for each tier (unlocks at adventurer level 1/5/10/20/30, never sells out, sells back for half), Extras (potions and scrolls: +25% Attack / Defense / HP, +50% XP, +15% loot, 3 uses each) and Redeem (rewards the admin adds)
 - `stats.html` (`/stats`): live visitors online, daily visitors and page views, and community numbers
 - `admin.html` (`/admin`): review shared gallery links, moderate chat, reset games and points, and manage the shop (password protected, not in the menu)
 
@@ -81,7 +82,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 8. **Shop:** items in D1 with pictures in KV; buying takes the points and one from the stock in a way that can't oversell.
 9. **Discord bot:** slash commands (`/points`, `/top`, `/shop`, `/round`, `/sinners`, `/notify-here`) arrive as signed requests at `/discord/interactions`, so the bot needs no server of its own. Site logins are Discord accounts, so points and scores match up automatically. With `/notify-here`, shop purchases and new gallery links are posted to a channel. `/stats-live` keeps a site report in a channel that updates by itself (every 5 min to once a day); this needs a Cron Trigger on the Worker every 5 minutes (`*/5 * * * *`). Setup: add `DISCORD_PUBLIC_KEY` (Text) and `DISCORD_BOT_TOKEN` (Secret), set the Interactions Endpoint URL in the Discord Developer Portal, then use the Discord bot card on `admin.html`.
 10. **Site stats:** every open tab sends an anonymous heartbeat once a minute (`presence.js`, a random ID kept in the browser, no IPs). The Worker keeps who's online now and daily visitor and page-view totals in D1, shown on `stats.html`, in the header's "online" badge and in the bot's `/stats`.
-11. **Adventure:** adventurers, items and timed dungeon runs in D1 (results decided by the Worker, each run collected once). Shop items have tiers 1-5 that unlock at adventurer level 1/5/10/20/30; gear bought in the shop goes into the bag.
+11. **Adventure:** adventurers, items and timed dungeon runs in D1 (results decided by the Worker, each run collected once). Win chances come from a power score (attack + 0.8 x defense + 0.25 x HP) on a logistic curve, and the fight log is played out to match. Arena ratings use Elo, 10 duels a day.
 
 Setup in the Cloudflare dashboard (Workers & Pages → the Worker → Settings):
 
