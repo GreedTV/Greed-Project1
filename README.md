@@ -13,6 +13,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 - `index.html` (`/`): home page with platform logo tiles and a "How to use Sinners" guide
 - `watch.html` (`/watch`): watch streams one at a time with chat, or up to 4 at once
 - `content.html` (`/content`): watch YouTube videos and playlists while waiting for a stream
+- `games.html` (`/games`): mini games (Quick Draw, Target Rush, Chat Typer) with a shared leaderboard
 - `gallery.html` (`/gallery`): community gallery with Images and Clips sections; visitors share links
 - `about.html` (`/about`): short, plain about page (to be filled in later)
 - `admin.html` (`/admin`): review shared gallery links (password protected, not in the menu)
@@ -28,6 +29,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 - `mini.js`: floating, draggable mini player (Watch single view and Content page)
 - `nav.js`: in-site navigation that swaps page content without reloading, so the mini player keeps playing across sections; it loads each page's own script (watch.js, content.js, gallery.js, admin.js) as a module
 - `watch.js`: the Watch page (players, multi-view, volume/quality, chat column, adding and fixing streamers)
+- `games.js`: the three mini games, saving scores, and the leaderboard
 - `gallery.js`: loads approved items, the viewer, and the share forms
 - `content.js`: YouTube queue (saved per visitor)
 - `admin.js`: approve / reject / remove gallery items
@@ -47,6 +49,12 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 - **Moderation:** `admin.html` lists recent messages with Delete and Ban user. Banning removes that user's messages from the last day and blocks them from chatting and logging in.
 - Limits: 300 characters per message, one message per 1.5 seconds per user.
 
+## Games
+
+- Three quick original games: Quick Draw (reaction time, 5 rounds), Target Rush (targets hit in 30 s) and Chat Typer (words typed in 30 s).
+- Anyone can play; logging in with Discord saves your best score to the leaderboard (top 10 shown).
+- Scores come from the browser, so they can't be fully cheat-proof: impossible scores are refused, submissions are rate limited, banned users can't post, and `admin.html` can remove entries or reset a game.
+
 ## Gallery
 
 - Anyone can share an image link or a Kick / Twitch / YouTube clip link.
@@ -55,12 +63,13 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 
 ## Cloudflare Worker
 
-`worker/sinners-worker.js` does five jobs:
+`worker/sinners-worker.js` does six jobs:
 
 1. **Kick HD:** asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers. Video chunks load straight from Kick's servers. Kick may change or block this at any time.
 2. **Gallery:** stores shared links in Workers KV and handles the review queue.
 3. **Discord login:** sends visitors to Discord and back with a signed session token.
 4. **Sinners chat:** stores messages in D1, with admin delete and ban.
+6. **Game leaderboards:** saves logged-in players' best scores in D1, refuses impossible scores, and lets the admin remove entries or reset a game.
 5. **YouTube channels:** finds a channel by name or @handle and checks whether it's live, by reading YouTube's public channel pages.
 
 Setup in the Cloudflare dashboard (Workers & Pages → the Worker → Settings):

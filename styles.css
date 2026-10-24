@@ -524,10 +524,17 @@ img {
   letter-spacing: 0.02em;
 }
 
-.platform-perk {
-  color: var(--muted);
-  font-size: 0.92rem;
-  max-width: 260px;
+.platform-site {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--brand);
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.platform-tile:hover .platform-site {
+  opacity: 1;
+  text-decoration: underline;
 }
 
 /* How to use Sinners */
@@ -2276,6 +2283,340 @@ img {
 .player-offline .alert-toggle.on {
   border-color: var(--accent);
   color: var(--text);
+}
+
+/* Games page */
+.game-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.game-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, transform 0.2s;
+}
+
+.game-tab:hover {
+  color: var(--text);
+  transform: translateY(-2px);
+}
+
+.game-tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+  box-shadow: var(--glow);
+}
+
+.game-tab-icon {
+  font-size: 1.4rem;
+}
+
+.game-tab-title {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.25rem;
+}
+
+.games-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+.game-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  overflow: hidden;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.game-stage.intro {
+  display: grid;
+  place-items: center;
+}
+
+.game-intro {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.game-intro-icon {
+  font-size: 3rem;
+}
+
+.game-intro h2 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.game-intro p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  max-width: 420px;
+}
+
+.game-hud {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 16px;
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.game-time.low {
+  color: var(--live);
+}
+
+.game-score {
+  color: var(--accent);
+}
+
+/* Quick Draw */
+.reaction-panel {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  text-align: center;
+  cursor: pointer;
+  color: #fff;
+  transition: background 0.1s;
+}
+
+.reaction-panel.idle,
+.reaction-panel.between,
+.reaction-panel.done { background: #2b2440; }
+.reaction-panel.wait { background: #b4232f; }
+.reaction-panel.go { background: #16a34a; }
+.reaction-panel.early { background: #9a3412; }
+
+.reaction-big {
+  font-family: "Rajdhani", sans-serif;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 700;
+}
+
+.reaction-small {
+  opacity: 0.85;
+}
+
+/* Target Rush */
+.aim-field {
+  position: relative;
+  flex: 1;
+  cursor: crosshair;
+}
+
+.aim-target {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  cursor: crosshair;
+  background: radial-gradient(circle, #fff 0 18%, var(--accent) 19% 42%, #fff 43% 58%, var(--accent) 59%);
+  box-shadow: var(--glow);
+  animation: target-pop 0.15s ease-out;
+}
+
+@keyframes target-pop {
+  from { transform: scale(0.4); }
+  to { transform: scale(1); }
+}
+
+/* Chat Typer */
+.typer {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.typer-word {
+  font-family: "Rajdhani", sans-serif;
+  font-size: clamp(2.4rem, 7vw, 4rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.typer-word.wrong {
+  color: var(--live);
+}
+
+.typer-next {
+  color: var(--muted);
+}
+
+.typer-input {
+  width: min(360px, 80vw);
+  font: inherit;
+  font-size: 1.2rem;
+  text-align: center;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.typer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Result and leaderboard */
+.game-result:not(:empty) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.result-line {
+  display: grid;
+  font-size: 1.1rem;
+}
+
+.result-line span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.result-status {
+  flex: 1;
+  margin: 0;
+  color: var(--muted);
+}
+
+.game-result .discord-btn {
+  width: auto;
+}
+
+.lb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.lb-row {
+  display: grid;
+  grid-template-columns: 30px 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+}
+
+.lb-row:nth-child(-n + 3) {
+  background: var(--bg-alt);
+}
+
+.lb-row.me {
+  outline: 1px solid var(--accent);
+}
+
+.lb-row img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.lb-rank {
+  text-align: center;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.lb-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-score {
+  font-family: "Rajdhani", sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.lb-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 16px 0;
+}
+
+@media (max-width: 960px) {
+  .games-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .game-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .game-stage {
+    aspect-ratio: 4 / 5;
+  }
+}
+
+/* Admin: game leaderboards */
+.games-admin {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.games-admin-card .side-head {
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.games-admin-card .button {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+.lb-row.admin-row {
+  grid-template-columns: 30px 1fr auto auto;
 }
 
 /* Footer */

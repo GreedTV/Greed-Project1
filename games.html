@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Games — Sinners</title>
+  <meta name="description" content="Quick mini games with a leaderboard: reaction time, aim and typing speed.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0c0a0d">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sinners">
+  <meta property="og:title" content="Games — Sinners">
+  <meta property="og:description" content="Quick mini games with a leaderboard: reaction time, aim and typing speed.">
+  <meta property="og:url" content="https://sinnerstv.com/games">
+  <meta property="og:image" content="https://sinnerstv.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a href="/" class="logo"><span class="logo-mark" aria-hidden="true">S</span><span>SINNERS<span class="logo-dot">.</span></span></a>
+      <nav>
+        <ul id="nav-links">
+          <li><a href="/">Home</a></li>
+          <li><a href="/watch">Watch</a></li>
+          <li><a href="/content">Content</a></li>
+          <li><a href="/games" aria-current="page">Games</a></li>
+          <li><a href="/gallery">Gallery</a></li>
+          <li><a href="/about">About</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions" id="nav-actions"></div>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container reveal">
+        <h1>Mini <span class="gradient-text">Games</span></h1>
+        <p>Quick games for the wait before a stream. Log in to put your best score on the leaderboard.</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:24px">
+      <div class="container wide">
+        <div class="game-picker" role="tablist" id="game-picker"></div>
+
+        <div class="games-layout">
+          <div class="game-main">
+            <div class="game-stage" id="game-stage" tabindex="0"></div>
+            <div class="game-result" id="game-result" role="status"></div>
+          </div>
+          <aside class="leaderboard side-box">
+            <div class="side-head">
+              <h3>🏆 Leaderboard</h3>
+              <button class="link-btn" id="lb-refresh" type="button">↻</button>
+            </div>
+            <p class="hint" id="lb-hint"></p>
+            <ol class="lb-list" id="lb-list"></ol>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span id="year"></span> Sinners</p>
+      <p><a href="/watch">Watch</a><a href="/content">Content</a><a href="/games">Games</a><a href="/gallery">Gallery</a><a href="/about">About</a></p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="alerts.js"></script>
+  <script src="chat.js"></script>
+  <script src="mini.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

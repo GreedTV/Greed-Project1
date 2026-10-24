@@ -13,6 +13,12 @@
 //   GET  /youtube/channel?q=<@handle | name | channel link | UC id>  -> { id, name }
 //   GET  /youtube/live?channel=<UC id>                               -> { live, videoId, title, name }
 //
+// Mini game leaderboards (Games page)
+//   GET  /games/leaderboard?game=<id>   -> { game, scores: [top 10] }
+//   POST /games/score                  -> { game, score }  (logged in; only your best counts)
+//   GET  /games-admin                  -> every game's top 50   (admin)
+//   POST /games-admin                  -> { action: "reset", game } | { action: "delete", game, userId }   (admin)
+//
 // Discord login
 //   GET  /auth/discord?return=<page url>  -> sends the visitor to Discord, then back to the page with #session=<token>
 //   GET  /me                              -> the logged-in user ("Authorization: Bearer <session token>")
@@ -82,6 +88,15 @@ export default {
       if (path === "/auth/discord") return await discordStart(url, env);
       if (path === "/auth/discord/callback") return await discordCallback(url, env);
       if (path === "/me" && request.method === "GET") return json({ user: await requireUser(request, env) }, 200, cors);
+
+      if (path.startsWith("/games")) {
+        if (!env.DB) return json({ error: "Leaderboard storage isn't set up yet (DB binding missing)." }, 503, cors);
+        await ensureSchema(env);
+        if (path === "/games/leaderboard" && request.method === "GET") return await gameLeaderboard(url, env, cors);
+        if (path === "/games/score" && request.method === "POST") return await gameScore(request, env, cors);
+        if (path === "/games-admin" && request.method === "GET") return await gamesAdminList(request, env, cors);
+        if (path === "/games-admin" && request.method === "POST") return await gamesAdminAction(request, env, cors);
+      }
 
       const room = path.replace(/%3A/gi, ":").match(/^\/chat\/([a-z]+:[a-z0-9_-]+)$/);
       if (room || path === "/chat-admin") {
@@ -506,6 +521,11 @@ async function ensureSchema(env) {
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT, banned INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)"
     ),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS scores (game TEXT NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, avatar TEXT, score REAL NOT NULL, " +
+        "created INTEGER NOT NULL, PRIMARY KEY (game, user_id))"
+    ),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS score_limits (user_id TEXT PRIMARY KEY, at INTEGER NOT NULL)"),
   ]);
   schemaReady = true;
 }
@@ -583,12 +603,91 @@ async function chatAdminAction(request, env, cors) {
         now
       ),
       env.DB.prepare("UPDATE messages SET deleted = 1, deleted_at = ? WHERE user_id = ? AND created > ?").bind(now, String(userId), now - 86400000),
+      env.DB.prepare("DELETE FROM scores WHERE user_id = ?").bind(String(userId)),
     ]);
   } else if (action === "unban") {
     await env.DB.prepare("UPDATE users SET banned = 0 WHERE id = ?").bind(String(userId)).run();
   } else {
     fail("Unknown action", 400);
   }
+  return json({ ok: true }, 200, cors);
+}
+
+// ---------- Mini game leaderboards ----------
+// Scores come from the visitor's browser, so they can't be fully trusted: impossible scores are
+// refused, submissions are rate limited, banned users can't post, and the admin can remove entries.
+
+const GAMES = {
+  reaction: { lowerIsBetter: true, min: 90, max: 3000 }, // average reaction time in ms
+  aim: { lowerIsBetter: false, min: 1, max: 120 }, // targets hit in 30 seconds
+  typing: { lowerIsBetter: false, min: 1, max: 90 }, // words typed in 30 seconds
+};
+const SCORE_GAP_MS = 4000;
+
+function gameOf(id) {
+  const game = GAMES[id];
+  if (!game) fail("Unknown game", 400);
+  return game;
+}
+
+async function topScores(env, id, limit) {
+  const order = gameOf(id).lowerIsBetter ? "ASC" : "DESC";
+  const { results } = await env.DB.prepare(
+    `SELECT user_id AS userId, name, avatar, score, created FROM scores WHERE game = ? ORDER BY score ${order}, created ASC LIMIT ?`
+  )
+    .bind(id, limit)
+    .all();
+  return results;
+}
+
+async function gameLeaderboard(url, env, cors) {
+  const id = url.searchParams.get("game") || "";
+  return json({ game: id, scores: await topScores(env, id, 10) }, 200, cors);
+}
+
+async function gameScore(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { game: id, score: raw } = await readJson(request);
+  const game = gameOf(id);
+  const score = Math.round(Number(raw));
+  if (!Number.isFinite(score) || score < game.min || score > game.max) fail("That score doesn't look possible.", 400);
+
+  const now = Date.now();
+  const last = await env.DB.prepare("SELECT at FROM score_limits WHERE user_id = ?").bind(user.id).first();
+  if (last && now - last.at < SCORE_GAP_MS) fail("Slow down a little before sending another score.", 429);
+
+  const better = game.lowerIsBetter ? "excluded.score < scores.score" : "excluded.score > scores.score";
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO scores (game, user_id, name, avatar, score, created) VALUES (?, ?, ?, ?, ?, ?) " +
+        `ON CONFLICT(game, user_id) DO UPDATE SET name = excluded.name, avatar = excluded.avatar, ` +
+        `created = CASE WHEN ${better} THEN excluded.created ELSE scores.created END, ` +
+        `score = CASE WHEN ${better} THEN excluded.score ELSE scores.score END`
+    ).bind(id, user.id, user.name, user.avatar, score, now),
+    env.DB.prepare("INSERT INTO score_limits (user_id, at) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET at = excluded.at").bind(user.id, now),
+  ]);
+
+  const mine = await env.DB.prepare("SELECT score FROM scores WHERE game = ? AND user_id = ?").bind(id, user.id).first();
+  const ahead = await env.DB.prepare(`SELECT COUNT(*) AS n FROM scores WHERE game = ? AND score ${game.lowerIsBetter ? "<" : ">"} ?`)
+    .bind(id, mine.score)
+    .first();
+  return json({ best: mine.score, rank: ahead.n + 1, newBest: mine.score === score }, 200, cors);
+}
+
+async function gamesAdminList(request, env, cors) {
+  checkAdmin(request, env);
+  const boards = {};
+  for (const id of Object.keys(GAMES)) boards[id] = await topScores(env, id, 50);
+  return json(boards, 200, cors);
+}
+
+async function gamesAdminAction(request, env, cors) {
+  checkAdmin(request, env);
+  const { action, game: id, userId } = await readJson(request);
+  gameOf(id);
+  if (action === "reset") await env.DB.prepare("DELETE FROM scores WHERE game = ?").bind(id).run();
+  else if (action === "delete") await env.DB.prepare("DELETE FROM scores WHERE game = ? AND user_id = ?").bind(id, String(userId)).run();
+  else fail("Unknown action", 400);
   return json({ ok: true }, 200, cors);
 }
 

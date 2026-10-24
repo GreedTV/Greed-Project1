@@ -1,0 +1,406 @@
+// Mini games with a shared leaderboard (stored by the Worker).
+// Anyone can play; logged-in players' best scores go on the leaderboard.
+
+const API = WORKER_URL.replace(/\/$/, "");
+const PENDING_KEY = "sinners-pending-score"; // a score waiting for the player to log in
+const ROUND_SECONDS = 30;
+
+const GAMES = {
+  reaction: {
+    icon: "⚡",
+    title: "Quick Draw",
+    blurb: "Wait for green, then click as fast as you can. Average of 5 rounds.",
+    lowerIsBetter: true,
+    format: (v) => `${Math.round(v)} ms`,
+    start: startReaction,
+  },
+  aim: {
+    icon: "🎯",
+    title: "Target Rush",
+    blurb: `Hit as many targets as you can in ${ROUND_SECONDS} seconds.`,
+    format: (v) => `${v} hits`,
+    start: startAim,
+  },
+  typing: {
+    icon: "⌨️",
+    title: "Chat Typer",
+    blurb: `Type the words as they appear. ${ROUND_SECONDS} seconds, as many as you can.`,
+    format: (v) => `${v} words`,
+    start: startTyping,
+  },
+};
+
+const WORDS = (
+  "stream clutch raid headshot respawn lobby victory squad combo loot sniper reload strafe spawn speedrun " +
+  "boss level quest pixel arcade joystick console replay highlight overtime camera ranked queue frag bonus " +
+  "rocket shield potion dragon castle portal crystal thunder shadow neon turbo glitch laser rookie legend " +
+  "champion jackpot hype friendly chat emote follow subscribe donate moderator channel online offline " +
+  "keyboard mouse headset monitor controller victory defeat dungeon arena ultimate critical stealth zombie"
+).split(" ");
+
+const picker = document.getElementById("game-picker");
+const stage = document.getElementById("game-stage");
+const result = document.getElementById("game-result");
+const lbList = document.getElementById("lb-list");
+const lbHint = document.getElementById("lb-hint");
+
+let currentGame = "reaction";
+let timers = [];
+let cleanupGame = null;
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function later(fn, ms) {
+  const id = setTimeout(fn, ms);
+  timers.push(id);
+  return id;
+}
+
+function stopGame() {
+  timers.forEach((id) => {
+    clearTimeout(id);
+    clearInterval(id);
+  });
+  timers = [];
+  if (cleanupGame) cleanupGame();
+  cleanupGame = null;
+}
+
+// ---------- Picking a game ----------
+
+function renderPicker() {
+  picker.replaceChildren(
+    ...Object.entries(GAMES).map(([id, g]) => {
+      const b = el("button", "game-tab" + (id === currentGame ? " active" : ""));
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", id === currentGame);
+      b.append(el("span", "game-tab-icon", g.icon), el("span", "game-tab-title", g.title));
+      b.addEventListener("click", () => pick(id));
+      return b;
+    })
+  );
+}
+
+function pick(id) {
+  stopGame();
+  currentGame = id;
+  history.replaceState(null, "", `#${id}`);
+  renderPicker();
+  showIntro();
+  loadLeaderboard();
+}
+
+function showIntro() {
+  const g = GAMES[currentGame];
+  result.replaceChildren();
+  stage.className = "game-stage intro";
+  const box = el("div", "game-intro");
+  box.append(el("div", "game-intro-icon", g.icon), el("h2", null, g.title), el("p", null, g.blurb));
+  const start = el("button", "button", "▶ Play");
+  start.type = "button";
+  start.addEventListener("click", (e) => {
+    e.stopPropagation();
+    stage.className = "game-stage";
+    stage.replaceChildren();
+    g.start();
+  });
+  box.append(start);
+  stage.replaceChildren(box);
+}
+
+function timerBar(seconds, onEnd) {
+  const bar = el("div", "game-hud");
+  const time = el("span", "game-time", `${seconds}s`);
+  const score = el("span", "game-score", "0");
+  bar.append(time, score);
+  let left = seconds;
+  const id = setInterval(() => {
+    left--;
+    time.textContent = `${left}s`;
+    if (left <= 5) time.classList.add("low");
+    if (left <= 0) {
+      clearInterval(id);
+      onEnd();
+    }
+  }, 1000);
+  timers.push(id);
+  return { bar, setScore: (v) => (score.textContent = v) };
+}
+
+// ---------- ⚡ Quick Draw ----------
+
+function startReaction() {
+  const times = [];
+  let state = "idle";
+  let shownAt = 0;
+  const panel = el("div", "reaction-panel");
+  const big = el("div", "reaction-big");
+  const small = el("div", "reaction-small");
+  panel.append(big, small);
+  stage.append(panel);
+
+  const set = (cls, a, b) => {
+    panel.className = `reaction-panel ${cls}`;
+    big.textContent = a;
+    small.textContent = b;
+  };
+
+  const nextRound = () => {
+    state = "waiting";
+    set("wait", "Wait for green…", `Round ${times.length + 1} of 5`);
+    later(() => {
+      state = "go";
+      shownAt = performance.now();
+      set("go", "CLICK!", "");
+    }, 1200 + Math.random() * 2300);
+  };
+
+  const onPress = (e) => {
+    e.preventDefault();
+    if (state === "waiting") {
+      stopGame();
+      cleanupGame = attach();
+      state = "early";
+      set("early", "Too soon!", "Click to try this round again");
+    } else if (state === "go") {
+      const ms = performance.now() - shownAt;
+      times.push(ms);
+      if (times.length === 5) {
+        state = "done";
+        const avg = times.reduce((a, b) => a + b, 0) / times.length;
+        set("done", `${Math.round(avg)} ms`, times.map((t) => Math.round(t)).join(" · "));
+        finish(Math.round(avg));
+      } else {
+        state = "between";
+        set("between", `${Math.round(ms)} ms`, "Click for the next round");
+      }
+    } else if (state === "between" || state === "early" || state === "idle") {
+      nextRound();
+    }
+  };
+
+  const attach = () => {
+    panel.addEventListener("pointerdown", onPress);
+    return () => panel.removeEventListener("pointerdown", onPress);
+  };
+  cleanupGame = attach();
+  set("idle", "Click to start", "5 rounds. Don't click before it turns green!");
+}
+
+// ---------- 🎯 Target Rush ----------
+
+function startAim() {
+  let hits = 0;
+  let misses = 0;
+  const field = el("div", "aim-field");
+  const hud = timerBar(ROUND_SECONDS, () => {
+    field.replaceChildren();
+    finish(hits, `${misses} missed click${misses === 1 ? "" : "s"}`);
+  });
+  stage.append(hud.bar, field);
+
+  const spawn = () => {
+    const t = el("button", "aim-target");
+    t.type = "button";
+    t.setAttribute("aria-label", "Target");
+    const size = 46;
+    const w = field.clientWidth - size;
+    const h = field.clientHeight - size;
+    t.style.left = `${Math.random() * Math.max(w, 0)}px`;
+    t.style.top = `${Math.random() * Math.max(h, 0)}px`;
+    t.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      hits++;
+      hud.setScore(hits);
+      t.remove();
+      spawn();
+    });
+    field.append(t);
+  };
+  const onMiss = () => {
+    misses++;
+  };
+  field.addEventListener("pointerdown", onMiss);
+  cleanupGame = () => field.removeEventListener("pointerdown", onMiss);
+  spawn();
+}
+
+// ---------- ⌨️ Chat Typer ----------
+
+function startTyping() {
+  let typed = 0;
+  let started = false;
+  let word = "";
+  let upcoming = [];
+  const randomWord = () => WORDS[Math.floor(Math.random() * WORDS.length)];
+  const wrap = el("div", "typer");
+  const current = el("div", "typer-word");
+  const next = el("div", "typer-next");
+  const input = el("input", "typer-input");
+  input.type = "text";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.setAttribute("autocapitalize", "off");
+  input.placeholder = "Start typing to begin…";
+  input.setAttribute("aria-label", "Type the word");
+  let hud = null;
+
+  const advance = () => {
+    word = upcoming.shift() || randomWord();
+    while (upcoming.length < 3) upcoming.push(randomWord());
+    current.textContent = word;
+    next.textContent = upcoming.join("  ·  ");
+  };
+
+  input.addEventListener("input", () => {
+    if (!started) {
+      started = true;
+      hud = timerBar(ROUND_SECONDS, () => {
+        input.disabled = true;
+        finish(typed);
+      });
+      wrap.before(hud.bar);
+    }
+    const value = input.value.trim().toLowerCase();
+    current.classList.toggle("wrong", !word.startsWith(value));
+    if (value === word) {
+      typed++;
+      hud.setScore(typed);
+      input.value = "";
+      current.classList.remove("wrong");
+      advance();
+    }
+  });
+
+  wrap.append(current, next, input);
+  stage.append(wrap);
+  advance();
+  input.focus();
+}
+
+// ---------- Score and leaderboard ----------
+
+async function finish(score, extra = "") {
+  const g = GAMES[currentGame];
+  const game = currentGame;
+  result.replaceChildren();
+  const line = el("div", "result-line");
+  line.append(el("strong", null, `Your score: ${g.format(score)}`));
+  if (extra) line.append(el("span", null, extra));
+  const again = el("button", "button ghost", "Play again");
+  again.type = "button";
+  again.addEventListener("click", () => {
+    stopGame();
+    stage.className = "game-stage";
+    stage.replaceChildren();
+    result.replaceChildren();
+    g.start();
+  });
+  const status = el("p", "result-status");
+  result.append(line, status, again);
+
+  if (!SinnersAuth.user) {
+    status.textContent = "Log in with Discord to put this score on the leaderboard.";
+    const login = el("button", "button discord-btn", "Log in to save this score");
+    login.type = "button";
+    login.addEventListener("click", () => {
+      try {
+        sessionStorage.setItem(PENDING_KEY, JSON.stringify({ game, score }));
+      } catch (e) {}
+      SinnersAuth.login();
+    });
+    result.insertBefore(login, again);
+    return;
+  }
+  await submit(game, score, status);
+}
+
+async function submit(game, score, status) {
+  status.textContent = "Saving…";
+  try {
+    const res = await fetch(`${API}/games/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
+      body: JSON.stringify({ game, score }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 || res.status === 403) SinnersAuth.expire();
+    if (!res.ok) throw new Error(data.error || "Couldn't save your score.");
+    const g = GAMES[game];
+    status.textContent = data.newBest
+      ? `New personal best! You're #${data.rank} on the leaderboard.`
+      : `Saved. Your best is ${g.format(data.best)} (#${data.rank}).`;
+    if (game === currentGame) loadLeaderboard();
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+
+async function loadLeaderboard() {
+  const g = GAMES[currentGame];
+  const game = currentGame;
+  lbHint.textContent = g.lowerIsBetter ? `${g.title}: lowest time wins.` : `${g.title}: highest score wins.`;
+  lbList.replaceChildren(el("li", "lb-empty", "Loading…"));
+  try {
+    const res = await fetch(`${API}/games/leaderboard?game=${game}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Leaderboard unavailable");
+    if (game !== currentGame) return;
+    const me = SinnersAuth.user && SinnersAuth.user.id;
+    if (!data.scores.length) {
+      lbList.replaceChildren(el("li", "lb-empty", "No scores yet. Be the first!"));
+      return;
+    }
+    lbList.replaceChildren(
+      ...data.scores.map((s, i) => {
+        const li = el("li", "lb-row" + (s.userId === me ? " me" : ""));
+        li.append(el("span", "lb-rank", ["🥇", "🥈", "🥉"][i] || `${i + 1}`));
+        if (s.avatar) {
+          const img = el("img");
+          img.src = s.avatar;
+          img.alt = "";
+          img.loading = "lazy";
+          li.append(img);
+        } else {
+          li.append(el("span", "chat-avatar", s.name.charAt(0).toUpperCase()));
+        }
+        li.append(el("span", "lb-name", s.name), el("span", "lb-score", g.format(s.score)));
+        return li;
+      })
+    );
+  } catch (e) {
+    lbList.replaceChildren(el("li", "lb-empty", "Leaderboard unavailable right now."));
+  }
+}
+
+document.getElementById("lb-refresh").addEventListener("click", loadLeaderboard);
+
+// ---------- Start ----------
+
+const fromHash = location.hash.slice(1);
+if (GAMES[fromHash]) currentGame = fromHash;
+renderPicker();
+showIntro();
+loadLeaderboard();
+
+// Back from Discord login with a score waiting to be saved
+try {
+  const pending = JSON.parse(sessionStorage.getItem(PENDING_KEY) || "null");
+  if (pending && SinnersAuth.user && GAMES[pending.game]) {
+    sessionStorage.removeItem(PENDING_KEY);
+    if (pending.game !== currentGame) pick(pending.game);
+    const status = el("p", "result-status");
+    result.replaceChildren(el("div", "result-line", `Your score: ${GAMES[pending.game].format(pending.score)}`), status);
+    submit(pending.game, pending.score, status);
+  }
+} catch (e) {}
+
+// In-site navigation (nav.js): stop any running game when leaving the page
+SinnersNav.onLeave(stopGame);

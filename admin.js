@@ -42,6 +42,68 @@ async function refresh() {
     loginMsg.textContent = err.message;
   }
   refreshChat();
+  refreshGames();
+}
+
+// ---------- Game leaderboards ----------
+
+const GAME_NAMES = {
+  reaction: ["⚡ Quick Draw", (v) => `${Math.round(v)} ms`],
+  aim: ["🎯 Target Rush", (v) => `${v} hits`],
+  typing: ["⌨️ Chat Typer", (v) => `${v} words`],
+};
+
+async function gameAction(body, confirmText, button) {
+  if (confirmText && !confirm(confirmText)) return;
+  button.disabled = true;
+  try {
+    await api("/games-admin", { method: "POST", body: JSON.stringify(body) });
+    await refreshGames();
+  } catch (err) {
+    button.disabled = false;
+    alert(err.message);
+  }
+}
+
+async function refreshGames() {
+  const box = document.getElementById("games-admin");
+  let boards;
+  try {
+    boards = await api("/games-admin");
+  } catch (err) {
+    box.replaceChildren(el("p", "gallery-empty", `Leaderboards unavailable: ${err.message}`));
+    return;
+  }
+  box.replaceChildren(
+    ...Object.entries(GAME_NAMES).map(([id, [name, format]]) => {
+      const scores = boards[id] || [];
+      const card = el("div", "side-box games-admin-card");
+      const head = el("div", "side-head");
+      head.append(el("h3", null, `${name} (${scores.length})`));
+      const reset = el("button", "button ghost", "Reset leaderboard");
+      reset.type = "button";
+      reset.disabled = !scores.length;
+      reset.addEventListener("click", () => gameAction({ action: "reset", game: id }, `Delete every ${name} score? This can't be undone.`, reset));
+      head.append(reset);
+      card.append(head);
+      if (!scores.length) {
+        card.append(el("p", "lb-empty", "No scores yet."));
+        return card;
+      }
+      const list = el("ol", "lb-list");
+      scores.forEach((s, i) => {
+        const li = el("li", "lb-row admin-row");
+        li.append(el("span", "lb-rank", `${i + 1}`), el("span", "lb-name", s.name), el("span", "lb-score", format(s.score)));
+        const remove = el("button", "link-btn", "Remove");
+        remove.type = "button";
+        remove.addEventListener("click", () => gameAction({ action: "delete", game: id, userId: s.userId }, `Remove ${s.name}'s ${name} score?`, remove));
+        li.append(remove);
+        list.append(li);
+      });
+      card.append(list);
+      return card;
+    })
+  );
 }
 
 // ---------- Chat moderation ----------
