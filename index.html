@@ -37,6 +37,15 @@
           <li><a href="about.html">About</a></li>
         </ul>
       </nav>
+      <form class="header-search" action="watch.html" method="get" role="search" autocomplete="off">
+        <select name="platform" aria-label="Platform">
+          <option value="kick">Kick</option>
+          <option value="twitch">Twitch</option>
+          <option value="youtube">YouTube</option>
+        </select>
+        <input name="add" type="search" placeholder="Watch a streamer — name or link" aria-label="Streamer name or channel link" required>
+        <button type="submit" aria-label="Watch">▶</button>
+      </form>
       <div class="nav-actions" id="nav-actions"></div>
       <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
     </div>

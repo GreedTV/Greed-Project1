@@ -16,7 +16,7 @@ Live at https://sinnerstv.com/
 ## Scripts
 
 - `config.js`: the Worker address (`WORKER_URL`)
-- `theme.js`: Display settings (dark / light / system theme and accent color), loaded in <head> on all pages
+- `theme.js`: Display settings (dark / light theme, preset or custom color-code accent), loaded in <head> on all pages
 - `script.js`: menu and scroll animations (all pages)
 - `auth.js`: Discord login and the menu's Log in / profile button (all pages)
 - `chat.js`: Sinners chat (our own chat room per stream)
