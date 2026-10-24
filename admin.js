@@ -44,6 +44,66 @@ async function refresh() {
   refreshChat();
   refreshGames();
   refreshShop();
+  refreshBot();
+}
+
+// ---------- Discord bot ----------
+
+async function refreshBot() {
+  const box = document.getElementById("bot-admin");
+  let s;
+  try {
+    s = await api("/discord-admin");
+  } catch (err) {
+    box.replaceChildren(el("p", "gallery-empty", `Bot status unavailable: ${err.message}`));
+    return;
+  }
+  const checks = el("ul", "bot-checks");
+  [
+    [s.clientId, "DISCORD_CLIENT_ID (Text)"],
+    [s.publicKey, "DISCORD_PUBLIC_KEY (Text): Developer Portal → General Information → Public Key"],
+    [s.botToken, "DISCORD_BOT_TOKEN (Secret): Developer Portal → Bot → Reset Token"],
+    [s.notifyChannel, s.notifyChannel ? `Notifications go to channel ${s.notifyChannel}` : "Notification channel: type /notify-here in a Discord channel"],
+  ].forEach(([ok, label]) => checks.append(el("li", ok ? "ok" : "missing", `${ok ? "✓" : "✕"} ${label}`)));
+
+  const endpoint = el("p", "hint");
+  endpoint.append("Interactions Endpoint URL (Developer Portal → General Information): ", el("code", null, s.interactionsUrl));
+
+  const actions = el("div", "admin-bar");
+  if (s.inviteUrl) {
+    const invite = el("a", "button ghost", "Add bot to a server");
+    invite.href = s.inviteUrl;
+    invite.target = "_blank";
+    invite.rel = "noopener noreferrer";
+    actions.append(invite);
+  }
+  const register = el("button", "button", "Register commands");
+  register.type = "button";
+  register.disabled = !(s.clientId && s.botToken);
+  const msg = el("p", "form-msg");
+  register.addEventListener("click", async () => {
+    register.disabled = true;
+    msg.className = "form-msg";
+    msg.textContent = "Registering…";
+    try {
+      const r = await api("/discord-admin", { method: "POST", body: JSON.stringify({ action: "register" }) });
+      msg.className = "form-msg ok";
+      msg.textContent = `Done: ${r.commands.map((c) => "/" + c).join(", ")}. They can take a minute to show up in Discord.`;
+    } catch (err) {
+      msg.className = "form-msg error";
+      msg.textContent = err.message;
+    } finally {
+      register.disabled = false;
+    }
+  });
+  actions.append(register);
+  box.replaceChildren(
+    el("p", null, `Commands: ${s.commands.map((c) => "/" + c).join("  ")}`),
+    checks,
+    endpoint,
+    actions,
+    msg
+  );
 }
 
 // ---------- Shop ----------

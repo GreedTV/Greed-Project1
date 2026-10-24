@@ -37,6 +37,11 @@
 //   GET  /bets/state?game=colors|lucky -> the current round, its bets, recent results (and your bet if logged in)
 //   POST /bets/place                   -> { game, choice, amount }   (logged in)
 //
+// Discord bot (slash commands arrive here from Discord; set this as the app's Interactions Endpoint URL)
+//   POST /discord/interactions         -> /points, /top, /shop, /round, /sinners, /notify-here, /notify-off
+//   GET  /discord-admin                -> bot setup status and invite link   (admin)
+//   POST /discord-admin                -> { action: "register" }  (re)creates the slash commands   (admin)
+//
 // Discord login
 //   GET  /auth/discord?return=<page url>  -> sends the visitor to Discord, then back to the page with #session=<token>
 //   GET  /me                              -> the logged-in user ("Authorization: Bearer <session token>")
@@ -53,6 +58,8 @@
 //   3. Settings -> Bindings -> Add -> D1 database -> variable name DB -> select a database.
 //   4. Settings -> Variables and Secrets -> add as Secret: ADMIN_PASSWORD, DISCORD_CLIENT_SECRET, SESSION_SECRET
 //      and as Text: DISCORD_CLIENT_ID.
+//   5. Discord bot (optional): add DISCORD_BOT_TOKEN as Secret and DISCORD_PUBLIC_KEY as Text, then in the
+//      Discord Developer Portal set Interactions Endpoint URL to <this Worker>/discord/interactions.
 
 // Websites allowed to use this Worker. Add your own domain here if you get one.
 const ALLOWED_ORIGINS = [
@@ -79,7 +86,7 @@ const BROWSER_HEADERS = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const origin = request.headers.get("Origin") || "";
     const cors = {
       "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
@@ -99,6 +106,13 @@ export default {
       const kick = path.match(/^\/kick\/([a-zA-Z0-9_-]{2,30})\.m3u8$/);
       if (kick && request.method === "GET") return await kickPlaylist(kick[1].toLowerCase(), cors);
 
+      // Discord calls this directly (no browser, no Origin)
+      if (path === "/discord/interactions" && request.method === "POST") return await discordInteraction(request, env, ctx);
+      if (path === "/discord-admin") {
+        if (request.method === "GET") return await discordAdminStatus(request, env, cors);
+        if (request.method === "POST") return await discordAdminAction(request, env, cors);
+      }
+
       if (path === "/youtube/channel" && request.method === "GET") return await youtubeChannel(url, cors);
       if (path === "/youtube/live" && request.method === "GET") return await youtubeLive(url, cors);
       if (path === "/youtube/search" && request.method === "GET") return await youtubeSearch(url, cors);
@@ -113,7 +127,7 @@ export default {
         await ensureSchema(env);
         if (path === "/shop" && request.method === "GET") return await shopList(env, cors);
         if (path === "/shop/mine" && request.method === "GET") return await shopMine(request, env, cors);
-        if (path === "/shop/buy" && request.method === "POST") return await shopBuy(request, env, cors);
+        if (path === "/shop/buy" && request.method === "POST") return await shopBuy(request, env, cors, ctx);
         if (path === "/shop-admin" && request.method === "GET") return await shopAdminList(request, env, cors);
         if (path === "/shop-admin" && request.method === "POST") return await shopAdminAction(request, env, cors);
       }
@@ -154,7 +168,7 @@ export default {
       if (path.startsWith("/gallery")) {
         if (!env.GALLERY) return json({ error: "Gallery storage isn't set up yet (GALLERY binding missing)." }, 503, cors);
         if (path === "/gallery" && request.method === "GET") return await listGallery(env, cors);
-        if (path === "/gallery/submit" && request.method === "POST") return await submit(request, env, cors);
+        if (path === "/gallery/submit" && request.method === "POST") return await submit(request, env, cors, ctx);
         if (path === "/gallery/pending" && request.method === "GET") return await pending(request, env, cors);
         if (path === "/gallery/moderate" && request.method === "POST") return await moderate(request, env, cors);
       }
@@ -360,7 +374,7 @@ async function listGallery(env, cors) {
   );
 }
 
-async function submit(request, env, cors) {
+async function submit(request, env, cors, ctx) {
   const body = await readJson(request);
 
   // Spam limit per visitor
@@ -384,6 +398,11 @@ async function submit(request, env, cors) {
   queue.push(item);
   await env.GALLERY.put("pending", JSON.stringify(queue));
   await env.GALLERY.put(rateKey, String(count + 1), { expirationTtl: 3700 });
+  later(ctx, discordNotify(env, {
+    title: "🖼️ New gallery link to review",
+    description: `${item.title || "(no title)"}${item.name ? ` · shared by ${item.name}` : ""}\n${item.link || item.url}`,
+    url: `${SITE_URL}/admin`,
+  }));
   return json({ ok: true }, 200, cors);
 }
 
@@ -1082,7 +1101,7 @@ async function shopMine(request, env, cors) {
   return json({ purchases: results }, 200, cors);
 }
 
-async function shopBuy(request, env, cors) {
+async function shopBuy(request, env, cors, ctx) {
   const user = await requireUser(request, env);
   const { id } = await readJson(request);
   const item = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items WHERE id = ?`).bind(Math.floor(Number(id)) || 0).first();
@@ -1106,6 +1125,11 @@ async function shopBuy(request, env, cors) {
     .run();
   const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
   const left = await env.DB.prepare("SELECT stock FROM shop_items WHERE id = ?").bind(item.id).first();
+  later(ctx, discordNotify(env, {
+    title: "🛒 New shop purchase",
+    description: `<@${user.id}> (${user.name}) bought **${item.name}** for ${item.price} 🪙.\nHand it out, then mark it delivered on the admin page.`,
+    url: `${SITE_URL}/admin`,
+  }));
   return json({ ok: true, points: w.points, stock: left ? left.stock : null }, 200, cors);
 }
 
@@ -1182,6 +1206,268 @@ async function shopAdminAction(request, env, cors) {
     return json({ ok: true }, 200, cors);
   }
   fail("Unknown action", 400);
+}
+
+// ---------- Discord bot ----------
+// Slash commands are sent by Discord to /discord/interactions as signed HTTP requests, so the bot needs no
+// server of its own. Players log in to the site with Discord, so a Discord user ID is also their site
+// account: /points works for anyone who has logged in once. Messages the bot posts by itself (shop
+// purchases, gallery links) go to the channel picked with /notify-here, using DISCORD_BOT_TOKEN.
+// To add a command: add it to BOT_COMMANDS, handle it in botCommand(), then press "Register commands"
+// on the admin page.
+
+const SITE_URL = "https://sinnerstv.com";
+const DISCORD_API = "https://discord.com/api/v10";
+const BOT_COLOR = 0xe11d48;
+const MANAGE_SERVER = 0x20;
+const BOARD_CHOICES = [
+  { name: "Most points", value: "points" },
+  { name: "Quick Draw", value: "reaction" },
+  { name: "Target Rush", value: "aim" },
+  { name: "Chat Typer", value: "typing" },
+];
+const BOARD_FORMAT = {
+  reaction: ["⚡ Quick Draw", (v) => `${Math.round(v)} ms`],
+  aim: ["🎯 Target Rush", (v) => `${v} hits`],
+  typing: ["⌨️ Chat Typer", (v) => `${v} words`],
+};
+
+const BOT_COMMANDS = [
+  { name: "points", description: "Show someone's Sinners points", options: [{ type: 6, name: "user", description: "Whose points (you if empty)" }] },
+  { name: "top", description: "Sinners leaderboards", options: [{ type: 3, name: "board", description: "Which leaderboard", choices: BOARD_CHOICES }] },
+  { name: "shop", description: "What's in the Sinners shop" },
+  {
+    name: "round",
+    description: "The current betting round and recent results",
+    options: [{ type: 3, name: "game", description: "Which game", choices: [{ name: "Color Clash", value: "colors" }, { name: "Lucky Number", value: "lucky" }] }],
+  },
+  { name: "sinners", description: "Links to the Sinners website" },
+  { name: "notify-here", description: "Post shop purchases and new gallery links in this channel", default_member_permissions: String(MANAGE_SERVER), dm_permission: false },
+  { name: "notify-off", description: "Stop posting site notifications", default_member_permissions: String(MANAGE_SERVER), dm_permission: false },
+];
+
+function later(ctx, promise) {
+  const safe = promise.catch(() => {});
+  if (ctx && ctx.waitUntil) ctx.waitUntil(safe);
+  return safe;
+}
+
+function hexBytes(hex) {
+  return new Uint8Array((String(hex).match(/../g) || []).map((h) => parseInt(h, 16)));
+}
+
+// Discord signs every request; anything that doesn't verify must get a 401
+async function discordVerified(request, env, body) {
+  const sig = request.headers.get("X-Signature-Ed25519");
+  const time = request.headers.get("X-Signature-Timestamp");
+  if (!sig || !time || !env.DISCORD_PUBLIC_KEY) return false;
+  const data = new TextEncoder().encode(time + body);
+  try {
+    const key = await crypto.subtle.importKey("raw", hexBytes(env.DISCORD_PUBLIC_KEY), { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify("Ed25519", key, hexBytes(sig), data);
+  } catch (e) {
+    // Older Workers runtimes name it differently
+    try {
+      const alg = { name: "NODE-ED25519", namedCurve: "NODE-ED25519" };
+      const key = await crypto.subtle.importKey("raw", hexBytes(env.DISCORD_PUBLIC_KEY), alg, false, ["verify"]);
+      return await crypto.subtle.verify(alg, key, hexBytes(sig), data);
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
+function botReply(content, { embeds, ephemeral } = {}) {
+  return json({ type: 4, data: { content: content || undefined, embeds, flags: ephemeral ? 64 : undefined, allowed_mentions: { parse: [] } } }, 200, {});
+}
+
+function embed(fields) {
+  return { color: BOT_COLOR, footer: { text: "sinnerstv.com" }, ...fields };
+}
+
+async function discordInteraction(request, env, ctx) {
+  const body = await request.text();
+  if (!(await discordVerified(request, env, body))) return text("Bad signature", 401, {});
+  const interaction = JSON.parse(body);
+  if (interaction.type === 1) return json({ type: 1 }, 200, {}); // Discord checking the endpoint
+  if (interaction.type !== 2) return botReply("Unknown interaction.", { ephemeral: true });
+  try {
+    if (!env.DB) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
+    await ensureSchema(env);
+    return await botCommand(interaction, env, new URL(request.url).origin);
+  } catch (err) {
+    return botReply(`Something went wrong: ${err.message}`, { ephemeral: true });
+  }
+}
+
+async function botCommand(interaction, env, origin) {
+  const { name, options = [], resolved = {} } = interaction.data;
+  const opt = (key) => (options.find((o) => o.name === key) || {}).value;
+  const caller = (interaction.member && interaction.member.user) || interaction.user || {};
+
+  if (name === "points") {
+    const id = opt("user") || caller.id;
+    const discordUser = (resolved.users && resolved.users[id]) || caller;
+    const label = discordUser.global_name || discordUser.username || "That player";
+    const w = await env.DB.prepare("SELECT points, earned_day AS day, earned_today AS today FROM wallets WHERE user_id = ?").bind(id).first();
+    if (!w) return botReply(`${label} hasn't played on Sinners yet. Log in at ${SITE_URL}/games to get 100 free points.`, { ephemeral: !opt("user") });
+    const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM wallets WHERE points > ?").bind(w.points).first();
+    const earned = w.day === today() ? w.today : 0;
+    return botReply(null, {
+      embeds: [
+        embed({
+          title: `🪙 ${label}: ${w.points} points`,
+          description: `Rank #${n + 1} on the points list · earned today ${earned} / ${DAILY_CAP}`,
+          url: `${SITE_URL}/games`,
+        }),
+      ],
+    });
+  }
+
+  if (name === "top") {
+    const board = opt("board") || "points";
+    let title, rows;
+    if (board === "points") {
+      title = "🪙 Most points";
+      const { results } = await env.DB.prepare("SELECT name, points FROM wallets ORDER BY points DESC LIMIT 10").all();
+      rows = results.map((r) => [r.name, `${r.points} 🪙`]);
+    } else {
+      const [label, format] = BOARD_FORMAT[board] || BOARD_FORMAT.reaction;
+      title = `🏆 ${label}`;
+      rows = (await topScores(env, BOARD_FORMAT[board] ? board : "reaction", 10)).map((r) => [r.name, format(r.score)]);
+    }
+    const medals = ["🥇", "🥈", "🥉"];
+    const description = rows.length
+      ? rows.map(([who, score], i) => `${medals[i] || `**${i + 1}.**`} ${who} · ${score}`).join("\n")
+      : "Nobody's on this board yet.";
+    return botReply(null, { embeds: [embed({ title, description, url: `${SITE_URL}/games` })] });
+  }
+
+  if (name === "shop") {
+    const { results } = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items ORDER BY price, id LIMIT 25`).all();
+    if (!results.length) return botReply(null, { embeds: [embed({ title: "🛒 Sinners shop", description: "The shop is empty for now. New items are coming soon!", url: `${SITE_URL}/games#shop` })] });
+    return botReply(null, {
+      embeds: [
+        embed({
+          title: "🛒 Sinners shop",
+          description: `Buy with points at ${SITE_URL}/games#shop`,
+          url: `${SITE_URL}/games#shop`,
+          thumbnail: { url: origin + shopItemOut(results[0]).image },
+          fields: results.map((i) => ({
+            name: `${i.name} · ${i.price} 🪙`,
+            value: `${i.description || "​"}${i.stock != null ? `\n${i.stock ? `${i.stock} left` : "Sold out"}` : ""}`.slice(0, 1024),
+          })),
+        }),
+      ],
+    });
+  }
+
+  if (name === "round") {
+    const id = opt("game") || "colors";
+    betGameOf(id);
+    await settleRounds(env, id);
+    const now = Date.now();
+    const round = Math.floor(now / ROUND_MS);
+    const { results: bets } = await env.DB.prepare("SELECT amount FROM bets WHERE game = ? AND round = ?").bind(id, round).all();
+    const pool = await env.DB.prepare("SELECT jackpot FROM pools WHERE game = ?").bind(id).first();
+    const { results: history } = await env.DB.prepare("SELECT outcome FROM rounds WHERE game = ? ORDER BY round DESC LIMIT 8").bind(id).all();
+    const label = id === "colors" ? "🎨 Color Clash" : "🍀 Lucky Number";
+    const dot = { red: "🔴", green: "🟢", blue: "🔵" };
+    const pot = bets.reduce((s, b) => s + b.amount, 0);
+    return botReply(null, {
+      embeds: [
+        embed({
+          title: label,
+          url: `${SITE_URL}/games#${id}`,
+          description:
+            `This round ends <t:${Math.floor(((round + 1) * ROUND_MS) / 1000)}:R> · ${bets.length} bet${bets.length === 1 ? "" : "s"} · pot ${pot} 🪙` +
+            (pool && pool.jackpot ? ` · jackpot +${pool.jackpot}` : "") +
+            `\nLast results: ${history.length ? history.map((h) => dot[h.outcome] || `**${h.outcome}**`).join(" ") : "none yet"}` +
+            `\nPlace your bet at ${SITE_URL}/games#${id}`,
+        }),
+      ],
+    });
+  }
+
+  if (name === "sinners") {
+    return botReply(null, {
+      embeds: [
+        embed({
+          title: "SINNERS.",
+          url: SITE_URL,
+          description: [
+            `▶️ [Watch](${SITE_URL}/watch): Kick, Twitch and YouTube side by side`,
+            `📺 [Content](${SITE_URL}/content): browse YouTube while you wait`,
+            `🎮 [Games](${SITE_URL}/games): earn points, bet them, spend them in the shop`,
+            `🖼️ [Gallery](${SITE_URL}/gallery): community clips and images`,
+          ].join("\n"),
+        }),
+      ],
+    });
+  }
+
+  if (name === "notify-here" || name === "notify-off") {
+    const perms = BigInt((interaction.member && interaction.member.permissions) || 0);
+    if (!interaction.guild_id || !(perms & BigInt(MANAGE_SERVER))) return botReply("Only server managers can do that.", { ephemeral: true });
+    if (!env.GALLERY) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
+    if (name === "notify-off") {
+      await env.GALLERY.delete("discord:notify");
+      return botReply("🔕 Site notifications are off.", { ephemeral: true });
+    }
+    await env.GALLERY.put("discord:notify", interaction.channel_id || (interaction.channel || {}).id);
+    return botReply(
+      env.DISCORD_BOT_TOKEN
+        ? "🔔 Shop purchases and new gallery links will be posted in this channel. (Make sure I'm allowed to send messages here.)"
+        : "🔔 Channel saved, but DISCORD_BOT_TOKEN isn't set in the Worker yet, so I can't post here until it is.",
+      { ephemeral: true }
+    );
+  }
+  return botReply("Unknown command. The admin may need to press Register commands again.", { ephemeral: true });
+}
+
+// A message from the bot in the /notify-here channel (does nothing if that isn't set up)
+async function discordNotify(env, fields) {
+  if (!env.DISCORD_BOT_TOKEN || !env.GALLERY) return;
+  const channel = await env.GALLERY.get("discord:notify");
+  if (!channel) return;
+  await fetch(`${DISCORD_API}/channels/${channel}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ embeds: [embed(fields)], allowed_mentions: { parse: [] } }),
+  });
+}
+
+async function discordAdminStatus(request, env, cors) {
+  checkAdmin(request, env);
+  return json(
+    {
+      clientId: !!env.DISCORD_CLIENT_ID,
+      publicKey: !!env.DISCORD_PUBLIC_KEY,
+      botToken: !!env.DISCORD_BOT_TOKEN,
+      notifyChannel: env.GALLERY ? await env.GALLERY.get("discord:notify") : null,
+      inviteUrl: env.DISCORD_CLIENT_ID
+        ? `https://discord.com/oauth2/authorize?client_id=${env.DISCORD_CLIENT_ID}&scope=bot+applications.commands&permissions=19456`
+        : null,
+      interactionsUrl: `${new URL(request.url).origin}/discord/interactions`,
+      commands: BOT_COMMANDS.map((c) => c.name),
+    },
+    200,
+    cors
+  );
+}
+
+async function discordAdminAction(request, env, cors) {
+  checkAdmin(request, env);
+  const { action } = await readJson(request);
+  if (action !== "register") fail("Unknown action", 400);
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_BOT_TOKEN) fail("Add DISCORD_BOT_TOKEN (and DISCORD_CLIENT_ID) to the Worker first.");
+  const res = await fetch(`${DISCORD_API}/applications/${env.DISCORD_CLIENT_ID}/commands`, {
+    method: "PUT",
+    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(BOT_COMMANDS),
+  });
+  if (!res.ok) fail(`Discord said: ${res.status} ${(await res.text()).slice(0, 200)}`, 502);
+  return json({ ok: true, commands: BOT_COMMANDS.map((c) => c.name) }, 200, cors);
 }
 
 // ---------- Helpers ----------

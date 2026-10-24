@@ -67,7 +67,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 
 ## Cloudflare Worker
 
-`worker/sinners-worker.js` does eight jobs:
+`worker/sinners-worker.js` does nine jobs:
 
 1. **Kick HD:** asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers. Video chunks load straight from Kick's servers. Kick may change or block this at any time.
 2. **Gallery:** stores shared links in Workers KV and handles the review queue.
@@ -77,6 +77,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 6. **Game leaderboards:** saves logged-in players' best scores in D1, refuses impossible scores, and lets the admin remove entries or reset a game.
 7. **Points and betting rounds:** wallets (100 to start, up to 300 earned per day from games), one-minute Color Clash / Lucky Number rounds whose results come from an HMAC of the round number, paid out exactly once.
 8. **Shop:** items in D1 with pictures in KV; buying takes the points and one from the stock in a way that can't oversell.
+9. **Discord bot:** slash commands (`/points`, `/top`, `/shop`, `/round`, `/sinners`, `/notify-here`) arrive as signed requests at `/discord/interactions`, so the bot needs no server of its own. Site logins are Discord accounts, so points and scores match up automatically. With `/notify-here`, shop purchases and new gallery links are posted to a channel. Setup: add `DISCORD_PUBLIC_KEY` (Text) and `DISCORD_BOT_TOKEN` (Secret), set the Interactions Endpoint URL in the Discord Developer Portal, then use the Discord bot card on `admin.html`.
 
 Setup in the Cloudflare dashboard (Workers & Pages → the Worker → Settings):
 
