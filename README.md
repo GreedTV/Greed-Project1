@@ -7,12 +7,15 @@ Live at https://sinnerstv.com/
 
 ## Pages
 
-- `index.html`: home page with a quick "watch a streamer" box
-- `watch.html`: watch streams one at a time with chat, or up to 4 at once
-- `content.html`: watch YouTube videos and playlists while waiting for a stream, with a Kick live alert
-- `gallery.html`: community gallery with Images and Clips sections; visitors share links
-- `about.html`: short, plain about page (to be filled in later)
-- `admin.html`: review shared gallery links (password protected, not in the menu)
+GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site links that way.
+
+
+- `index.html` (`/`): home page with a quick "watch a streamer" box
+- `watch.html` (`/watch`): watch streams one at a time with chat, or up to 4 at once
+- `content.html` (`/content`): watch YouTube videos and playlists while waiting for a stream
+- `gallery.html` (`/gallery`): community gallery with Images and Clips sections; visitors share links
+- `about.html` (`/about`): short, plain about page (to be filled in later)
+- `admin.html` (`/admin`): review shared gallery links (password protected, not in the menu)
 
 ## Scripts
 
@@ -20,12 +23,13 @@ Live at https://sinnerstv.com/
 - `theme.js`: light / dark theme toggle, loaded in <head> on all pages
 - `script.js`: menu and scroll animations (all pages)
 - `auth.js`: Discord login and the menu's Log in / profile button (all pages)
+- `alerts.js`: live alerts (🔔 on the Watch page) for Kick and YouTube streamers; checks every minute and shows a banner on any page
 - `chat.js`: Sinners chat (our own chat room per stream)
 - `mini.js`: floating, draggable mini player (Watch single view and Content page)
 - `nav.js`: in-site navigation that swaps page content without reloading, so the mini player keeps playing across sections; it loads each page's own script (watch.js, content.js, gallery.js, admin.js) as a module
 - `watch.js`: the Watch page (players, multi-view, volume/quality, chat column, adding and fixing streamers)
 - `gallery.js`: loads approved items, the viewer, and the share forms
-- `content.js`: YouTube queue (saved per visitor), community picks from the gallery, Kick live alert
+- `content.js`: YouTube queue (saved per visitor)
 - `admin.js`: approve / reject / remove gallery items
 - `worker/sinners-worker.js`: the Cloudflare Worker
 
@@ -76,4 +80,4 @@ If you use a custom domain, add it to `ALLOWED_ORIGINS` in the Worker.
 
 ## Run it locally
 
-Run `python -m http.server 8080` in this folder and visit http://localhost:8080. (Twitch players need a real web address, so opening the files directly won't work.)
+Serve this folder with any static server and visit http://localhost:8080. To use the short addresses (`/watch`) locally, the server must serve `watch.html` for `/watch` like GitHub Pages does. (Twitch players need a real web address, so opening the files directly won't work.)

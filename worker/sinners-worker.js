@@ -170,16 +170,33 @@ async function youtubeChannel(url, cors) {
 async function youtubeLive(url, cors) {
   const id = url.searchParams.get("channel") || "";
   if (!UC_ID.test(id)) fail("Unknown YouTube channel", 400);
-  const html = await youtubePage(`/channel/${id}/live`);
+  // The channel's Live tab lists its streams; one that's on air carries a LIVE badge.
+  // (The /live page itself is a video page, which YouTube may not show to servers.)
+  const html = await youtubePage(`/channel/${id}/streams`);
   if (!html) fail("Couldn't reach YouTube", 502);
 
-  // While live, the channel's /live page is the stream itself; otherwise it's the channel page
-  const videoId = (html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})"/) || [])[1];
-  const live = !!videoId && /"isLive":true/.test(html) && !/"isUpcoming":true/.test(html);
-  const title = (html.match(/<meta name="title" content="([^"]*)"/) || [])[1];
-  const name = (html.match(/"author":"([^"]*)"/) || html.match(/<meta property="og:title" content="([^"]*)"/) || [])[1];
+  let videoId = null;
+  let title = "";
+  const badge = html.indexOf('"badgeStyle":"THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE"');
+  if (badge !== -1) {
+    const start = html.lastIndexOf('"lockupViewModel":{', badge);
+    const next = html.indexOf('"lockupViewModel":{', badge);
+    const block = html.slice(start, next === -1 ? badge + 20000 : next);
+    videoId = (block.match(/"contentId":"([\w-]{11})"/) || [])[1] || null;
+    title = (block.match(/"lockupMetadataViewModel":\{"title":\{"content":"([^"]*)"/) || [])[1] || "";
+  } else {
+    // Older page layout
+    const old = html.indexOf('"style":"LIVE"');
+    if (old !== -1) {
+      const before = html.slice(Math.max(0, old - 8000), old);
+      const ids = [...before.matchAll(/"videoRenderer":\{"videoId":"([\w-]{11})"/g)];
+      if (ids.length) videoId = ids[ids.length - 1][1];
+    }
+  }
+  const live = !!videoId;
+  const name = (html.match(/<meta property="og:title" content="([^"]*)"/) || [])[1];
   return json(
-    { live, videoId: live ? videoId : null, title: live ? clean(decodeHtml(title || ""), 120) : "", name: clean(decodeHtml(name || ""), 80) },
+    { live, videoId, title: live ? clean(decodeHtml(title), 120) : "", name: clean(decodeHtml(name || ""), 80) },
     200,
     { ...cors, "Cache-Control": "public, max-age=60" }
   );

@@ -1987,71 +1987,21 @@ img {
   overflow: hidden;
 }
 
-.alert-status {
-  margin: 10px 0 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.alert-status:empty {
-  display: none;
-}
-
-.picks {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.pick {
-  display: grid;
-  gap: 6px;
-  padding: 0;
-  text-align: left;
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text);
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.pick img {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  transition: border-color 0.2s;
-}
-
-.pick:hover img {
-  border-color: var(--accent);
-}
-
-.pick span {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 .live-banner {
-  position: sticky;
+  position: fixed;
   top: 84px;
-  z-index: 15;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
   display: flex;
   align-items: center;
   gap: 12px;
   width: min(760px, calc(100% - 32px));
-  margin: 0 auto 8px;
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--live);
   border-radius: 14px;
-  box-shadow: 0 0 28px color-mix(in srgb, var(--live) 35%, transparent);
-  animation: fade-in 0.3s ease both;
+  box-shadow: 0 0 28px color-mix(in srgb, var(--live) 35%, transparent), 0 18px 40px rgba(0, 0, 0, 0.3);
 }
 
 .live-banner[hidden] {
@@ -2201,6 +2151,21 @@ img {
 
 .tile-bar .mini-btn {
   font-size: 0.85rem;
+}
+
+/* Live alert toggle (watch.js) */
+.streamer .actions .alert-toggle.on {
+  color: var(--accent);
+}
+
+.player-offline .alert-toggle {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+
+.player-offline .alert-toggle.on {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 /* Footer */

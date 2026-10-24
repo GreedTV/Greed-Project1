@@ -12,13 +12,20 @@
 
 const SinnersNav = (() => {
   const PAGE_SCRIPTS = {
-    "watch.html": "watch.js",
-    "content.html": "content.js",
-    "gallery.html": "gallery.js",
-    "admin.html": "admin.js",
+    watch: "watch.js",
+    content: "content.js",
+    gallery: "gallery.js",
+    admin: "admin.js",
   };
 
-  const pageName = (url) => new URL(url, location.href).pathname.split("/").pop() || "index.html";
+  // "/watch", "/watch.html" -> "watch"; "/", "/index.html" -> "index"
+  const pageName = (url) => new URL(url, location.href).pathname.split("/").pop().replace(/\.html$/, "") || "index";
+
+  // Old links ending in .html still work; show the short address instead
+  const cleanPath = (pathname) => pathname.replace(/\/index(\.html)?$/, "/").replace(/\.html$/, "");
+  if (cleanPath(location.pathname) !== location.pathname) {
+    history.replaceState(null, "", cleanPath(location.pathname) + location.search + location.hash);
+  }
 
   function makePage(main, url, title) {
     return { name: pageName(url), url, main, title, leave: [], returns: [] };
@@ -87,7 +94,7 @@ const SinnersNav = (() => {
         parked = null;
         returning = true;
       } else {
-        const res = await fetch(target.pathname + target.search, { cache: "no-cache" });
+        const res = await fetch(cleanPath(target.pathname) + target.search, { cache: "no-cache" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const doc = new DOMParser().parseFromString(await res.text(), "text/html");
         const main = doc.querySelector("main");
@@ -114,7 +121,7 @@ const SinnersNav = (() => {
       next.url = target.href;
       current = next;
 
-      if (push) history.pushState(null, "", target.href);
+      if (push) history.pushState(null, "", cleanPath(target.pathname) + target.search + target.hash);
       document.title = next.title;
       if (next.description) document.querySelector('meta[name="description"]')?.setAttribute("content", next.description);
       updateMenu();
@@ -142,7 +149,8 @@ const SinnersNav = (() => {
     const a = e.target.closest("a[href]");
     if (!a || a.target || a.hasAttribute("download")) return;
     const url = new URL(a.href, location.href);
-    if (url.origin !== location.origin || !/(\/|\.html)$/.test(url.pathname)) return;
+    // Only site pages: "/", "/watch", "/watch.html" (not files like /og-image.png)
+    if (url.origin !== location.origin || !/(^|\/)([\w-]+(\.html)?)?$/.test(url.pathname)) return;
     // Same page, only a #section change: let the browser handle it
     if (pageName(url) === current.name && url.search === location.search && url.hash) return;
     e.preventDefault();

@@ -298,11 +298,11 @@ async function setupKickHD(s, box, controls, muted) {
     hls.destroy();
     if (data.response && data.response.code === 404) {
       quality.offline();
-      // Offer something to watch meanwhile, with a live alert already set for this streamer
+      // Offer a live alert, and something to watch meanwhile
       const offline = el("div", "player-offline");
       const wait = el("a", null, "Watch something while you wait →");
-      wait.href = `content.html?alert=${encodeURIComponent(s.channel)}`;
-      offline.append(el("p", null, `${displayName(s)} is offline.`), wait);
+      wait.href = "/content";
+      offline.append(el("p", null, `${displayName(s)} is offline.`), alertButton(s, { long: true }), wait);
       box.replaceChildren(offline);
     } else {
       // Worker or HD feed not working: use Kick's own player instead
@@ -418,8 +418,13 @@ function youtubeOffline(s, box, controls, muted, status) {
   const again = el("button", "button ghost", "Check now");
   again.type = "button";
   const wait = el("a", null, "Watch something while you wait →");
-  wait.href = "content.html";
-  offline.append(el("p", null, `${status.name || displayName(s)} isn't live on YouTube right now.`), again, wait);
+  wait.href = "/content";
+  offline.append(
+    el("p", null, `${status.name || displayName(s)} isn't live on YouTube right now.`),
+    alertButton(s, { long: true }),
+    again,
+    wait
+  );
   box.replaceChildren(offline);
 
   const recheck = async () => {
@@ -574,6 +579,28 @@ function el(tag, className, text) {
   return node;
 }
 
+// 🔔 Live alert toggle (alerts.js) for Kick and YouTube streamers
+function alertButton(s, { long = false } = {}) {
+  const btn = el("button", long ? "button ghost alert-toggle" : "alert-toggle");
+  btn.type = "button";
+  const update = () => {
+    const on = SinnersAlerts.has(s);
+    btn.classList.toggle("on", on);
+    btn.textContent = long ? (on ? "🔔 We'll tell you when they're live" : "🔔 Notify me when they go live") : on ? "🔔" : "🔕";
+    btn.title = on ? "Live alert on. Click to turn off" : "Notify me when they go live";
+    btn.setAttribute("aria-label", btn.title);
+    btn.setAttribute("aria-pressed", on);
+  };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    SinnersAlerts.toggle(s);
+    update();
+    renderList();
+  });
+  update();
+  return btn;
+}
+
 function platformBadge(s) {
   return el("span", `platform ${s.platform}`, s.platform);
 }
@@ -590,6 +617,7 @@ function renderList() {
     li.append(platformBadge(s), el("span", "name", displayName(s)));
 
     const actions = el("span", "actions");
+    if (SinnersAlerts.canAlert(s)) actions.append(alertButton(s));
     const fix = el("button", null, "✎ Fix");
     fix.type = "button";
     fix.title = "Wrong streamer? Replace with a link";
@@ -917,7 +945,7 @@ function cap(word) {
   return word === "youtube" ? "YouTube" : word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-// Coming from the home page: watch.html?platform=kick&add=name-or-link
+// Coming from the home page: /watch?platform=kick&add=name-or-link
 async function addFromUrl() {
   const params = new URLSearchParams(location.search);
   const text = params.get("add");
@@ -944,7 +972,7 @@ render();
 addFromUrl().then((added) => added && render());
 
 // In-site navigation (nav.js): stop players and chat when this page closes,
-// and pick up a new streamer link (watch.html?add=...) when coming back to it
+// and pick up a new streamer link (/watch?add=...) when coming back to it
 SinnersNav.onLeave(() => {
   if (stopChat) stopChat();
   cleanups.splice(0).forEach((stop) => stop());

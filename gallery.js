@@ -1,5 +1,5 @@
 // Community gallery: shows approved image and clip links from the Worker,
-// and lets visitors share new ones (they appear after approval on admin.html).
+// and lets visitors share new ones (they appear after approval on /admin).
 
 const API = WORKER_URL.replace(/\/$/, "");
 const HOST = location.hostname || "localhost";

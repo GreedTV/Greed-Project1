@@ -28,14 +28,14 @@
 <body>
   <header class="site-header">
     <div class="container nav">
-      <a href="index.html" class="logo"><span class="logo-mark" aria-hidden="true">S</span><span>SINNERS<span class="logo-dot">.</span></span></a>
+      <a href="/" class="logo"><span class="logo-mark" aria-hidden="true">S</span><span>SINNERS<span class="logo-dot">.</span></span></a>
       <nav>
         <ul id="nav-links">
-          <li><a href="index.html" aria-current="page">Home</a></li>
-          <li><a href="watch.html">Watch</a></li>
-          <li><a href="content.html">Content</a></li>
-          <li><a href="gallery.html">Gallery</a></li>
-          <li><a href="about.html">About</a></li>
+          <li><a href="/" aria-current="page">Home</a></li>
+          <li><a href="/watch">Watch</a></li>
+          <li><a href="/content">Content</a></li>
+          <li><a href="/gallery">Gallery</a></li>
+          <li><a href="/about">About</a></li>
         </ul>
       </nav>
       <div class="nav-actions" id="nav-actions"></div>
@@ -54,7 +54,7 @@
         <h1>All your streams.<br><span class="gradient-text">One screen.</span></h1>
         <p>Watch Kick, Twitch and YouTube side by side — in HD, with your own volume and quality controls.</p>
 
-        <form class="quick-watch" action="watch.html" method="get" autocomplete="off">
+        <form class="quick-watch" action="/watch" method="get" autocomplete="off">
           <select name="platform" aria-label="Platform">
             <option value="kick">Kick</option>
             <option value="twitch">Twitch</option>
@@ -63,7 +63,7 @@
           <input name="add" type="text" placeholder="Streamer name or channel link" aria-label="Streamer name or channel link" required>
           <button class="button" type="submit">▶ Watch</button>
         </form>
-        <p class="quick-hint">Or <a href="watch.html">open the Watch page</a> and build your own multi-view.</p>
+        <p class="quick-hint">Or <a href="/watch">open the Watch page</a> and build your own multi-view.</p>
       </div>
     </section>
 
@@ -137,7 +137,7 @@
         <div class="cta reveal">
           <h2>Got a clip worth sharing?</h2>
           <p>Post a clip or image link to the community gallery.</p>
-          <a href="gallery.html" class="button">Go to the gallery</a>
+          <a href="/gallery" class="button">Go to the gallery</a>
         </div>
       </div>
     </section>
@@ -146,13 +146,14 @@
   <footer class="site-footer">
     <div class="container">
       <p>&copy; <span id="year"></span> Sinners</p>
-      <p><a href="watch.html">Watch</a><a href="content.html">Content</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
+      <p><a href="/watch">Watch</a><a href="/content">Content</a><a href="/gallery">Gallery</a><a href="/about">About</a></p>
     </div>
   </footer>
 
   <script src="script.js"></script>
   <script src="config.js"></script>
   <script src="auth.js"></script>
+  <script src="alerts.js"></script>
   <script src="chat.js"></script>
   <script src="mini.js"></script>
   <script src="nav.js"></script>
