@@ -142,6 +142,16 @@ function step(delta) {
 document.getElementById("prev").addEventListener("click", () => step(-1));
 document.getElementById("next").addEventListener("click", () => step(1));
 
+// Mini player: keep watching in a small floating window while scrolling the page
+const mini = makeMinimizable(playerBox, {
+  title: () => (queue[current] ? queue[current].title : "Sinners"),
+  onClose: () => player && player.pauseVideo(),
+});
+document.getElementById("mini").addEventListener("click", () => {
+  if (!queue[current]) return;
+  mini.isMini() ? mini.restore() : mini.minimize();
+});
+
 // ---------- Queue ----------
 
 function render() {

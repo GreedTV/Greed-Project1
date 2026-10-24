@@ -594,6 +594,22 @@ function renderStage() {
     open.target = "_blank";
     open.rel = "noopener";
     bar.append(open);
+    if (!multi) {
+      // Single view: shrink into a floating mini player
+      const mini = makeMinimizable(box, {
+        title: () => displayName(s),
+        onClose: () => {
+          selected = [];
+          render();
+        },
+      });
+      const miniBtn = el("button", "mini-btn", "⧉");
+      miniBtn.type = "button";
+      miniBtn.title = "Mini player";
+      miniBtn.setAttribute("aria-label", "Mini player");
+      miniBtn.addEventListener("click", () => (mini.isMini() ? mini.restore() : mini.minimize()));
+      bar.append(miniBtn);
+    }
     if (multi) {
       const close = el("button", null, "✕");
       close.type = "button";

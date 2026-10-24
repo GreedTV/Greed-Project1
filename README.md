@@ -21,6 +21,7 @@ Live at https://sinnerstv.com/
 - `script.js`: menu and scroll animations (all pages)
 - `auth.js`: Discord login and the menu's Log in / profile button (all pages)
 - `chat.js`: Sinners chat (our own chat room per stream)
+- `mini.js`: floating, draggable mini player (Watch single view and Content page)
 - `watch.js`: the Watch page (players, multi-view, volume/quality, chat column, adding and fixing streamers)
 - `gallery.js`: loads approved items, the viewer, and the share forms
 - `content.js`: YouTube queue (saved per visitor), community picks from the gallery, Kick live alert
