@@ -9,6 +9,10 @@ const DEFAULT_STREAMERS = [
   { platform: "youtube", channel: "UCWsDFcIhY2DBi3GB5uykGXA", label: "IShowSpeed" },
 ];
 
+// Address of the Cloudflare Worker from worker/kick-proxy.js, e.g. "https://sinners-kick.name.workers.dev".
+// When set, Kick streams play in HD with volume and quality controls. When empty, Kick's own player is used.
+const KICK_PROXY = "";
+
 const STORAGE_KEY = "sinners-streamers";
 const MAX_MULTI = 4;
 const HOST = location.hostname || "localhost";
@@ -155,9 +159,11 @@ function displayName(s) {
 
 // ---------- Players and controls ----------
 // Twitch and YouTube have player APIs we can control from the page.
-// Kick doesn't, so its own built-in player controls are used instead.
+// Kick doesn't, so Kick streams either play in our own HD player (through KICK_PROXY)
+// or fall back to Kick's embed with its built-in controls.
 
 const players = new Map(); // box id -> player API, for the tiles currently on screen
+const cleanups = []; // stop functions for players that keep loading after their tile is gone
 const scripts = {};
 let youtubeReady;
 
@@ -188,11 +194,112 @@ function makeFrame(src, s) {
   return frame;
 }
 
+function kickEmbed(s, box, controls, muted, note = "Volume and quality: use the Kick player's own controls.") {
+  box.replaceChildren(makeFrame(playerUrl(s, muted), s));
+  controls.replaceChildren(el("span", "controls-note", note));
+}
+
+// Plays the Kick stream's HD playlist (from the Worker) with hls.js
+async function setupKickHD(s, box, controls, muted) {
+  const volume = volumeControl(muted);
+  const quality = qualityControl();
+  const full = el("button", "icon-btn", "⛶");
+  full.type = "button";
+  full.title = "Fullscreen";
+  full.setAttribute("aria-label", "Fullscreen");
+  full.addEventListener("click", () => (document.fullscreenElement ? document.exitFullscreen() : box.requestFullscreen()));
+  controls.append(volume.el, quality.el, full);
+
+  const video = document.createElement("video");
+  video.playsInline = true;
+  video.muted = muted;
+  box.append(video);
+
+  // Browsers block autoplay with sound until the viewer interacts, so offer a play button
+  const play = () =>
+    video.play().catch(() => {
+      if (box.querySelector(".big-play")) return;
+      const btn = el("button", "big-play", "▶ Click to play");
+      btn.type = "button";
+      btn.addEventListener("click", () => {
+        btn.remove();
+        video.play();
+      });
+      box.append(btn);
+    });
+  video.addEventListener("click", () => (video.paused ? video.play() : video.pause()));
+
+  const src = `${KICK_PROXY.replace(/\/$/, "")}/kick/${s.channel}.m3u8`;
+  try {
+    await loadScript("https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js");
+  } catch (e) {
+    return kickEmbed(s, box, controls, muted);
+  }
+  if (!box.isConnected) return;
+
+  if (!window.Hls || !Hls.isSupported()) {
+    // Safari plays HLS by itself, but without quality switching
+    video.src = src;
+    quality.el.remove();
+    const api = mediaApi(video);
+    players.set(box.id, api);
+    volume.attach(api, { readValues: false });
+    volume.apply();
+    play();
+    return;
+  }
+
+  const hls = new Hls({ lowLatencyMode: true });
+  cleanups.push(() => hls.destroy());
+  const api = {
+    ...mediaApi(video),
+    qualities: () => [
+      { name: "Auto", group: "auto" },
+      ...hls.levels
+        .map((l, i) => ({
+          name: `${l.height}p${l.frameRate > 30 ? Math.round(l.frameRate) : ""}`,
+          group: String(i),
+        }))
+        .reverse(), // highest quality first
+    ],
+    getQuality: () => (hls.autoLevelEnabled ? "auto" : String(hls.currentLevel)),
+    setQuality: (q) => (hls.currentLevel = q === "auto" ? -1 : Number(q)),
+  };
+  players.set(box.id, api);
+  volume.attach(api, { readValues: false });
+  volume.apply();
+
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    quality.attach(api);
+    play();
+  });
+  hls.on(Hls.Events.ERROR, (event, data) => {
+    if (!data.fatal) return;
+    hls.destroy();
+    if (data.response && data.response.code === 404) {
+      quality.offline();
+      box.replaceChildren(el("div", "player-offline", `${displayName(s)} is offline.`));
+    } else {
+      // Worker or HD feed not working: use Kick's own player instead
+      kickEmbed(s, box, controls, muted, "HD player unavailable, using Kick's player.");
+    }
+  });
+  hls.loadSource(src);
+  hls.attachMedia(video);
+}
+
+function mediaApi(video) {
+  return {
+    setVolume: (v) => (video.volume = v / 100),
+    setMuted: (m) => (video.muted = m),
+    getVolume: () => Math.round(video.volume * 100),
+    getMuted: () => video.muted,
+  };
+}
+
 async function setupPlayer(s, box, controls, muted) {
   if (s.platform === "kick") {
-    box.append(makeFrame(playerUrl(s, muted), s));
-    controls.append(el("span", "controls-note", "Volume and quality: use the Kick player's own controls."));
-    return;
+    return KICK_PROXY ? setupKickHD(s, box, controls, muted) : kickEmbed(s, box, controls, muted);
   }
 
   const volume = volumeControl(muted);
@@ -469,6 +576,7 @@ function renderStage() {
   }
 
   players.clear();
+  cleanups.splice(0).forEach((stop) => stop());
   playing.forEach((s, i) => {
     const tile = el("div", "tile");
     const box = el("div", "player-box");

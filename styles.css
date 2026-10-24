@@ -818,11 +818,43 @@ img {
   background: #000;
 }
 
-.player-box iframe {
+.player-box {
+  position: relative;
+}
+
+.player-box iframe,
+.player-box video {
   display: block;
   width: 100%;
   height: 100%;
   border: 0;
+  background: #000;
+}
+
+.player-box:fullscreen video {
+  object-fit: contain;
+}
+
+.big-play {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 14px 26px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--glow);
+}
+
+.player-offline {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
 }
 
 .controls {
