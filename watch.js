@@ -153,6 +153,250 @@ function displayName(s) {
   return s.label || s.channel || `YouTube video ${s.video}`;
 }
 
+// ---------- Players and controls ----------
+// Twitch and YouTube have player APIs we can control from the page.
+// Kick doesn't, so its own built-in player controls are used instead.
+
+const players = new Map(); // box id -> player API, for the tiles currently on screen
+const scripts = {};
+let youtubeReady;
+
+function loadScript(src) {
+  return (scripts[src] ||= new Promise((resolve, reject) => {
+    const tag = document.createElement("script");
+    tag.src = src;
+    tag.onload = resolve;
+    tag.onerror = reject;
+    document.head.append(tag);
+  }));
+}
+
+function loadYouTube() {
+  return (youtubeReady ||= new Promise((resolve) => {
+    if (window.YT && YT.Player) return resolve();
+    window.onYouTubeIframeAPIReady = resolve;
+    loadScript("https://www.youtube.com/iframe_api");
+  }));
+}
+
+function makeFrame(src, s) {
+  const frame = document.createElement("iframe");
+  frame.src = src;
+  frame.allow = "autoplay; fullscreen; encrypted-media; picture-in-picture";
+  frame.allowFullscreen = true;
+  frame.title = `${displayName(s)} stream`;
+  return frame;
+}
+
+async function setupPlayer(s, box, controls, muted) {
+  if (s.platform === "kick") {
+    box.append(makeFrame(playerUrl(s, muted), s));
+    controls.append(el("span", "controls-note", "Volume and quality: use the Kick player's own controls."));
+    return;
+  }
+
+  const volume = volumeControl(muted);
+  controls.append(volume.el);
+
+  try {
+    if (s.platform === "twitch") {
+      const quality = qualityControl();
+      controls.append(quality.el);
+      await loadScript("https://player.twitch.tv/js/embed/v1.js");
+      if (!box.isConnected) return;
+
+      const p = new Twitch.Player(box.id, {
+        channel: s.channel,
+        parent: [HOST],
+        width: "100%",
+        height: "100%",
+        muted,
+        autoplay: true,
+      });
+      const api = {
+        setVolume: (v) => p.setVolume(v / 100),
+        setMuted: (m) => p.setMuted(m),
+        getVolume: () => Math.round(p.getVolume() * 100),
+        getMuted: () => p.getMuted(),
+        qualities: () => p.getQualities(),
+        getQuality: () => p.getQuality(),
+        setQuality: (q) => p.setQuality(q),
+      };
+      players.set(box.id, api);
+      volume.attach(api, { readValues: false });
+
+      // Twitch's READY event doesn't always arrive, so also check for the quality list
+      let ready = false;
+      const onReady = () => {
+        if (ready || !box.isConnected) return;
+        ready = true;
+        volume.apply();
+        quality.attach(api);
+      };
+      p.addEventListener(Twitch.Player.READY, onReady);
+      p.addEventListener(Twitch.Player.PLAYING, () => quality.attach(api));
+      p.addEventListener(Twitch.Player.OFFLINE, () => quality.offline());
+      let checks = 0;
+      const poll = setInterval(() => {
+        if (ready || !box.isConnected || checks++ > 40) return clearInterval(poll);
+        if (api.qualities().length > 1) onReady();
+      }, 1500);
+    } else {
+      const quality = el("span", "controls-note", "Quality: ⚙ in the player");
+      controls.append(quality);
+      const frame = makeFrame(`${playerUrl(s, muted)}&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, s);
+      box.append(frame);
+      await loadYouTube();
+      if (!box.isConnected) return;
+
+      new YT.Player(frame, {
+        events: {
+          onReady: (e) => {
+            const p = e.target;
+            const api = {
+              setVolume: (v) => p.setVolume(v),
+              setMuted: (m) => (m ? p.mute() : p.unMute()),
+              getVolume: () => p.getVolume(),
+              getMuted: () => p.isMuted(),
+            };
+            players.set(box.id, api);
+            volume.attach(api);
+          },
+        },
+      });
+    }
+  } catch (err) {
+    controls.replaceChildren(el("span", "controls-note", "Controls couldn't load. Use the player's own controls."));
+  }
+}
+
+function volumeControl(startMuted) {
+  const wrap = el("div", "volume");
+  const btn = el("button", "icon-btn", "🔇");
+  btn.type = "button";
+  btn.disabled = true;
+  const down = el("button", "icon-btn small", "−");
+  down.type = "button";
+  down.disabled = true;
+  down.setAttribute("aria-label", "Volume down");
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = 0;
+  slider.max = 100;
+  slider.step = 5;
+  slider.value = 80;
+  slider.disabled = true;
+  slider.setAttribute("aria-label", "Volume");
+  const up = el("button", "icon-btn small", "+");
+  up.type = "button";
+  up.disabled = true;
+  up.setAttribute("aria-label", "Volume up");
+  const level = el("span", "volume-level", "");
+
+  let api = null;
+  let muted = startMuted;
+
+  const update = () => {
+    const v = Number(slider.value);
+    btn.textContent = muted || v === 0 ? "🔇" : v < 50 ? "🔉" : "🔊";
+    btn.setAttribute("aria-label", muted ? "Unmute" : "Mute");
+    level.textContent = muted ? "Muted" : `${v}%`;
+    slider.style.setProperty("--fill", `${muted ? 0 : v}%`);
+  };
+
+  const setLevel = (v) => {
+    slider.value = Math.max(0, Math.min(100, v));
+    api.setVolume(Number(slider.value));
+    if (muted && slider.value > 0) {
+      muted = false;
+      api.setMuted(false);
+    }
+    update();
+  };
+
+  btn.addEventListener("click", () => {
+    muted = !muted;
+    api.setMuted(muted);
+    if (!muted && Number(slider.value) === 0) setLevel(50);
+    update();
+  });
+  slider.addEventListener("input", () => setLevel(Number(slider.value)));
+  down.addEventListener("click", () => setLevel(Number(slider.value) - 10));
+  up.addEventListener("click", () => setLevel(Number(slider.value) + 10));
+
+  wrap.append(btn, down, slider, up, level);
+  update();
+
+  return {
+    el: wrap,
+    // readValues: take the player's current volume instead of ours
+    attach(playerApi, { readValues = true } = {}) {
+      api = playerApi;
+      if (readValues) {
+        const v = api.getVolume();
+        if (Number.isFinite(v)) slider.value = v;
+        muted = api.getMuted();
+      }
+      [btn, down, slider, up].forEach((c) => (c.disabled = false));
+      update();
+    },
+    // Push our volume to the player (for players that ignore commands until loaded)
+    apply() {
+      api.setVolume(Number(slider.value));
+      api.setMuted(muted);
+    },
+  };
+}
+
+// Twitch only. Shows Auto, the source quality and 360p–1080p.
+function qualityControl() {
+  const select = document.createElement("select");
+  select.className = "quality";
+  select.disabled = true;
+  select.setAttribute("aria-label", "Quality");
+  select.append(new Option("Quality…", ""));
+
+  let api = null;
+  let isOffline = false;
+  let retries = 0;
+  select.addEventListener("change", () => api && api.setQuality(select.value));
+
+  const fill = () => {
+    if (isOffline || !select.isConnected) return;
+    const options = api
+      .qualities()
+      .filter((q) => q.group === "auto" || q.group === "chunked" || /^(360|480|720|1080)p/.test(q.name));
+    // The list can arrive a moment after the player is ready
+    if (!options.length) {
+      if (retries++ < 10) setTimeout(fill, 2000);
+      return;
+    }
+    const current = api.getQuality();
+    select.replaceChildren(
+      ...options.map((q) => {
+        const label =
+          q.group === "auto" ? "Auto" : q.group === "chunked" ? `${q.name.replace(/\s*\(source\)/i, "")} (Source)` : q.name;
+        return new Option(label, q.group, false, q.group === current);
+      })
+    );
+    select.disabled = false;
+  };
+
+  return {
+    el: select,
+    attach(playerApi) {
+      api = playerApi;
+      retries = 0;
+      fill();
+    },
+    offline() {
+      isOffline = true;
+      select.replaceChildren(new Option("Offline", ""));
+      select.disabled = true;
+    },
+  };
+}
+
 // ---------- Rendering ----------
 
 function el(tag, className, text) {
@@ -224,14 +468,12 @@ function renderStage() {
     return;
   }
 
+  players.clear();
   playing.forEach((s, i) => {
     const tile = el("div", "tile");
-    const frame = document.createElement("iframe");
-    // In multi-view only the first stream has sound, so they don't talk over each other
-    frame.src = playerUrl(s, multi && i > 0);
-    frame.allow = "autoplay; fullscreen; encrypted-media; picture-in-picture";
-    frame.allowFullscreen = true;
-    frame.title = `${displayName(s)} stream`;
+    const box = el("div", "player-box");
+    box.id = `player-${i}`;
+    const controls = el("div", "controls");
 
     const bar = el("div", "tile-bar");
     bar.append(platformBadge(s), el("span", null, displayName(s)));
@@ -248,8 +490,10 @@ function renderStage() {
       bar.append(close);
     }
 
-    tile.append(frame, bar);
+    tile.append(box, controls, bar);
     stage.append(tile);
+    // In multi-view only the first stream starts with sound, so they don't talk over each other
+    setupPlayer(s, box, controls, multi && i > 0);
   });
 
   if (!multi) {

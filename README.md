@@ -28,6 +28,7 @@ Live at https://greedtv.github.io/Greed-Project1/
 - **Stats:** change the `data-count` numbers in `index.html`.
 - **Streamers on the Watch page:** visitors can add streamers by name or link with the "Add a streamer" box, but those are saved only in their own browser. To show streamers to everyone, add them to `DEFAULT_STREAMERS` at the top of `watch.js`.
   - YouTube can't look up names, so use a live video link (`youtube.com/watch?v=…`) or a channel link with `/channel/UC…`.
+  - Volume controls work for Twitch and YouTube; the quality picker (Auto, Source, 360p–1080p) works for Twitch. Kick has no player API, so Kick streams use the Kick player's own controls, and YouTube quality is set from the ⚙ in its player.
   - Twitch chat and players only work when the site is opened through a web address (GitHub Pages or a local server), not by double-clicking the file.
 
 ## Run it locally
