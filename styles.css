@@ -290,8 +290,10 @@ img {
   mask-image: linear-gradient(#000 70%, transparent);
 }
 
+/* The page-wide glow (.ambient) colors the hero now, so these stay off */
 .hero::before,
 .hero::after {
+  display: none;
   content: "";
   position: absolute;
   width: 480px;
@@ -363,7 +365,7 @@ img {
 }
 
 .section.alt {
-  /* see-through, so the background light beams show */
+  /* see-through, so the background glow shows */
   background: color-mix(in srgb, var(--bg-alt) 72%, transparent);
 }
 
@@ -3074,9 +3076,9 @@ img {
   }
 }
 
-/* ---------- Background light beams ----------
-   Stage lights in Kick green, Twitch purple and YouTube red shine down from the header on every page,
-   sway slowly and now and then flicker like lightning. The element is added by script.js. */
+/* ---------- Background glow ----------
+   Soft, blurry color clouds in Kick green, Twitch purple and YouTube red drift slowly behind every page.
+   The element is added by script.js. */
 .ambient {
   position: fixed;
   inset: 0;
@@ -3085,81 +3087,38 @@ img {
   overflow: hidden;
 }
 
-.beam {
-  --o: 0.24;
+.glow {
   position: absolute;
-  top: -14vh;
-  width: 36vw;
-  height: 130vh;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--beam) 85%, transparent),
-    color-mix(in srgb, var(--beam) 25%, transparent) 50%,
-    transparent 88%
-  );
-  clip-path: polygon(45% 0, 55% 0, 100% 100%, 0 100%);
-  filter: blur(26px);
-  mix-blend-mode: screen;
-  opacity: var(--o);
-  transform-origin: 50% 0;
-  transform: rotate(var(--tilt));
-  will-change: transform, opacity;
-  animation: beam-sway 16s ease-in-out infinite, beam-flicker 11s linear infinite;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  background: var(--glow-color);
+  filter: blur(120px);
+  opacity: 0.22;
+  will-change: transform;
+  animation: glow-drift 22s ease-in-out infinite;
 }
 
-.beam.kick { --beam: #53fc18; --tilt: -22deg; left: -10vw; }
-.beam.twitch { --beam: #9146ff; --tilt: 0deg; left: 32vw; --o: 0.28; animation-delay: -5s, -4s; }
-.beam.youtube { --beam: #ff0033; --tilt: 22deg; left: 74vw; animation-delay: -10s, -7.5s; }
+.glow.kick { --glow-color: #53fc18; top: -14vmax; left: -12vmax; opacity: 0.16; }
+.glow.twitch { --glow-color: #9146ff; top: 30vh; left: 32vw; animation-delay: -8s; animation-duration: 26s; }
+.glow.youtube { --glow-color: #ff0033; top: -10vmax; right: -14vmax; animation-delay: -15s; animation-duration: 24s; }
 
-/* A faint flash from the top of the page, timed with the flickers */
-.flash {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 70% 55% at 50% 0, rgba(255, 255, 255, 0.5), transparent 70%);
-  opacity: 0;
-  animation: sky-flash 11s linear infinite;
-  animation-delay: -4s;
+@keyframes glow-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(6vw, 5vh) scale(1.08); }
+  66% { transform: translate(-4vw, 8vh) scale(0.95); }
 }
 
-@keyframes beam-sway {
-  0%, 100% { transform: rotate(calc(var(--tilt) - 5deg)); }
-  50% { transform: rotate(calc(var(--tilt) + 5deg)); }
+/* On a light page the colors are softer */
+:root[data-theme="light"] .glow {
+  opacity: 0.12;
 }
-
-@keyframes beam-flicker {
-  0%, 84%, 100% { opacity: var(--o); }
-  86% { opacity: calc(var(--o) * 2.4); }
-  87% { opacity: calc(var(--o) * 0.5); }
-  88.5% { opacity: calc(var(--o) * 2.1); }
-  91% { opacity: var(--o); }
-}
-
-@keyframes sky-flash {
-  0%, 84%, 91%, 100% { opacity: 0; }
-  86% { opacity: 0.1; }
-  87% { opacity: 0; }
-  88.5% { opacity: 0.07; }
-}
-
-/* Coloured light on a light page: no "screen" blending (it would vanish on white), and softer */
-:root[data-theme="light"] .beam {
-  --o: 0.13;
-  mix-blend-mode: normal;
-}
-:root[data-theme="light"] .flash {
-  display: none;
-}
-
-@media (max-width: 700px) {
-  .beam { width: 60vw; }
-  .beam.kick { left: -32vw; }
-  .beam.twitch { left: 20vw; }
-  .beam.youtube { left: 72vw; }
+:root[data-theme="light"] .glow.kick {
+  opacity: 0.1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .beam,
-  .flash {
+  .glow {
     animation: none;
   }
 }
