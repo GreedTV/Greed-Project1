@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Watch — Sinners</title>
+  <meta name="description" content="Watch Twitch, YouTube and Kick streams in one place.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a href="index.html" class="logo">SINNERS<span>.</span></a>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+      <nav>
+        <ul id="nav-links">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="watch.html" aria-current="page">Watch</a></li>
+          <li><a href="schedule.html">Schedule</a></li>
+          <li><a href="gallery.html">Gallery</a></li>
+          <li><a href="about.html">About</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container reveal">
+        <h1>Watch <span class="gradient-text">Streams</span></h1>
+        <p>Twitch, YouTube and Kick in one place. Pick a streamer, or watch up to 4 at once.</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:24px">
+      <div class="container watch-layout">
+        <div class="watch-main">
+          <div class="watch-toolbar">
+            <h2 id="now-title">Pick a streamer</h2>
+            <label class="switch">
+              <input type="checkbox" id="multi-toggle">
+              <span class="switch-track"></span>
+              Multi-view
+            </label>
+          </div>
+          <div id="stage" class="stage"></div>
+        </div>
+
+        <aside class="watch-side">
+          <form id="add-form" class="add-form" autocomplete="off">
+            <h3 id="form-title">Add a streamer</h3>
+            <div class="add-row">
+              <select id="add-platform" aria-label="Platform">
+                <option value="twitch">Twitch</option>
+                <option value="youtube">YouTube</option>
+                <option value="kick">Kick</option>
+              </select>
+              <input id="add-input" type="text" placeholder="Name or paste a link" aria-label="Streamer name or link">
+            </div>
+            <p class="hint">Type a name and pick the platform. Wrong streamer showing up? Paste their channel link instead.</p>
+            <div class="add-actions">
+              <button class="button" type="submit" id="add-submit">Add</button>
+              <button class="button ghost" type="button" id="add-cancel" hidden>Cancel</button>
+            </div>
+            <p class="form-msg" id="add-msg" role="status"></p>
+          </form>
+
+          <ul id="streamer-list" class="streamer-list"></ul>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span id="year"></span> Sinners</p>
+      <p><a href="watch.html">Watch</a><a href="schedule.html">Schedule</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+  <script src="watch.js"></script>
+</body>
+</html>
