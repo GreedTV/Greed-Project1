@@ -23,12 +23,12 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
   <link rel="stylesheet" href="styles.css">
+  <script src="theme.js"></script>
 </head>
 <body>
   <header class="site-header">
     <div class="container nav">
-      <a href="index.html" class="logo">SINNERS<span>.</span></a>
-      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+      <a href="index.html" class="logo"><span class="logo-mark" aria-hidden="true">S</span><span>SINNERS<span class="logo-dot">.</span></span></a>
       <nav>
         <ul id="nav-links">
           <li><a href="index.html">Home</a></li>
@@ -37,6 +37,8 @@
           <li><a href="about.html" aria-current="page">About</a></li>
         </ul>
       </nav>
+      <div class="nav-actions" id="nav-actions"></div>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
     </div>
   </header>
 

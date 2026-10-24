@@ -66,13 +66,13 @@ const SinnersAuth = (() => {
   };
 })();
 
-// Menu button
+// Header button
 (() => {
-  const nav = document.getElementById("nav-links");
-  if (!nav) return;
-  const li = document.createElement("li");
+  const actions = document.getElementById("nav-actions");
+  if (!actions) return;
+  const li = document.createElement("div");
   li.className = "nav-auth";
-  nav.append(li);
+  actions.append(li);
 
   const render = (user) => {
     li.replaceChildren();
