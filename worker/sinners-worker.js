@@ -9,10 +9,22 @@
 //   GET  /gallery/pending       -> pending items             (admin: "Authorization: Bearer <ADMIN_PASSWORD>")
 //   POST /gallery/moderate      -> { id, action: "approve" | "reject" | "delete" }   (admin)
 //
+// Discord login
+//   GET  /auth/discord?return=<page url>  -> sends the visitor to Discord, then back to the page with #session=<token>
+//   GET  /me                              -> the logged-in user ("Authorization: Bearer <session token>")
+//
+// Sinners chat (one room per stream, e.g. "kick:lexor2k")
+//   GET  /chat/<room>?after=<id>  -> { messages, deleted }  newest 50, or only messages after <id>
+//   POST /chat/<room>             -> { text }  (logged in)
+//   GET  /chat-admin              -> recent messages and banned users   (admin)
+//   POST /chat-admin              -> { action: "delete", id } | { action: "ban" | "unban", userId }   (admin)
+//
 // Setup (Cloudflare dashboard -> Workers & Pages -> this Worker):
 //   1. Edit code -> paste this file -> Deploy.
-//   2. Bindings -> Add -> KV namespace -> variable name GALLERY -> create/select a namespace.
-//   3. Settings -> Variables and Secrets -> Add -> type Secret -> name ADMIN_PASSWORD -> your password.
+//   2. Settings -> Bindings -> Add -> KV namespace -> variable name GALLERY -> select a namespace.
+//   3. Settings -> Bindings -> Add -> D1 database -> variable name DB -> select a database.
+//   4. Settings -> Variables and Secrets -> add as Secret: ADMIN_PASSWORD, DISCORD_CLIENT_SECRET, SESSION_SECRET
+//      and as Text: DISCORD_CLIENT_ID.
 
 // Websites allowed to use this Worker. Add your own domain here if you get one.
 const ALLOWED_ORIGINS = [
@@ -24,6 +36,11 @@ const ALLOWED_ORIGINS = [
 const SUBMITS_PER_HOUR = 5; // per visitor
 const MAX_PENDING = 100;
 const MAX_APPROVED = 500;
+
+const SESSION_DAYS = 30;
+const CHAT_MAX_LENGTH = 300;
+const CHAT_MIN_GAP_MS = 1500; // per user, between messages
+const ROOM_PATTERN = /^(kick|twitch|youtube):[a-z0-9_-]{2,40}$/;
 
 const BROWSER_HEADERS = {
   "User-Agent":
@@ -46,10 +63,26 @@ export default {
     // Requests from other websites are refused, so this can't be used by anyone else
     if (origin && !ALLOWED_ORIGINS.includes(origin)) return text("Origin not allowed", 403, cors);
 
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
     try {
       const kick = path.match(/^\/kick\/([a-zA-Z0-9_-]{2,30})\.m3u8$/);
       if (kick && request.method === "GET") return await kickPlaylist(kick[1].toLowerCase(), cors);
+
+      // Login pages are opened by the browser directly, so they answer with redirects
+      if (path === "/auth/discord") return await discordStart(url, env);
+      if (path === "/auth/discord/callback") return await discordCallback(url, env);
+      if (path === "/me" && request.method === "GET") return json({ user: await requireUser(request, env) }, 200, cors);
+
+      const room = path.replace(/%3A/gi, ":").match(/^\/chat\/([a-z]+:[a-z0-9_-]+)$/);
+      if (room || path === "/chat-admin") {
+        if (!env.DB) return json({ error: "Chat storage isn't set up yet (DB binding missing)." }, 503, cors);
+        await ensureSchema(env);
+        if (room && request.method === "GET") return await chatList(room[1], url, env, cors);
+        if (room && request.method === "POST") return await chatPost(room[1], request, env, cors);
+        if (path === "/chat-admin" && request.method === "GET") return await chatAdminList(request, env, cors);
+        if (path === "/chat-admin" && request.method === "POST") return await chatAdminAction(request, env, cors);
+      }
 
       if (path.startsWith("/gallery")) {
         if (!env.GALLERY) return json({ error: "Gallery storage isn't set up yet (GALLERY binding missing)." }, 503, cors);
@@ -230,6 +263,229 @@ async function clipItem(link) {
   }
 
   fail("Clips must be from Kick, Twitch or YouTube.");
+}
+
+// ---------- Discord login ----------
+// After Discord confirms who the visitor is, the Worker signs a session token and sends the
+// visitor back to the page they came from with it in the URL fragment (#session=...).
+
+async function discordStart(url, env) {
+  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || !env.SESSION_SECRET) {
+    return text("Discord login isn't set up yet.", 503, {});
+  }
+  const back = url.searchParams.get("return") || "";
+  if (!ALLOWED_ORIGINS.some((o) => back.startsWith(`${o}/`))) return text("Bad return address", 400, {});
+
+  const state = await signToken(env, { r: back, exp: Date.now() + 10 * 60000 });
+  const discord = new URL("https://discord.com/oauth2/authorize");
+  discord.search = new URLSearchParams({
+    client_id: env.DISCORD_CLIENT_ID,
+    response_type: "code",
+    redirect_uri: `${url.origin}/auth/discord/callback`,
+    scope: "identify",
+    state,
+    prompt: "none",
+  });
+  return Response.redirect(discord.href, 302);
+}
+
+async function discordCallback(url, env) {
+  const state = await verifyToken(env, url.searchParams.get("state"));
+  if (!state) return text("Login expired. Go back and try again.", 400, {});
+  const back = (hash) => Response.redirect(`${state.r}#${hash}`, 302);
+
+  const code = url.searchParams.get("code");
+  if (!code) return back("login=cancelled");
+
+  const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.DISCORD_CLIENT_ID,
+      client_secret: env.DISCORD_CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: `${url.origin}/auth/discord/callback`,
+    }),
+  });
+  if (!tokenRes.ok) return back("login=failed");
+  const { access_token } = await tokenRes.json();
+
+  const meRes = await fetch("https://discord.com/api/users/@me", { headers: { Authorization: `Bearer ${access_token}` } });
+  if (!meRes.ok) return back("login=failed");
+  const me = await meRes.json();
+
+  const user = {
+    id: `discord:${me.id}`,
+    name: clean(me.global_name || me.username, 32) || "Discord user",
+    avatar: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=64` : "",
+  };
+
+  if (env.DB) {
+    await ensureSchema(env);
+    const existing = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(user.id).first();
+    if (existing && existing.banned) return back("login=banned");
+    await env.DB.prepare(
+      "INSERT INTO users (id, name, avatar, banned, created) VALUES (?, ?, ?, 0, ?) " +
+        "ON CONFLICT(id) DO UPDATE SET name = excluded.name, avatar = excluded.avatar"
+    )
+      .bind(user.id, user.name, user.avatar, Date.now())
+      .run();
+  }
+
+  const session = await signToken(env, { ...user, exp: Date.now() + SESSION_DAYS * 86400000 });
+  return back(`session=${session}`);
+}
+
+// The logged-in user from "Authorization: Bearer <session>", or a 401 error
+async function requireUser(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  const user = auth.startsWith("Bearer ") && env.SESSION_SECRET ? await verifyToken(env, auth.slice(7)) : null;
+  if (!user || !user.id) fail("Please log in.", 401);
+  if (env.DB) {
+    await ensureSchema(env);
+    const row = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(user.id).first();
+    if (row && row.banned) fail("Your account has been banned from chat.", 403);
+  }
+  return { id: user.id, name: user.name, avatar: user.avatar };
+}
+
+// Signed tokens: base64url(JSON) + "." + base64url(HMAC-SHA256)
+async function hmacKey(env) {
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(env.SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+    "verify",
+  ]);
+}
+
+async function signToken(env, data) {
+  const body = b64url(new TextEncoder().encode(JSON.stringify(data)));
+  const sig = await crypto.subtle.sign("HMAC", await hmacKey(env), new TextEncoder().encode(body));
+  return `${body}.${b64url(new Uint8Array(sig))}`;
+}
+
+async function verifyToken(env, token) {
+  const [body, sig] = String(token || "").split(".");
+  if (!body || !sig) return null;
+  try {
+    const ok = await crypto.subtle.verify("HMAC", await hmacKey(env), fromB64url(sig), new TextEncoder().encode(body));
+    if (!ok) return null;
+    const data = JSON.parse(new TextDecoder().decode(fromB64url(body)));
+    return data.exp > Date.now() ? data : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function b64url(bytes) {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromB64url(str) {
+  const bin = atob(str.replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+// ---------- Sinners chat ----------
+// Messages live in D1. Viewers poll for new messages every few seconds.
+
+let schemaReady = false;
+async function ensureSchema(env) {
+  if (schemaReady) return;
+  await env.DB.batch([
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, user_id TEXT NOT NULL, " +
+        "name TEXT NOT NULL, avatar TEXT, text TEXT NOT NULL, created INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, deleted_at INTEGER)"
+    ),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS messages_room ON messages (room, id)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS messages_user ON messages (user_id, id)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT, banned INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)"
+    ),
+  ]);
+  schemaReady = true;
+}
+
+function checkRoom(room) {
+  if (!ROOM_PATTERN.test(room)) fail("Unknown chat room", 400);
+}
+
+const MESSAGE_COLUMNS = "id, user_id AS userId, name, avatar, text, created";
+
+async function chatList(room, url, env, cors) {
+  checkRoom(room);
+  const after = Number(url.searchParams.get("after")) || 0;
+  const { results: messages } = after
+    ? await env.DB.prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE room = ? AND id > ? AND deleted = 0 ORDER BY id LIMIT 100`)
+        .bind(room, after)
+        .all()
+    : await env.DB.prepare(
+        `SELECT * FROM (SELECT ${MESSAGE_COLUMNS} FROM messages WHERE room = ? AND deleted = 0 ORDER BY id DESC LIMIT 50) ORDER BY id`
+      )
+        .bind(room)
+        .all();
+  const { results: removed } = await env.DB.prepare("SELECT id FROM messages WHERE room = ? AND deleted = 1 AND deleted_at > ?")
+    .bind(room, Date.now() - 10 * 60000)
+    .all();
+  return json({ messages, deleted: removed.map((r) => r.id) }, 200, cors);
+}
+
+async function chatPost(room, request, env, cors) {
+  checkRoom(room);
+  const user = await requireUser(request, env);
+  const { text: raw } = await readJson(request);
+  // Only control characters are removed: the site always shows chat as plain text, so "<3" stays "<3"
+  const message = String(raw || "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .slice(0, CHAT_MAX_LENGTH);
+  if (!message) fail("Type a message first.");
+
+  const last = await env.DB.prepare("SELECT created FROM messages WHERE user_id = ? ORDER BY id DESC LIMIT 1").bind(user.id).first();
+  if (last && Date.now() - last.created < CHAT_MIN_GAP_MS) fail("You're sending messages too fast.", 429);
+
+  const created = Date.now();
+  const result = await env.DB.prepare("INSERT INTO messages (room, user_id, name, avatar, text, created) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(room, user.id, user.name, user.avatar, message, created)
+    .run();
+  return json(
+    { message: { id: result.meta.last_row_id, userId: user.id, name: user.name, avatar: user.avatar, text: message, created } },
+    200,
+    cors
+  );
+}
+
+async function chatAdminList(request, env, cors) {
+  checkAdmin(request, env);
+  const { results: messages } = await env.DB.prepare(
+    `SELECT ${MESSAGE_COLUMNS}, room FROM messages WHERE deleted = 0 ORDER BY id DESC LIMIT 100`
+  ).all();
+  const { results: banned } = await env.DB.prepare("SELECT id, name, avatar FROM users WHERE banned = 1 ORDER BY name").all();
+  return json({ messages, banned }, 200, cors);
+}
+
+async function chatAdminAction(request, env, cors) {
+  checkAdmin(request, env);
+  const { action, id, userId } = await readJson(request);
+  const now = Date.now();
+  if (action === "delete") {
+    await env.DB.prepare("UPDATE messages SET deleted = 1, deleted_at = ? WHERE id = ?").bind(now, Number(id)).run();
+  } else if (action === "ban") {
+    // Ban and remove their messages from the last day
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO users (id, name, banned, created) VALUES (?, ?, 1, ?) ON CONFLICT(id) DO UPDATE SET banned = 1").bind(
+        String(userId),
+        "Banned user",
+        now
+      ),
+      env.DB.prepare("UPDATE messages SET deleted = 1, deleted_at = ? WHERE user_id = ? AND created > ?").bind(now, String(userId), now - 86400000),
+    ]);
+  } else if (action === "unban") {
+    await env.DB.prepare("UPDATE users SET banned = 0 WHERE id = ?").bind(String(userId)).run();
+  } else {
+    fail("Unknown action", 400);
+  }
+  return json({ ok: true }, 200, cors);
 }
 
 // ---------- Helpers ----------

@@ -38,9 +38,81 @@ async function refresh() {
     renderList("pending", data.pending || []);
     renderList("approved", data.approved || []);
   } catch (err) {
-    if (err.status === 401) logout("Wrong password.");
-    else loginMsg.textContent = err.message;
+    if (err.status === 401) return logout("Wrong password.");
+    loginMsg.textContent = err.message;
   }
+  refreshChat();
+}
+
+// ---------- Chat moderation ----------
+
+async function refreshChat() {
+  const chatList = document.getElementById("chat-list");
+  const bannedList = document.getElementById("banned-list");
+  try {
+    const data = await api("/chat-admin");
+    renderChat(chatList, data.messages || []);
+    renderBanned(bannedList, data.banned || []);
+  } catch (err) {
+    chatList.replaceChildren(el("p", "gallery-empty", `Chat moderation unavailable: ${err.message}`));
+    bannedList.replaceChildren();
+  }
+}
+
+function chatAction(body, confirmText) {
+  return async (e) => {
+    if (confirmText && !confirm(confirmText)) return;
+    e.target.disabled = true;
+    try {
+      await api("/chat-admin", { method: "POST", body: JSON.stringify(body) });
+      await refreshChat();
+    } catch (err) {
+      e.target.disabled = false;
+      alert(err.message);
+    }
+  };
+}
+
+function renderChat(container, messages) {
+  if (!messages.length) return container.replaceChildren(el("p", "gallery-empty", "No chat messages yet."));
+  container.replaceChildren(
+    ...messages.map((m) => {
+      const row = el("div", "review-item chat-review");
+      const info = el("div", "review-info");
+      info.append(el("strong", null, m.name));
+      info.append(el("span", null, m.text));
+      info.append(el("small", null, `${m.room} · ${new Date(m.created).toLocaleString()}`));
+      const actions = el("div", "review-actions");
+      const del = el("button", "button ghost", "Delete");
+      del.type = "button";
+      del.addEventListener("click", chatAction({ action: "delete", id: m.id }));
+      const ban = el("button", "button ghost", "Ban user");
+      ban.type = "button";
+      ban.addEventListener("click", chatAction({ action: "ban", userId: m.userId }, `Ban ${m.name}? Their messages from the last day will be removed.`));
+      actions.append(del, ban);
+      row.append(info, actions);
+      return row;
+    })
+  );
+}
+
+function renderBanned(container, users) {
+  document.getElementById("banned-count").textContent = users.length ? `(${users.length})` : "";
+  if (!users.length) return container.replaceChildren(el("p", "gallery-empty", "Nobody is banned."));
+  container.replaceChildren(
+    ...users.map((u) => {
+      const row = el("div", "review-item chat-review");
+      const info = el("div", "review-info");
+      info.append(el("strong", null, u.name), el("small", null, u.id));
+      const unban = el("button", "button ghost", "Unban");
+      unban.type = "button";
+      unban.addEventListener("click", chatAction({ action: "unban", userId: u.id }));
+      const actions = el("div", "review-actions");
+      actions.append(unban);
+      row.append(info, actions);
+      return row;
+    })
+  );
 }
 
 function preview(item) {

@@ -17,7 +17,9 @@ Live at https://greedtv.github.io/Greed-Project1/
 
 - `config.js`: the Worker address (`WORKER_URL`)
 - `script.js`: menu and scroll animations (all pages)
-- `watch.js`: the Watch page (players, multi-view, volume/quality, adding and fixing streamers)
+- `auth.js`: Discord login and the menu's Log in / profile button (all pages)
+- `chat.js`: Sinners chat (our own chat room per stream)
+- `watch.js`: the Watch page (players, multi-view, volume/quality, chat column, adding and fixing streamers)
 - `gallery.js`: loads approved items, the viewer, and the share forms
 - `admin.js`: approve / reject / remove gallery items
 - `worker/sinners-worker.js`: the Cloudflare Worker
@@ -29,6 +31,13 @@ Live at https://greedtv.github.io/Greed-Project1/
 - Volume works for all platforms; the quality menu works for Twitch and Kick. YouTube quality is set from the ⚙ in its player.
 - Kick streams play in HD through the Worker (see below). If it's unavailable, Kick's own player is used.
 
+## Chat and login
+
+- **Sinners chat:** a chat room for each stream on our site. Anyone can read; logging in with Discord lets you write. Messages are stored in Cloudflare D1, and the page checks for new ones every 3 seconds (paused in background tabs).
+- **Platform chat:** a second tab shows the streamer's real chat. Twitch and YouTube chat are embedded (viewers log in with their Twitch/YouTube account there). Kick chat can't be embedded, so it opens in a small Kick window.
+- **Moderation:** `admin.html` lists recent messages with Delete and Ban user. Banning removes that user's messages from the last day and blocks them from chatting and logging in.
+- Limits: 300 characters per message, one message per 1.5 seconds per user.
+
 ## Gallery
 
 - Anyone can share an image link or a Kick / Twitch / YouTube clip link.
@@ -37,16 +46,25 @@ Live at https://greedtv.github.io/Greed-Project1/
 
 ## Cloudflare Worker
 
-`worker/sinners-worker.js` does two jobs:
+`worker/sinners-worker.js` does four jobs:
 
 1. **Kick HD:** asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers. Video chunks load straight from Kick's servers. Kick may change or block this at any time.
 2. **Gallery:** stores shared links in Workers KV and handles the review queue.
+3. **Discord login:** sends visitors to Discord and back with a signed session token.
+4. **Sinners chat:** stores messages in D1, with admin delete and ban.
 
-Setup in the Cloudflare dashboard (Workers & Pages → the Worker):
+Setup in the Cloudflare dashboard (Workers & Pages → the Worker → Settings):
 
 1. **Edit code** → paste `worker/sinners-worker.js` → **Deploy**.
-2. **Bindings** → **Add binding** → **KV namespace** → variable name `GALLERY` → create a namespace (e.g. `sinners-gallery`).
-3. **Settings** → **Variables and Secrets** → **Add** → type **Secret**, name `ADMIN_PASSWORD`, value: your admin password.
+2. **Bindings** → **Add binding** → **KV namespace** → variable name `GALLERY` → namespace `sinners-gallery`.
+3. **Bindings** → **Add binding** → **D1 database** → variable name `DB` → database `sinners-chat` (create it under Storage & databases → D1). Tables are created automatically.
+4. **Runtime variables and secrets** → **Add variable**:
+   - `ADMIN_PASSWORD` (secret): your admin password
+   - `DISCORD_CLIENT_ID` (text) and `DISCORD_CLIENT_SECRET` (secret): from your Discord application
+   - `SESSION_SECRET` (secret): a long random string used to sign logins
+
+Discord application (https://discord.com/developers/applications → your app → OAuth2): add the redirect
+`https://<your worker>.workers.dev/auth/discord/callback`.
 
 If you use a custom domain, add it to `ALLOWED_ORIGINS` in the Worker.
 

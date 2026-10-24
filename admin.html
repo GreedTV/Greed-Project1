@@ -29,8 +29,8 @@
   <main>
     <section class="page-hero">
       <div class="container">
-        <h1>Gallery <span class="gradient-text">Review</span></h1>
-        <p>Approve or reject shared links. Only approved ones show on the gallery.</p>
+        <h1>Admin <span class="gradient-text">Review</span></h1>
+        <p>Approve shared gallery links and keep Sinners chat clean.</p>
       </div>
     </section>
 
@@ -54,6 +54,10 @@
           <div class="review-list" id="pending-list"></div>
           <h2>On the gallery <span class="count" id="approved-count"></span></h2>
           <div class="review-list" id="approved-list"></div>
+          <h2>Recent chat messages</h2>
+          <div class="review-list" id="chat-list"></div>
+          <h2>Banned from chat <span class="count" id="banned-count"></span></h2>
+          <div class="review-list" id="banned-list"></div>
         </div>
       </div>
     </section>
@@ -68,6 +72,7 @@
 
   <script src="script.js"></script>
   <script src="config.js"></script>
+  <script src="auth.js"></script>
   <script src="admin.js"></script>
 </body>
 </html>

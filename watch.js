@@ -16,6 +16,7 @@ const stage = document.getElementById("stage");
 const list = document.getElementById("streamer-list");
 const title = document.getElementById("now-title");
 const multiToggle = document.getElementById("multi-toggle");
+const chatToggle = document.getElementById("chat-toggle");
 const form = document.getElementById("add-form");
 const formTitle = document.getElementById("form-title");
 const platformSelect = document.getElementById("add-platform");
@@ -557,8 +558,9 @@ function renderStage() {
   const multi = multiToggle.checked;
   const playing = selected.map((id) => streamers.find((s) => s.id === id)).filter(Boolean);
 
+  if (stopChat) stopChat();
   stage.replaceChildren();
-  stage.className = "stage" + (multi ? ` multi count-${playing.length}` : "");
+  stage.className = "stage" + (chatHidden ? " no-chat" : "");
 
   if (!playing.length) {
     stage.append(
@@ -572,6 +574,8 @@ function renderStage() {
 
   players.clear();
   cleanups.splice(0).forEach((stop) => stop());
+  const tiles = el("div", "tiles" + (multi ? ` multi count-${playing.length}` : ""));
+  stage.append(tiles);
   playing.forEach((s, i) => {
     const tile = el("div", "tile");
     const box = el("div", "player-box");
@@ -594,35 +598,119 @@ function renderStage() {
     }
 
     tile.append(box, controls, bar);
-    stage.append(tile);
+    tiles.append(tile);
     // In multi-view only the first stream starts with sound, so they don't talk over each other
     setupPlayer(s, box, controls, multi && i > 0);
   });
 
-  if (!multi) {
-    const s = playing[0];
-    const chat = el("div", "chat");
+  stage.append(buildChat(playing));
+  title.textContent = multi ? `Multi-view (${playing.length}/${MAX_MULTI})` : displayName(playing[0]);
+}
+
+// ---------- Chat column ----------
+// Tabs: our own Sinners chat (chat.js) and the platform's real chat.
+
+let chatStreamId = null; // which stream's chat is shown (multi-view can switch)
+let chatTab = "sinners";
+let stopChat = null;
+let chatHidden = false;
+try {
+  chatHidden = localStorage.getItem("sinners-chat-hidden") === "1";
+} catch (e) {}
+
+function buildChat(playing) {
+  if (!playing.some((s) => s.id === chatStreamId)) chatStreamId = playing[0].id;
+  const col = el("div", "chat");
+  const head = el("div", "chat-head");
+  const body = el("div", "chat-body");
+
+  if (playing.length > 1) {
+    const pickStream = document.createElement("select");
+    pickStream.className = "chat-stream";
+    pickStream.setAttribute("aria-label", "Which stream's chat");
+    playing.forEach((s) => pickStream.append(new Option(`${displayName(s)} (${cap(s.platform)})`, s.id, false, s.id === chatStreamId)));
+    pickStream.addEventListener("change", () => {
+      chatStreamId = pickStream.value;
+      showTabs();
+    });
+    head.append(pickStream);
+  }
+
+  const tabRow = el("div", "chat-tabs");
+  head.append(tabRow);
+  col.append(head, body);
+
+  function showTabs() {
+    const s = playing.find((x) => x.id === chatStreamId);
+    tabRow.replaceChildren();
+    [
+      ["sinners", "Sinners chat"],
+      ["platform", `${cap(s.platform)} chat`],
+    ].forEach(([key, label]) => {
+      const btn = el("button", "chat-tab" + (chatTab === key ? " active" : ""), label);
+      btn.type = "button";
+      btn.addEventListener("click", () => {
+        chatTab = key;
+        showTabs();
+      });
+      tabRow.append(btn);
+    });
+    showBody(s);
+  }
+
+  function showBody(s) {
+    if (stopChat) stopChat();
+    stopChat = null;
+    body.replaceChildren();
+    if (chatTab === "sinners") {
+      stopChat = mountSinnersChat(body, s.id);
+      return;
+    }
     const url = chatUrl(s);
     if (url) {
       const frame = document.createElement("iframe");
       frame.src = url;
       frame.title = `${displayName(s)} chat`;
-      chat.append(frame);
+      body.append(frame);
+      return;
+    }
+    const none = el("div", "chat-none");
+    if (s.platform === "kick") {
+      none.append(el("p", null, "Kick chat opens in its own small window. Log in to Kick there to chat with the streamer."));
+      const btn = el("button", "button", "Open Kick chat");
+      btn.type = "button";
+      btn.addEventListener("click", () =>
+        window.open(`https://kick.com/popout/${s.channel}/chat`, `kick-chat-${s.channel}`, "width=420,height=720")
+      );
+      none.append(btn);
     } else {
-      const none = el("div", "chat-none");
-      const link = el("a", null, `Open chat on ${cap(s.platform)} ↗`);
+      none.append(el("p", null, "Chat can't be shown here for this stream."));
+      const link = el("a", null, `Open on ${cap(s.platform)} ↗`);
       link.href = pageUrl(s);
       link.target = "_blank";
       link.rel = "noopener";
-      none.append(el("p", null, "Chat can't be shown here for this stream."), link);
-      chat.append(none);
+      none.append(link);
     }
-    stage.append(chat);
-    title.textContent = displayName(s);
-  } else {
-    title.textContent = `Multi-view (${playing.length}/${MAX_MULTI})`;
+    body.append(none);
   }
+
+  showTabs();
+  return col;
 }
+
+chatToggle.addEventListener("click", () => {
+  chatHidden = !chatHidden;
+  try {
+    localStorage.setItem("sinners-chat-hidden", chatHidden ? "1" : "0");
+  } catch (e) {}
+  updateChatToggle();
+  stage.classList.toggle("no-chat", chatHidden);
+});
+
+function updateChatToggle() {
+  chatToggle.textContent = chatHidden ? "💬 Show chat" : "💬 Hide chat";
+}
+updateChatToggle();
 
 function render() {
   renderList();
