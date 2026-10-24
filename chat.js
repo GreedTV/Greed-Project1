@@ -68,7 +68,9 @@ function mountSinnersChat(container, room) {
 
   async function poll() {
     if (stopped) return;
-    if (document.hidden) return schedule(); // don't use up requests in background tabs
+    if (!box.isConnected) return; // its page was closed
+    // Don't use up requests in background tabs, or while its page is parked behind another section
+    if (document.hidden || box.closest(".page-parked")) return schedule();
     try {
       const res = await fetch(lastId ? `${api}?after=${lastId}` : api);
       const data = await res.json();
@@ -144,11 +146,12 @@ function mountSinnersChat(container, room) {
 
   status("Loading chat…");
   renderFooter();
-  SinnersAuth.onChange(() => !stopped && renderFooter());
+  const stopListening = SinnersAuth.onChange(() => !stopped && renderFooter());
   poll();
 
   return () => {
     stopped = true;
     clearTimeout(timer);
+    stopListening();
   };
 }

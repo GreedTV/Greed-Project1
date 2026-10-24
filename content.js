@@ -83,6 +83,7 @@ let playerCreating = null;
 
 function loadYouTubeApi() {
   return (playerReady ||= new Promise((resolve) => {
+    if (window.YT && YT.Player) return resolve(); // already loaded by another page
     window.onYouTubeIframeAPIReady = resolve;
     const tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
@@ -378,12 +379,19 @@ document.getElementById("live-dismiss").addEventListener("click", () => {
 render();
 loadPicks();
 // From the Watch page: content.html?alert=<kick name>
-const alertParam = new URLSearchParams(location.search).get("alert");
-if (alertParam && /^[a-z0-9_-]{2,30}$/i.test(alertParam)) {
+function alertFromUrl() {
+  const name = new URLSearchParams(location.search).get("alert");
+  if (!name || !/^[a-z0-9_-]{2,30}$/i.test(name)) return false;
   history.replaceState(null, "", location.pathname);
-  alertName = alertParam.toLowerCase();
+  alertName = name.toLowerCase();
+  return true;
 }
+alertFromUrl();
 if (alertName) startAlert(alertName);
+
+// In-site navigation (nav.js)
+SinnersNav.onLeave(() => clearInterval(alertTimer));
+SinnersNav.onReturn(() => alertFromUrl() && startAlert(alertName));
 // Pick up where the visitor left off, without autoplaying sound on page load
 if (queue[current]) nowPlaying.textContent = queue[current].title;
 playerBox.addEventListener("click", () => !playerCreating && queue[current] && play(current));

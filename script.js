@@ -25,4 +25,8 @@ const revealObserver = new IntersectionObserver(
   },
   { threshold: 0.12 }
 );
-document.querySelectorAll(".reveal").forEach((el) => revealObserver.observe(el));
+// Also called by nav.js for page content that's swapped in
+function observeReveals(root = document) {
+  root.querySelectorAll(".reveal:not(.visible)").forEach((el) => revealObserver.observe(el));
+}
+observeReveals();

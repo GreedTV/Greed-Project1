@@ -2085,6 +2085,24 @@ img {
   }
 }
 
+/* A page that's playing in the mini player while you browse another section (nav.js):
+   hidden and taking no space, except for the floating player itself */
+.page-parked {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.page-parked .player-box.mini {
+  visibility: visible;
+  pointer-events: auto;
+}
+
 /* Mini player (mini.js): the player floats in a small draggable window */
 .mini-bar {
   display: none;

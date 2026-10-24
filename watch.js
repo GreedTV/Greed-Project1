@@ -866,3 +866,16 @@ function addFromUrl() {
 
 addFromUrl();
 render();
+
+// In-site navigation (nav.js): stop players and chat when this page closes,
+// and pick up a new streamer link (watch.html?add=...) when coming back to it
+SinnersNav.onLeave(() => {
+  if (stopChat) stopChat();
+  cleanups.splice(0).forEach((stop) => stop());
+  players.clear();
+});
+SinnersNav.onReturn(() => {
+  if (!new URLSearchParams(location.search).has("add")) return;
+  addFromUrl();
+  render();
+});

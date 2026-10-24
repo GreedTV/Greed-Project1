@@ -224,11 +224,17 @@ lightbox.querySelector(".next").addEventListener("click", () => step(1));
 lightbox.addEventListener("click", (e) => {
   if (e.target === lightbox) close();
 });
-document.addEventListener("keydown", (e) => {
+function onKey(e) {
   if (!lightbox.classList.contains("open")) return;
   if (e.key === "Escape") close();
   if (e.key === "ArrowLeft") step(-1);
   if (e.key === "ArrowRight") step(1);
+}
+document.addEventListener("keydown", onKey);
+// In-site navigation (nav.js): stop listening when this page closes
+SinnersNav.onLeave(() => {
+  document.removeEventListener("keydown", onKey);
+  clearMedia();
 });
 
 // ---------- Sharing ----------

@@ -60,8 +60,13 @@ const SinnersAuth = (() => {
     expire() {
       set("");
     },
+    // Returns a function that stops listening
     onChange(fn) {
       listeners.push(fn);
+      return () => {
+        const i = listeners.indexOf(fn);
+        if (i !== -1) listeners.splice(i, 1);
+      };
     },
   };
 })();

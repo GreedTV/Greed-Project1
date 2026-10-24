@@ -10,6 +10,17 @@
 const MINI_POS_KEY = "sinners-mini-pos";
 const MINI_MARGIN = 16;
 
+const SinnersMini = {
+  all: new Set(),
+  // Put back every mini player inside this page content (used when navigating back to it)
+  restoreIn(root) {
+    this.all.forEach((m) => {
+      if (!m.box.isConnected) this.all.delete(m);
+      else if (root.contains(m.box)) m.restore();
+    });
+  },
+};
+
 function makeMinimizable(box, { title = () => "", onClose = () => {} } = {}) {
   let placeholder = null;
 
@@ -109,11 +120,18 @@ function makeMinimizable(box, { title = () => "", onClose = () => {} } = {}) {
   });
 
   window.addEventListener("resize", () => box.classList.contains("mini") && place(...pos()));
-  restoreBtn.addEventListener("click", restore);
+  // On another section of the site, "back to the page" means going back to that page
+  restoreBtn.addEventListener("click", () => {
+    if (box.closest(".page-parked") && typeof SinnersNav !== "undefined") SinnersNav.goToParked();
+    else restore();
+  });
   closeBtn.addEventListener("click", () => {
     restore();
     onClose();
+    document.dispatchEvent(new CustomEvent("sinners:mini-closed"));
   });
 
-  return { minimize, restore, isMini: () => !!placeholder };
+  const api = { box, minimize, restore, isMini: () => !!placeholder };
+  SinnersMini.all.add(api);
+  return api;
 }
