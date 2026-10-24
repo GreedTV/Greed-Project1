@@ -42,7 +42,9 @@
 //   GET  /stats                        -> online now, visitors and views (today, 7 days), community numbers
 //
 // Discord bot (slash commands arrive here from Discord; set this as the app's Interactions Endpoint URL)
-//   POST /discord/interactions         -> /stats, /points, /top, /shop, /round, /sinners, /notify-here, /notify-off
+//   POST /discord/interactions         -> /stats, /stats-live, /stats-live-off, /points, /top, /shop, /round, /sinners,
+//                                         /notify-here, /notify-off
+//   (scheduled)                        -> keeps the /stats-live board up to date (needs a Cron Trigger, see Setup)
 //   GET  /discord-admin                -> bot setup status and invite link   (admin)
 //   POST /discord-admin                -> { action: "register" }  (re)creates the slash commands   (admin)
 //
@@ -64,6 +66,7 @@
 //      and as Text: DISCORD_CLIENT_ID.
 //   5. Discord bot (optional): add DISCORD_BOT_TOKEN as Secret and DISCORD_PUBLIC_KEY as Text, then in the
 //      Discord Developer Portal set Interactions Endpoint URL to <this Worker>/discord/interactions.
+//   6. Live stats board (optional): Settings -> Trigger events -> Add -> Cron Triggers -> every 5 minutes (*/5 * * * *).
 
 // Websites allowed to use this Worker. Add your own domain here if you get one.
 const ALLOWED_ORIGINS = [
@@ -187,6 +190,11 @@ export default {
     } catch (err) {
       return json({ error: err.message || "Something went wrong" }, err.status || 500, cors);
     }
+  },
+
+  // Cron Trigger (every 5 minutes): refresh the live stats board in Discord when it's due
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(updateStatsBoard(env).catch(() => {}));
   },
 };
 
@@ -1342,6 +1350,15 @@ const BOARD_FORMAT = {
   typing: ["⌨️ Chat Typer", (v) => `${v} words`],
 };
 
+const BOARD_KEY = "discord:statsboard";
+const BOARD_INTERVALS = [
+  { name: "5 minutes", value: 5 },
+  { name: "15 minutes", value: 15 },
+  { name: "1 hour", value: 60 },
+  { name: "6 hours", value: 360 },
+  { name: "Once a day", value: 1440 },
+];
+
 const BOT_COMMANDS = [
   { name: "stats", description: "Sinners site report: visitors, players, games, betting, chat, shop" },
   { name: "points", description: "Show someone's Sinners points", options: [{ type: 6, name: "user", description: "Whose points (you if empty)" }] },
@@ -1353,6 +1370,25 @@ const BOT_COMMANDS = [
     options: [{ type: 3, name: "game", description: "Which game", choices: [{ name: "Color Clash", value: "colors" }, { name: "Lucky Number", value: "lucky" }] }],
   },
   { name: "sinners", description: "Links to the Sinners website" },
+  {
+    name: "stats-live",
+    description: "Keep a site report in this channel that updates by itself",
+    default_member_permissions: String(MANAGE_SERVER),
+    dm_permission: false,
+    options: [
+      { type: 4, name: "every", description: "How often to update (default 5 minutes)", choices: BOARD_INTERVALS },
+      {
+        type: 3,
+        name: "mode",
+        description: "Update one message, or post a new report each time",
+        choices: [
+          { name: "Keep one message updated", value: "edit" },
+          { name: "Post a new report each time", value: "post" },
+        ],
+      },
+    ],
+  },
+  { name: "stats-live-off", description: "Stop the self-updating site report", default_member_permissions: String(MANAGE_SERVER), dm_permission: false },
   { name: "notify-here", description: "Post shop purchases and new gallery links in this channel", default_member_permissions: String(MANAGE_SERVER), dm_permission: false },
   { name: "notify-off", description: "Stop posting site notifications", default_member_permissions: String(MANAGE_SERVER), dm_permission: false },
 ];
@@ -1405,6 +1441,7 @@ async function discordInteraction(request, env, ctx) {
   try {
     if (!env.DB) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
     await ensureSchema(env);
+    if (interaction.data.name === "stats-live" || interaction.data.name === "stats-live-off") return await statsLiveCommand(interaction, env, ctx);
     if (interaction.data.name === "stats") {
       // Lots to gather: say "thinking…" now, then fill in the message (Discord allows 3 s for a first answer)
       later(ctx, editOriginal(env, interaction, () => statsReport(env, interaction)));
@@ -1675,6 +1712,85 @@ async function statsReport(env, interaction) {
   };
 }
 
+// ---------- Live stats board ----------
+// /stats-live saves { channel, message, guild, every, mode, last } in KV. The Cron Trigger runs every
+// 5 minutes; when the board is due it edits its message (or posts a new one in "post" mode). If the
+// message was deleted, a new one is posted.
+
+function botPost(env, channel, message) {
+  return fetch(`${DISCORD_API}/channels/${channel}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ allowed_mentions: { parse: [] }, ...message }),
+  });
+}
+
+function boardMessage(report, board) {
+  const label = (BOARD_INTERVALS.find((i) => i.value === board.every) || { name: `${board.every} minutes` }).name;
+  const e = report.embeds[0];
+  e.footer = { text: board.mode === "post" ? `sinnerstv.com · new report every ${label}` : `sinnerstv.com · updates every ${label} · last update` };
+  return report;
+}
+
+async function publishBoard(env, board) {
+  await ensureSchema(env);
+  const message = boardMessage(await statsReport(env, { guild_id: board.guild }), board);
+  let res = null;
+  if (board.mode === "edit" && board.message) {
+    res = await fetch(`${DISCORD_API}/channels/${board.channel}/messages/${board.message}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(message),
+    });
+  }
+  if (!res || res.status === 404) {
+    res = await botPost(env, board.channel, message);
+    if (res.ok) board.message = (await res.json()).id;
+  }
+  board.last = Date.now();
+  board.error = res.ok ? "" : `Discord said ${res.status}`;
+  await env.GALLERY.put(BOARD_KEY, JSON.stringify(board));
+  return res.ok;
+}
+
+async function updateStatsBoard(env) {
+  if (!env.DISCORD_BOT_TOKEN || !env.GALLERY || !env.DB) return;
+  const board = await env.GALLERY.get(BOARD_KEY, "json");
+  if (!board) return;
+  // A little slack, so a 5-minute board isn't skipped when the trigger runs a few seconds early
+  if (Date.now() - (board.last || 0) < board.every * 60000 - 30000) return;
+  await publishBoard(env, board);
+}
+
+async function statsLiveCommand(interaction, env, ctx) {
+  const perms = BigInt((interaction.member && interaction.member.permissions) || 0);
+  if (!interaction.guild_id || !(perms & BigInt(MANAGE_SERVER))) return botReply("Only server managers can do that.", { ephemeral: true });
+  if (!env.GALLERY || !env.DB) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
+  if (interaction.data.name === "stats-live-off") {
+    await env.GALLERY.delete(BOARD_KEY);
+    return botReply("⏹️ The live stats board is off. The last report stays in the channel.", { ephemeral: true });
+  }
+  if (!env.DISCORD_BOT_TOKEN) return botReply("DISCORD_BOT_TOKEN isn't set in the Worker yet, so I can't post.", { ephemeral: true });
+  const opts = interaction.data.options || [];
+  const opt = (k) => (opts.find((o) => o.name === k) || {}).value;
+  const board = {
+    channel: interaction.channel_id || (interaction.channel || {}).id,
+    guild: interaction.guild_id,
+    every: BOARD_INTERVALS.some((i) => i.value === opt("every")) ? opt("every") : 5,
+    mode: opt("mode") === "post" ? "post" : "edit",
+    message: null,
+    last: 0,
+  };
+  await ensureSchema(env);
+  later(ctx, publishBoard(env, board));
+  const label = BOARD_INTERVALS.find((i) => i.value === board.every).name;
+  return botReply(
+    `📊 Live stats board set up here: ${board.mode === "post" ? "a new report" : "the report updates"} every ${label}. ` +
+      "Use /stats-live-off to stop it. (Make sure I can send messages and embeds in this channel.)",
+    { ephemeral: true }
+  );
+}
+
 // A message from the bot in the /notify-here channel (does nothing if that isn't set up)
 async function discordNotify(env, fields) {
   if (!env.DISCORD_BOT_TOKEN || !env.GALLERY) return;
@@ -1695,6 +1811,7 @@ async function discordAdminStatus(request, env, cors) {
       publicKey: !!env.DISCORD_PUBLIC_KEY,
       botToken: !!env.DISCORD_BOT_TOKEN,
       notifyChannel: env.GALLERY ? await env.GALLERY.get("discord:notify") : null,
+      statsBoard: env.GALLERY ? await env.GALLERY.get(BOARD_KEY, "json") : null,
       inviteUrl: env.DISCORD_CLIENT_ID
         ? `https://discord.com/oauth2/authorize?client_id=${env.DISCORD_CLIENT_ID}&scope=bot+applications.commands&permissions=19456`
         : null,

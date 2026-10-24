@@ -64,6 +64,17 @@ async function refreshBot() {
     [s.publicKey, "DISCORD_PUBLIC_KEY (Text): Developer Portal → General Information → Public Key"],
     [s.botToken, "DISCORD_BOT_TOKEN (Secret): Developer Portal → Bot → Reset Token"],
     [s.notifyChannel, s.notifyChannel ? `Notifications go to channel ${s.notifyChannel}` : "Notification channel: type /notify-here in a Discord channel"],
+    [
+      s.statsBoard && !s.statsBoard.error,
+      s.statsBoard
+        ? `Live stats board in channel ${s.statsBoard.channel}, every ${s.statsBoard.every} min` +
+          (s.statsBoard.last ? `, last update ${new Date(s.statsBoard.last).toLocaleString()}` : "") +
+          (s.statsBoard.error ? ` (${s.statsBoard.error})` : "") +
+          (s.statsBoard.last && Date.now() - s.statsBoard.last > (s.statsBoard.every * 2 + 10) * 60000
+            ? ". ⚠️ Not updating: check the Cron Trigger (Cloudflare → Worker → Settings → Trigger events, every 5 minutes)"
+            : "")
+        : "Live stats board: type /stats-live in a Discord channel. It also needs a Cron Trigger every 5 minutes (Cloudflare → Worker → Settings → Trigger events)",
+    ],
   ].forEach(([ok, label]) => checks.append(el("li", ok ? "ok" : "missing", `${ok ? "✓" : "✕"} ${label}`)));
 
   const endpoint = el("p", "hint");
