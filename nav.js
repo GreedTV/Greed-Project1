@@ -20,6 +20,7 @@ const SinnersNav = (() => {
     games: "games.js",
     admin: "admin.js",
     stats: "stats.js",
+    profile: "profile.js",
   };
 
   // "/watch", "/watch.html" -> "watch"; "/", "/index.html" -> "index"

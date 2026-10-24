@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Profile — Sinners</title>
+  <meta name="description" content="Your Sinners profile, inventory and adventurer.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0c0a0d">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sinners">
+  <meta property="og:title" content="Profile — Sinners">
+  <meta property="og:description" content="Your Sinners profile, inventory and adventurer.">
+  <meta property="og:url" content="https://sinnerstv.com/profile">
+  <meta property="og:image" content="https://sinnerstv.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
+  <link rel="stylesheet" href="styles.css?v=202610242249">
+  <script src="theme.js?v=202610242249"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a href="/" class="logo"><span class="logo-mark" aria-hidden="true">S</span><span>SINNERS<span class="logo-dot">.</span></span></a>
+      <nav>
+        <ul id="nav-links">
+          <li><a href="/">Home</a></li>
+          <li><a href="/watch">Watch</a></li>
+          <li><a href="/content">Content</a></li>
+          <li><a href="/games">Games</a></li>
+          <li><a href="/gallery">Gallery</a></li>
+          <li><a href="/about">About</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions" id="nav-actions"></div>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="section profile-page" style="padding-top:32px">
+      <div class="container wide">
+        <div id="profile-login" class="profile-login" hidden>
+          <div class="hero-mini" aria-hidden="true">⚔️</div>
+          <h1>Your <span class="gradient-text">Profile</span></h1>
+          <p>Log in with Discord to see your stats and create your adventurer.</p>
+          <button class="button discord-btn" id="profile-login-btn" type="button">Log in with Discord</button>
+        </div>
+
+        <div id="profile" hidden>
+          <div class="profile-head side-box" id="profile-head"></div>
+          <div class="profile-stats" id="profile-stats"></div>
+
+          <div class="adventure">
+            <div class="side-box hero-panel">
+              <div class="hero-top">
+                <div>
+                  <h2 id="hero-name">Adventurer</h2>
+                  <span class="hero-level" id="hero-level"></span>
+                </div>
+                <button class="link-btn" id="hero-reroll" type="button" title="Pick a new random look">🎲 New look</button>
+              </div>
+              <div class="xp-bar"><span id="xp-fill"></span></div>
+              <p class="hint" id="xp-text"></p>
+              <div class="hero-stage">
+                <div class="gear-col" id="gear-left"></div>
+                <div class="hero-figure" id="hero-figure"></div>
+                <div class="gear-col" id="gear-right"></div>
+              </div>
+              <div class="hero-power" id="hero-power"></div>
+            </div>
+
+            <div class="side-box map-panel">
+              <div class="side-head">
+                <h3>🗺️ World map</h3>
+                <span class="hint">Pick where to send your adventurer</span>
+              </div>
+              <div class="world-map" id="world-map"></div>
+              <div class="trip" id="trip" role="status"></div>
+            </div>
+          </div>
+
+          <div class="adv-result" id="adv-result" role="status" hidden></div>
+
+          <div class="bag-row">
+            <div class="side-box bag-panel">
+              <div class="side-head">
+                <h3>🎒 Bag <span class="count" id="bag-count"></span></h3>
+                <a class="link-btn" href="/games#shop">🛒 Shop</a>
+              </div>
+              <div class="bag" id="bag"></div>
+            </div>
+            <div class="side-box item-panel" id="item-panel">
+              <p class="hint">Click an item in your bag or a gear slot to see it.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span id="year"></span> Sinners</p>
+      <p><a href="/watch">Watch</a><a href="/content">Content</a><a href="/games">Games</a><a href="/gallery">Gallery</a><a href="/about">About</a><a href="/stats">Stats</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></p>
+    </div>
+  </footer>
+
+  <script src="script.js?v=202610242249"></script>
+  <script src="config.js?v=202610242249"></script>
+  <script src="presence.js?v=202610242249"></script>
+  <script src="auth.js?v=202610242249"></script>
+  <script src="alerts.js?v=202610242249"></script>
+  <script src="chat.js?v=202610242249"></script>
+  <script src="mini.js?v=202610242249"></script>
+  <script src="nav.js?v=202610242249"></script>
+</body>
+</html>

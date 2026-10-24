@@ -93,19 +93,25 @@ const SinnersAuth = (() => {
     }
     const wrap = document.createElement("div");
     wrap.className = "profile";
+    // Avatar and name open the Profile page (stats, inventory, adventurer)
+    const link = document.createElement("a");
+    link.className = "profile-link";
+    link.href = "/profile";
+    link.title = "Your profile and adventurer";
     if (user.avatar) {
       const img = document.createElement("img");
       img.src = user.avatar;
       img.alt = "";
-      wrap.append(img);
+      link.append(img);
     }
     const name = document.createElement("span");
     name.textContent = user.name;
+    link.append(name);
     const out = document.createElement("button");
     out.type = "button";
     out.textContent = "Log out";
     out.addEventListener("click", SinnersAuth.logout);
-    wrap.append(name, out);
+    wrap.append(link, out);
     li.append(wrap);
   };
 

@@ -12,8 +12,8 @@
   <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="theme-color" content="#0c0a0d">
-  <link rel="stylesheet" href="styles.css?v=202610242209">
-  <script src="theme.js?v=202610242209"></script>
+  <link rel="stylesheet" href="styles.css?v=202610242249">
+  <script src="theme.js?v=202610242249"></script>
 </head>
 <body>
   <header class="site-header">
@@ -86,6 +86,40 @@
                   <input id="shop-stock" type="number" min="0" max="100000" placeholder="Stock (empty = unlimited)" aria-label="Stock">
                 </div>
                 <div class="add-row">
+                  <select id="shop-tier" aria-label="Tier">
+                    <option value="1">Tier 1 · everyone</option>
+                    <option value="2">Tier 2 · adventurer level 5</option>
+                    <option value="3">Tier 3 · adventurer level 10</option>
+                    <option value="4">Tier 4 · adventurer level 20</option>
+                    <option value="5">Tier 5 · adventurer level 30</option>
+                  </select>
+                  <select id="shop-kind" aria-label="Item type">
+                    <option value="reward">Reward (you hand it out)</option>
+                    <option value="gear">Gear (goes to the adventurer's bag)</option>
+                  </select>
+                </div>
+                <div class="add-row" id="shop-gear" hidden>
+                  <select id="shop-slot" aria-label="Gear slot">
+                    <option value="helmet">🪖 Helmet</option>
+                    <option value="chest">🥋 Chest</option>
+                    <option value="legs">👖 Legs</option>
+                    <option value="shoes">🥾 Shoes</option>
+                    <option value="gloves">🧤 Gloves</option>
+                    <option value="weapon">⚔️ Weapon</option>
+                    <option value="shield">🛡️ Shield</option>
+                    <option value="ring">💍 Ring / bracelet</option>
+                  </select>
+                  <select id="shop-rarity" aria-label="Rarity">
+                    <option value="common">Common</option>
+                    <option value="uncommon">Uncommon</option>
+                    <option value="rare">Rare</option>
+                    <option value="epic">Epic</option>
+                    <option value="legendary">Legendary</option>
+                  </select>
+                  <input id="shop-power" type="number" min="1" max="1000" placeholder="Power" aria-label="Power">
+                </div>
+                <p class="hint" id="shop-gear-hint" hidden>Dungeon loot power for comparison: tier 1 ≈ 3, tier 2 ≈ 8, tier 3 ≈ 16, tier 4 ≈ 30, tier 5 ≈ 50 (weapons ×1.5, rarer ×1.3 to ×3).</p>
+                <div class="add-row">
                   <button class="button" type="submit" id="shop-save">Add to shop</button>
                   <button class="button ghost" type="button" id="shop-cancel" hidden>Cancel</button>
                 </div>
@@ -111,13 +145,13 @@
     </div>
   </footer>
 
-  <script src="script.js?v=202610242209"></script>
-  <script src="config.js?v=202610242209"></script>
-  <script src="presence.js?v=202610242209"></script>
-  <script src="auth.js?v=202610242209"></script>
-  <script src="alerts.js?v=202610242209"></script>
-  <script src="chat.js?v=202610242209"></script>
-  <script src="mini.js?v=202610242209"></script>
-  <script src="nav.js?v=202610242209"></script>
+  <script src="script.js?v=202610242249"></script>
+  <script src="config.js?v=202610242249"></script>
+  <script src="presence.js?v=202610242249"></script>
+  <script src="auth.js?v=202610242249"></script>
+  <script src="alerts.js?v=202610242249"></script>
+  <script src="chat.js?v=202610242249"></script>
+  <script src="mini.js?v=202610242249"></script>
+  <script src="nav.js?v=202610242249"></script>
 </body>
 </html>
