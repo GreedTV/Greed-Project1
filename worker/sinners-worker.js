@@ -874,8 +874,8 @@ async function pointsTop(env, cors) {
 const ROUND_MS = 60000;
 const BET_CLOSE_MS = 5000; // betting closes this long before the round ends
 const BET_GAMES = {
-  colors: { choices: ["red", "green", "blue"], bonus: 0.5 }, // +50% of a winning bet
-  lucky: { choices: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], bonus: 3 }, // +3x a winning bet
+  colors: { choices: ["red", "green", "blue"], bonus: 0.1 }, // +10% of a winning bet
+  lucky: { choices: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], bonus: 0.2 }, // +20% of a winning bet
 };
 
 function today() {

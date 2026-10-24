@@ -33,10 +33,10 @@ const GAMES = {
   colors: {
     icon: "🎨",
     title: "Color Clash",
-    blurb: "Bet points on red, green or blue. Every minute one color wins: its backers split the whole pot, plus a 50% site bonus.",
+    blurb: "Bet points on red, green or blue. Every minute one color wins: its backers split the whole pot, plus a 10% site bonus.",
     bet: true,
     odds: "1 in 3",
-    bonusText: "+50% of your bet",
+    bonusText: "+10% of your bet",
     example: ["Red", "Blue"],
     choices: [
       ["red", "Red"],
@@ -47,10 +47,10 @@ const GAMES = {
   lucky: {
     icon: "🍀",
     title: "Lucky Number",
-    blurb: "Pick a number from 1 to 10 and bet. Every minute one number is drawn: winners split the pot plus a 3× site bonus; if nobody picked it, the pot grows into a jackpot.",
+    blurb: "Pick a number from 1 to 10 and bet. Every minute one number is drawn: winners split the pot plus a 20% site bonus; if nobody picked it, the pot grows into a jackpot.",
     bet: true,
     odds: "1 in 10",
-    bonusText: "3× your bet",
+    bonusText: "+20% of your bet",
     example: ["7", "3"],
     choices: Array.from({ length: 10 }, (_, i) => [String(i + 1), String(i + 1)]),
   },
@@ -647,7 +647,7 @@ function howItWorks(g) {
     el("strong", null, "Example"),
     el("span", null, `You bet 90 on ${mine}, Alex bets 60 on ${other}, Sam bets 30 on ${mine}. The pot is 180.`),
     el("span", null, `${mine} wins: ${mine}'s players put in 120, so you get 90/120 of the pot = 135, and Sam gets 45. Alex loses 60.`),
-    el("span", null, `Plus the site bonus (${g.bonusText}): you get ${Math.floor(90 * (g.choices.length > 3 ? 3 : 0.5))} more and Sam ${Math.floor(30 * (g.choices.length > 3 ? 3 : 0.5))} more.`)
+    el("span", null, `Plus the site bonus (${g.bonusText}): you get ${Math.floor(90 * (g.choices.length > 3 ? 0.2 : 0.1))} more and Sam ${Math.floor(30 * (g.choices.length > 3 ? 0.2 : 0.1))} more.`)
   );
   const notes = el("ul", "bet-help-notes");
   [
