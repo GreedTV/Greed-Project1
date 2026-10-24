@@ -3,7 +3,7 @@
 Watch Kick, Twitch and YouTube streams side by side, plus a community gallery of shared images and clips.
 Plain HTML, CSS and JavaScript, hosted on GitHub Pages, with a small Cloudflare Worker for the parts that need a server.
 
-Live at https://greedtv.github.io/Greed-Project1/
+Live at https://sinnerstv.com/
 
 ## Pages
 
