@@ -628,7 +628,8 @@ async function ensureSchema(env) {
     ),
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS bets (game TEXT NOT NULL, round INTEGER NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, avatar TEXT, " +
-        "choice TEXT NOT NULL, amount INTEGER NOT NULL, payout INTEGER, created INTEGER NOT NULL, PRIMARY KEY (game, round, user_id))"
+        "choice TEXT NOT NULL, amount INTEGER NOT NULL, payout INTEGER, bonus INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, " +
+        "PRIMARY KEY (game, round, user_id))"
     ),
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS rounds (game TEXT NOT NULL, round INTEGER NOT NULL, outcome TEXT NOT NULL, pot INTEGER NOT NULL DEFAULT 0, " +
@@ -645,6 +646,10 @@ async function ensureSchema(env) {
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS purchases_user ON purchases (user_id, id)"),
   ]);
+  // Added later: tables made before this need the column (fails harmlessly when it's already there)
+  try {
+    await env.DB.prepare("ALTER TABLE bets ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0").run();
+  } catch (e) {}
   schemaReady = true;
 }
 
@@ -861,15 +866,21 @@ async function pointsTop(env, cors) {
 // A new round starts every minute for everyone. Each round's result comes from a keyed hash of the
 // round number (HMAC with SESSION_SECRET), so it can't be predicted or changed from a browser.
 // Winners split the round's pot (plus any jackpot) in proportion to their bets; if nobody picked
-// the result, the pot rolls over into the jackpot. Rounds are paid out once, by whichever request
+// the result, the pot rolls over into the jackpot. On top of that, every winning bet gets a site bonus
+// (a share of the bet, made by the site), so a win always pays even for someone playing alone. Bonuses
+// count toward the same daily earning cap as the games, so extra accounts can't farm endless points. Rounds are paid out once, by whichever request
 // first sees that a round has finished.
 
 const ROUND_MS = 60000;
 const BET_CLOSE_MS = 5000; // betting closes this long before the round ends
 const BET_GAMES = {
-  colors: { choices: ["red", "green", "blue"] },
-  lucky: { choices: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] },
+  colors: { choices: ["red", "green", "blue"], bonus: 0.5 }, // +50% of a winning bet
+  lucky: { choices: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], bonus: 3 }, // +3x a winning bet
 };
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function betGameOf(id) {
   const game = BET_GAMES[id];
@@ -911,11 +922,24 @@ async function settleRounds(env, id) {
     if (winners.length) {
       const total = pot + pool.jackpot;
       const winningStake = winners.reduce((sum, b) => sum + b.amount, 0);
+      const day = today();
       for (const b of winners) {
         const payout = Math.floor((total * b.amount) / winningStake);
         paid += payout;
-        writes.push(env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(payout, b.user_id));
-        writes.push(env.DB.prepare("UPDATE bets SET payout = ? WHERE game = ? AND round = ? AND user_id = ?").bind(payout, id, round, b.user_id));
+        const w = await env.DB.prepare("SELECT earned_day AS day, earned_today AS today FROM wallets WHERE user_id = ?").bind(b.user_id).first();
+        const earned = w && w.day === day ? w.today : 0;
+        const bonus = Math.max(0, Math.min(Math.floor(b.amount * BET_GAMES[id].bonus), DAILY_CAP - earned));
+        writes.push(
+          env.DB.prepare("UPDATE wallets SET points = points + ?, earned_day = ?, earned_today = ? WHERE user_id = ?").bind(
+            payout + bonus,
+            day,
+            earned + bonus,
+            b.user_id
+          )
+        );
+        writes.push(
+          env.DB.prepare("UPDATE bets SET payout = ?, bonus = ? WHERE game = ? AND round = ? AND user_id = ?").bind(payout, bonus, id, round, b.user_id)
+        );
       }
       writes.push(env.DB.prepare("UPDATE pools SET jackpot = ? WHERE game = ?").bind(total - paid, id)); // leftover from rounding
     } else {
@@ -972,16 +996,19 @@ async function betState(request, url, env, cors) {
     jackpot: pool ? pool.jackpot : 0,
     bets: bets.slice(0, 30),
     history,
+    bonusRate: game.bonus,
   };
   if (user) {
     out.myBet = bets.find((b) => b.userId === user.id) || null;
     out.myLast = await env.DB.prepare(
-      "SELECT b.round, b.choice, b.amount, b.payout, r.outcome FROM bets b JOIN rounds r ON r.game = b.game AND r.round = b.round " +
+      "SELECT b.round, b.choice, b.amount, b.payout, b.bonus, r.outcome FROM bets b JOIN rounds r ON r.game = b.game AND r.round = b.round " +
         "WHERE b.game = ? AND b.user_id = ? ORDER BY b.round DESC LIMIT 1"
     )
       .bind(id, user.id)
       .first();
-    out.points = (await wallet(env, user)).points;
+    const w = await wallet(env, user);
+    out.points = w.points;
+    out.bonusLeft = Math.max(0, DAILY_CAP - (w.day === today() ? w.today : 0));
   }
   return json(out, 200, cors);
 }

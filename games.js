@@ -33,9 +33,10 @@ const GAMES = {
   colors: {
     icon: "🎨",
     title: "Color Clash",
-    blurb: "Bet points on red, green or blue. Every minute one color wins, and its backers split the whole pot.",
+    blurb: "Bet points on red, green or blue. Every minute one color wins: its backers split the whole pot, plus a 50% site bonus.",
     bet: true,
     odds: "1 in 3",
+    bonusText: "+50% of your bet",
     example: ["Red", "Blue"],
     choices: [
       ["red", "Red"],
@@ -46,9 +47,10 @@ const GAMES = {
   lucky: {
     icon: "🍀",
     title: "Lucky Number",
-    blurb: "Pick a number from 1 to 10 and bet. Every minute one number is drawn; if nobody picked it, the pot grows into a jackpot.",
+    blurb: "Pick a number from 1 to 10 and bet. Every minute one number is drawn: winners split the pot plus a 3× site bonus; if nobody picked it, the pot grows into a jackpot.",
     bet: true,
     odds: "1 in 10",
+    bonusText: "3× your bet",
     example: ["7", "3"],
     choices: Array.from({ length: 10 }, (_, i) => [String(i + 1), String(i + 1)]),
   },
@@ -638,16 +640,19 @@ function howItWorks(g) {
     `Pick ${g.choices.length > 3 ? "a number" : "a color"}, choose how many points to bet, and press Place bet. One bet per round; betting closes 5 seconds before the end.`,
     `When the timer hits 0, one ${g.choices.length > 3 ? "number" : "color"} wins at random. Each has the same ${g.odds} chance.`,
     "Every bet goes into one shared pot. The players who picked the winner split the whole pot, by how much each of them bet.",
+    `Every winner also gets a site bonus of ${g.bonusText}, paid by Sinners. So a win always earns something, even if you play alone.`,
   ].forEach((s) => steps.append(el("li", null, s)));
   const example = el("div", "bet-help-example");
   example.append(
     el("strong", null, "Example"),
     el("span", null, `You bet 90 on ${mine}, Alex bets 60 on ${other}, Sam bets 30 on ${mine}. The pot is 180.`),
-    el("span", null, `${mine} wins: ${mine}'s players put in 120, so you get 90/120 of the pot = 135 (+45), and Sam gets 45. Alex loses 60.`)
+    el("span", null, `${mine} wins: ${mine}'s players put in 120, so you get 90/120 of the pot = 135, and Sam gets 45. Alex loses 60.`),
+    el("span", null, `Plus the site bonus (${g.bonusText}): you get ${Math.floor(90 * (g.choices.length > 3 ? 3 : 0.5))} more and Sam ${Math.floor(30 * (g.choices.length > 3 ? 3 : 0.5))} more.`)
   );
   const notes = el("ul", "bet-help-notes");
   [
-    ["Playing alone?", " If nobody else bets, the pot is only your own points, so a win just gives them back. You win more when other people bet on the other options."],
+    ["Playing alone?", " Then the pot is only your own points: a win gives them back plus the site bonus. You win more when other people bet on the other options."],
+    ["Bonus limit:", " site bonuses count toward the same 300-points-a-day limit as the solo games. Once you've earned 300 today, wins pay only your share of the pot."],
     ["Nobody picked the winner?", " Then the pot goes into the jackpot, and the next round's winners get it on top."],
     ["Where do points come from?", " You start with 100, and the solo games (Quick Draw, Target Rush, Chat Typer) earn up to 300 more a day. Points are just for fun: they can't be bought or turned into money."],
   ].forEach(([q, a]) => {
@@ -752,10 +757,12 @@ function startBet(id) {
     const total = state.pot + state.jackpot + bet;
     const side = state.choices[picked].total + bet;
     const payout = Math.floor((total * bet) / side);
-    const others = state.pot - state.choices[picked].total;
-    if (payout <= bet)
-      return `If ${name} wins you get your ${bet} back. Nobody has bet on the other ${g.choices.length > 3 ? "numbers" : "colors"} yet, so there's nothing extra to win (yet).`;
-    return `If ${name} wins you'd get about ${payout} (+${payout - bet}), from the ${others + state.jackpot} points on the others${state.jackpot ? " and the jackpot" : ""}. More bets can change this.`;
+    const bonus = Math.max(0, Math.min(Math.floor(bet * (state.bonusRate || 0)), state.bonusLeft ?? Infinity));
+    const parts = [`your ${bet} back`];
+    if (payout > bet) parts.push(`${payout - bet} from other players`);
+    if (bonus) parts.push(`${bonus} site bonus`);
+    const capped = state.bonusLeft === 0 ? " (You've reached today's 300-point earning limit, so no bonus until tomorrow.)" : "";
+    return `If ${name} wins you'd get ${payout + bonus} (+${payout + bonus - bet}): ${parts.join(" + ")}. More bets can change this.${capped}`;
   }
 
   const labelOf = (value) => (g.choices.find(([v]) => v === value) || [value, value])[1];
@@ -778,10 +785,17 @@ function startBet(id) {
     const m = state.myLast;
     if (!m || m.round !== state.round - 1) return;
     let text;
-    if (m.payout > m.amount) text = `🎉 ${labelOf(m.outcome)} won! You got ${m.payout} back for your ${m.amount}: +${m.payout - m.amount} points from the other players.`;
-    else if (m.payout > 0)
-      text = `✅ ${labelOf(m.outcome)} won and you got your ${m.amount} back. No profit this time: nobody bet on the losing options, so there were no extra points to share.`;
-    else text = `${labelOf(m.outcome)} won. You lost your ${m.amount} on ${labelOf(m.choice)}; it went to the winners (or the jackpot).`;
+    const bonus = m.bonus || 0;
+    if (m.payout > 0) {
+      const parts = [`your ${m.amount} back`];
+      if (m.payout > m.amount) parts.push(`${m.payout - m.amount} from other players`);
+      if (bonus) parts.push(`${bonus} site bonus`);
+      const total = m.payout + bonus;
+      text =
+        total > m.amount
+          ? `🎉 ${labelOf(m.outcome)} won! You got ${total} for your ${m.amount} (+${total - m.amount}): ${parts.join(" + ")}.`
+          : `✅ ${labelOf(m.outcome)} won and you got your ${m.amount} back. No bonus: you've reached today's 300-point earning limit.`;
+    } else text = `${labelOf(m.outcome)} won. You lost your ${m.amount} on ${labelOf(m.choice)}; it went to the winners (or the jackpot).`;
     result.replaceChildren(el("div", "result-line", text));
   }
 
