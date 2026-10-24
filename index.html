@@ -46,28 +46,38 @@
   <main>
     <section class="hero">
       <div class="container">
-        <div class="platform-row">
-          <span class="platform kick">Kick</span>
-          <span class="platform twitch">Twitch</span>
-          <span class="platform youtube">YouTube</span>
-        </div>
         <h1>All your streams.<br><span class="gradient-text">One screen.</span></h1>
         <p>Watch Kick, Twitch and YouTube side by side — in HD, with your own volume and quality controls.</p>
-
-        <form class="quick-watch" action="/watch" method="get" autocomplete="off">
-          <select name="platform" aria-label="Platform">
-            <option value="kick">Kick</option>
-            <option value="twitch">Twitch</option>
-            <option value="youtube">YouTube</option>
-          </select>
-          <input name="add" type="text" placeholder="Streamer name or channel link" aria-label="Streamer name or channel link" required>
-          <button class="button" type="submit">▶ Watch</button>
-        </form>
-        <p class="quick-hint">Or <a href="/watch">open the Watch page</a> and build your own multi-view.</p>
+        <div class="hero-actions">
+          <a href="/watch" class="button">▶ Start watching</a>
+          <a href="#guide" class="button ghost">How to use Sinners</a>
+        </div>
       </div>
     </section>
 
-    <section class="section">
+    <section class="section platforms-section">
+      <div class="container">
+        <div class="platforms">
+          <a class="platform-tile kick reveal" href="/watch" aria-label="Watch Kick streams">
+            <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M1.333 0h8v5.333H12V2.667h2.667V0h8v8H20v2.667h-2.667v2.666H20V16h2.667v8h-8v-2.667H12v-2.666H9.333V24h-8Z"/></svg>
+            <span class="platform-name">Kick</span>
+            <span class="platform-perk">Full HD up to 1080p, with volume and quality controls</span>
+          </a>
+          <a class="platform-tile twitch reveal" href="/watch" aria-label="Watch Twitch streams">
+            <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
+            <span class="platform-name">Twitch</span>
+            <span class="platform-perk">Twitch chat right next to the stream, plus quality settings</span>
+          </a>
+          <a class="platform-tile youtube reveal" href="/watch" aria-label="Watch YouTube streams">
+            <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" fill="#fff"/><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+            <span class="platform-name">YouTube</span>
+            <span class="platform-perk">Live channels by name, with live chat and "not live yet" alerts</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section alt">
       <div class="container">
         <div class="section-head reveal">
           <h2>What you can do</h2>
@@ -79,24 +89,24 @@
             <p>Watch up to 4 streams at once in a grid, from any mix of platforms.</p>
           </article>
           <article class="feature reveal">
-            <div class="feature-icon">HD</div>
-            <h3>Kick in 1080p</h3>
-            <p>Kick streams play in full HD with a quality menu from 360p to 1080p.</p>
+            <div class="feature-icon">⧉</div>
+            <h3>Mini player</h3>
+            <p>Shrink the stream into a small window, drag it anywhere, and keep watching while you browse the site.</p>
           </article>
           <article class="feature reveal">
-            <div class="feature-icon">🔊</div>
-            <h3>Your controls</h3>
-            <p>Set the volume of each stream on its own, mute the rest, and pick the quality.</p>
+            <div class="feature-icon">🔔</div>
+            <h3>Live alerts</h3>
+            <p>Turn on the bell for a Kick or YouTube streamer and get a pop-up the moment they go live.</p>
           </article>
           <article class="feature reveal">
             <div class="feature-icon">💬</div>
             <h3>Chat alongside</h3>
-            <p>Twitch and YouTube chat sit right next to the player when you watch one stream.</p>
+            <p>Sinners chat with other viewers, plus the streamer's own Twitch or YouTube chat.</p>
           </article>
           <article class="feature reveal">
-            <div class="feature-icon">🔗</div>
-            <h3>Name or link</h3>
-            <p>Type a streamer's name, or paste their channel link to get exactly the right person.</p>
+            <div class="feature-icon">▶</div>
+            <h3>Content while you wait</h3>
+            <p>Queue up YouTube videos and playlists for when the stream hasn't started yet.</p>
           </article>
           <article class="feature reveal">
             <div class="feature-icon">🖼</div>
@@ -107,28 +117,79 @@
       </div>
     </section>
 
-    <section class="section alt">
+    <section class="section" id="guide">
       <div class="container">
         <div class="section-head reveal">
-          <h2>How it works</h2>
+          <h2>How to use Sinners</h2>
         </div>
-        <ol class="steps">
-          <li class="step reveal">
-            <span class="step-num">1</span>
-            <h3>Add streamers</h3>
-            <p>Type a name or paste a link from Kick, Twitch or YouTube.</p>
-          </li>
-          <li class="step reveal">
-            <span class="step-num">2</span>
-            <h3>Pick one or turn on multi-view</h3>
-            <p>Watch one stream with chat, or up to 4 together.</p>
-          </li>
-          <li class="step reveal">
-            <span class="step-num">3</span>
-            <h3>Tune it your way</h3>
-            <p>Balance the volume, choose the quality, go fullscreen.</p>
-          </li>
-        </ol>
+        <p class="guide-intro reveal">A quick guide to each page. Everything works without an account; log in only if you want to chat.</p>
+
+        <div class="guide">
+          <article class="guide-card reveal">
+            <div class="guide-head">
+              <span class="guide-icon">▶</span>
+              <div>
+                <h3>Watch</h3>
+                <a href="/watch">Open Watch →</a>
+              </div>
+            </div>
+            <ol>
+              <li><strong>Add a streamer:</strong> pick Kick, Twitch or YouTube, type their name (or @handle on YouTube) and press <em>Add</em>.</li>
+              <li><strong>Wrong person?</strong> Click <em>✎ Fix</em> next to them and paste their channel link instead.</li>
+              <li><strong>Watch:</strong> click a streamer in your list. Turn on <em>Multi-view</em> to watch up to 4 at once.</li>
+              <li><strong>Controls under the player:</strong> volume, quality (Kick and Twitch), <em>⛶</em> fullscreen and <em>⧉</em> mini player.</li>
+              <li><strong>Not live yet?</strong> Click <em>🔕</em> next to a Kick or YouTube streamer to turn on alerts (<em>🔔</em>).</li>
+              <li><strong>Chat:</strong> use the tabs beside the player for Sinners chat or the streamer's own chat. <em>💬 Hide chat</em> gives the video more room.</li>
+            </ol>
+          </article>
+
+          <article class="guide-card reveal">
+            <div class="guide-head">
+              <span class="guide-icon">⏭</span>
+              <div>
+                <h3>Content</h3>
+                <a href="/content">Open Content →</a>
+              </div>
+            </div>
+            <ol>
+              <li><strong>Add videos:</strong> paste a YouTube video or playlist link and press <em>Add</em>.</li>
+              <li><strong>Your queue</strong> plays in order and is saved for next time. Click any item to jump to it.</li>
+              <li><strong>Skip</strong> with <em>⏮ ⏭</em>, or press <em>⧉</em> to keep it playing in the mini player.</li>
+              <li><strong>Quality:</strong> YouTube only allows changing it with <em>⚙</em> inside the YouTube player.</li>
+            </ol>
+          </article>
+
+          <article class="guide-card reveal">
+            <div class="guide-head">
+              <span class="guide-icon">🖼</span>
+              <div>
+                <h3>Gallery</h3>
+                <a href="/gallery">Open Gallery →</a>
+              </div>
+            </div>
+            <ol>
+              <li><strong>Browse</strong> the <em>Images</em> and <em>Clips</em> tabs. Click anything to view it bigger.</li>
+              <li><strong>Share an image:</strong> right-click an image online, choose <em>Copy image address</em>, and paste it.</li>
+              <li><strong>Share a clip:</strong> paste a Kick clip, Twitch clip or YouTube video link.</li>
+              <li><strong>Shared links appear after a quick review</strong> to keep the gallery clean.</li>
+            </ol>
+          </article>
+
+          <article class="guide-card reveal">
+            <div class="guide-head">
+              <span class="guide-icon">⚙</span>
+              <div>
+                <h3>Account &amp; settings</h3>
+              </div>
+            </div>
+            <ol>
+              <li><strong>Log in</strong> (top right) with Discord to write in Sinners chat. It only shares your name and picture.</li>
+              <li><strong>Light or dark:</strong> switch with <em>☀️ / 🌙</em> at the top.</li>
+              <li><strong>Mini player tip:</strong> while a stream is in the mini player, you can open other pages and it keeps playing. Click <em>⤢</em> to go back.</li>
+              <li><strong>Your lists stay on your device:</strong> streamers, queue and alerts are saved in this browser.</li>
+            </ol>
+          </article>
+        </div>
       </div>
     </section>
 
@@ -139,6 +200,7 @@
           <p>Post a clip or image link to the community gallery.</p>
           <a href="/gallery" class="button">Go to the gallery</a>
         </div>
+        <p class="trademark-note">Kick, Twitch and YouTube names and logos belong to their owners. Sinners isn't affiliated with or endorsed by them.</p>
       </div>
     </section>
   </main>

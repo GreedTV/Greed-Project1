@@ -951,7 +951,7 @@ async function addFromUrl() {
   const text = params.get("add");
   if (!text) return false;
   history.replaceState(null, "", location.pathname);
-  const platform = ["twitch", "youtube", "kick"].includes(params.get("platform")) ? params.get("platform") : "twitch";
+  const platform = ["twitch", "youtube", "kick"].includes(params.get("platform")) ? params.get("platform") : "kick";
   try {
     const s = await parseFull(text, platform);
     s.id = makeId(s);

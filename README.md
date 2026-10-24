@@ -10,7 +10,7 @@ Live at https://sinnerstv.com/
 GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site links that way.
 
 
-- `index.html` (`/`): home page with a quick "watch a streamer" box
+- `index.html` (`/`): home page with platform logo tiles and a "How to use Sinners" guide
 - `watch.html` (`/watch`): watch streams one at a time with chat, or up to 4 at once
 - `content.html` (`/content`): watch YouTube videos and playlists while waiting for a stream
 - `gallery.html` (`/gallery`): community gallery with Images and Clips sections; visitors share links
@@ -81,3 +81,7 @@ If you use a custom domain, add it to `ALLOWED_ORIGINS` in the Worker.
 ## Run it locally
 
 Serve this folder with any static server and visit http://localhost:8080. To use the short addresses (`/watch`) locally, the server must serve `watch.html` for `/watch` like GitHub Pages does. (Twitch players need a real web address, so opening the files directly won't work.)
+
+## Credits
+
+Platform icons in `icons/` (and inlined on the home page) are from [Simple Icons](https://simpleicons.org/) (CC0). Kick, Twitch and YouTube names and logos belong to their owners.
