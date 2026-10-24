@@ -460,7 +460,8 @@ async function refreshPoints() {
     const login = el("button", "button discord-btn", "Log in");
     login.type = "button";
     login.addEventListener("click", SinnersAuth.login);
-    pointsBar.append(login);
+    pointsBar.append(login, shopButton());
+    renderShop();
     return;
   }
   try {
@@ -470,10 +471,143 @@ async function refreshPoints() {
     myPoints = data.points;
     pointsBar.replaceChildren(
       el("strong", "points-total", `🪙 ${data.points} points`),
-      el("span", null, `Earned from games today: ${data.earnedToday} / ${data.dailyCap}`)
+      el("span", null, `Earned from games today: ${data.earnedToday} / ${data.dailyCap}`),
+      shopButton()
     );
   } catch (e) {
     pointsBar.replaceChildren(el("span", null, "🪙 Points unavailable right now."));
+  }
+  renderShop();
+}
+
+function shopButton() {
+  const btn = el("button", "button ghost shop-jump", "🛒 Shop");
+  btn.type = "button";
+  btn.addEventListener("click", () => document.getElementById("shop").scrollIntoView({ behavior: "smooth" }));
+  return btn;
+}
+
+// ---------- Shop ----------
+
+const shopGrid = document.getElementById("shop-grid");
+let shopItems = null;
+
+async function loadShop() {
+  try {
+    const res = await fetch(`${API}/shop`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    shopItems = data.items || [];
+  } catch (e) {
+    shopItems = null;
+    shopGrid.replaceChildren(el("p", "shop-empty", "The shop is unavailable right now."));
+    return;
+  }
+  renderShop();
+}
+
+function renderShop() {
+  if (!shopItems) return;
+  if (!shopItems.length) {
+    const empty = el("div", "shop-empty");
+    empty.append(el("span", "shop-empty-icon", "🛒"), el("strong", null, "The shop is empty for now."), el("span", null, "New items are coming soon. Keep earning points!"));
+    shopGrid.replaceChildren(empty);
+    return;
+  }
+  shopGrid.replaceChildren(
+    ...shopItems.map((item) => {
+      const card = el("article", "shop-item");
+      const pic = el("div", "shop-pic");
+      const img = el("img");
+      img.src = API + item.image;
+      img.alt = item.name;
+      img.loading = "lazy";
+      pic.append(img);
+      if (item.stock != null) pic.append(el("span", "shop-stock" + (item.stock ? "" : " out"), item.stock ? `${item.stock} left` : "Sold out"));
+
+      const body = el("div", "shop-body");
+      body.append(el("h3", null, item.name));
+      if (item.description) body.append(el("p", null, item.description));
+      const foot = el("div", "shop-foot");
+      foot.append(el("span", "shop-price", `🪙 ${item.price}`));
+      const buy = el("button", "button", "Buy");
+      buy.type = "button";
+      const msg = el("p", "form-msg");
+      if (item.stock === 0) {
+        buy.disabled = true;
+        buy.textContent = "Sold out";
+      } else if (!SinnersAuth.user) {
+        buy.textContent = "Log in to buy";
+        buy.addEventListener("click", SinnersAuth.login);
+      } else if (myPoints != null && myPoints < item.price) {
+        buy.disabled = true;
+        buy.textContent = `Need ${item.price - myPoints} more`;
+      } else {
+        buy.addEventListener("click", () => buyItem(item, buy, msg));
+      }
+      foot.append(buy);
+      body.append(foot, msg);
+      card.append(pic, body);
+      return card;
+    })
+  );
+}
+
+async function buyItem(item, button, msg) {
+  if (!confirm(`Buy "${item.name}" for ${item.price} points?`)) return;
+  button.disabled = true;
+  msg.className = "form-msg";
+  msg.textContent = "Buying…";
+  try {
+    const res = await fetch(`${API}/shop/buy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
+      body: JSON.stringify({ id: item.id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 || res.status === 403) SinnersAuth.expire();
+    if (!res.ok) throw new Error(data.error || "Couldn't buy that.");
+    item.stock = data.stock;
+    await Promise.all([refreshPoints(), loadMine()]);
+    const done = [...shopGrid.children][shopItems.indexOf(item)];
+    const doneMsg = done && done.querySelector(".form-msg");
+    if (doneMsg) {
+      doneMsg.className = "form-msg ok";
+      doneMsg.textContent = "Bought! 🎉 It's in your purchases below.";
+    }
+  } catch (err) {
+    button.disabled = false;
+    msg.className = "form-msg error";
+    msg.textContent = err.message;
+  }
+}
+
+async function loadMine() {
+  const box = document.getElementById("shop-mine");
+  if (!SinnersAuth.user) {
+    box.hidden = true;
+    return;
+  }
+  try {
+    const res = await fetch(`${API}/shop/mine`, { headers: { Authorization: `Bearer ${SinnersAuth.token}` } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    const list = data.purchases || [];
+    box.hidden = !list.length;
+    document.getElementById("shop-mine-list").replaceChildren(
+      ...list.map((p) => {
+        const li = el("li", "shop-mine-row");
+        li.append(
+          el("strong", null, p.name),
+          el("span", "lb-score", `🪙 ${p.price}`),
+          el("small", null, new Date(p.created).toLocaleDateString()),
+          el("span", "shop-status" + (p.delivered ? " done" : ""), p.delivered ? "✓ Delivered" : "Waiting for admin")
+        );
+        return li;
+      })
+    );
+  } catch (e) {
+    box.hidden = true;
   }
 }
 
@@ -655,7 +789,12 @@ renderPicker();
 showIntro();
 loadLeaderboard();
 refreshPoints();
-const stopAuthWatch = SinnersAuth.onChange(refreshPoints);
+loadShop();
+loadMine();
+const stopAuthWatch = SinnersAuth.onChange(() => {
+  refreshPoints();
+  loadMine();
+});
 
 // Back from Discord login with a score waiting to be saved
 try {

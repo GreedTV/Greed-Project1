@@ -48,7 +48,7 @@
     <section class="page-hero">
       <div class="container reveal">
         <h1>While You <span class="gradient-text">Wait</span></h1>
-        <p>Watch YouTube while the stream is starting or on a break.</p>
+        <p>Browse YouTube and watch while the stream is starting or on a break.</p>
       </div>
     </section>
 
@@ -56,7 +56,7 @@
       <div class="container wide content-layout">
         <div class="content-main">
           <div class="player-box content-player" id="content-player">
-            <div class="player-offline">Add a YouTube video or playlist to start watching.</div>
+            <div class="player-offline">Pick a video below, or add a YouTube link.</div>
           </div>
           <div class="content-bar">
             <button class="icon-action" id="prev" type="button" aria-label="Previous video" title="Previous">⏮</button>
@@ -87,6 +87,21 @@
             <ol class="queue" id="queue"></ol>
           </div>
         </aside>
+      </div>
+    </section>
+
+    <section class="section yt-browse" id="browse">
+      <div class="container wide">
+        <div class="browse-head">
+          <h2><svg class="browse-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg> Browse YouTube</h2>
+          <form class="yt-search" id="yt-search" role="search" autocomplete="off">
+            <input id="yt-q" type="search" placeholder="Search YouTube" aria-label="Search YouTube" maxlength="100">
+            <button class="button" type="submit">Search</button>
+          </form>
+        </div>
+        <div class="yt-chips" id="yt-chips" role="tablist" aria-label="Categories"></div>
+        <p class="form-msg" id="yt-msg" role="status"></p>
+        <div class="video-grid" id="yt-grid"></div>
       </div>
     </section>
   </main>

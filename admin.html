@@ -68,6 +68,34 @@
           <div class="review-list" id="banned-list"></div>
           <h2>Game leaderboards</h2>
           <div class="games-admin" id="games-admin"></div>
+
+          <h2>Shop <span class="count" id="shop-count"></span></h2>
+          <form class="share-form shop-form" id="shop-form" autocomplete="off">
+            <h3 id="shop-form-title">Add an item</h3>
+            <div class="shop-form-grid">
+              <label class="shop-drop" id="shop-drop">
+                <input type="file" id="shop-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                <img id="shop-preview" alt="" hidden>
+                <span id="shop-drop-text">🖼️ Choose a picture<br><small>or drop it here</small></span>
+              </label>
+              <div class="shop-fields">
+                <input id="shop-name" type="text" maxlength="60" placeholder="Item name" aria-label="Item name" required>
+                <textarea id="shop-desc" maxlength="300" rows="3" placeholder="Description" aria-label="Description"></textarea>
+                <div class="add-row">
+                  <input id="shop-price" type="number" min="1" max="1000000" placeholder="Price (points)" aria-label="Price in points" required>
+                  <input id="shop-stock" type="number" min="0" max="100000" placeholder="Stock (empty = unlimited)" aria-label="Stock">
+                </div>
+                <div class="add-row">
+                  <button class="button" type="submit" id="shop-save">Add to shop</button>
+                  <button class="button ghost" type="button" id="shop-cancel" hidden>Cancel</button>
+                </div>
+                <p class="form-msg" id="shop-msg" role="status"></p>
+              </div>
+            </div>
+          </form>
+          <div class="review-list" id="shop-list"></div>
+          <h2>Purchases</h2>
+          <div class="review-list" id="purchase-list"></div>
         </div>
       </div>
     </section>

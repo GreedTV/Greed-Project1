@@ -30,3 +30,13 @@ function observeReveals(root = document) {
   root.querySelectorAll(".reveal:not(.visible)").forEach((el) => revealObserver.observe(el));
 }
 observeReveals();
+
+// Background light: stage beams in Kick green, Twitch purple and YouTube red (styles.css .ambient).
+// Added once; nav.js only swaps <main>, so it stays while moving around the site.
+if (!document.querySelector(".ambient")) {
+  const ambient = document.createElement("div");
+  ambient.className = "ambient";
+  ambient.setAttribute("aria-hidden", "true");
+  ambient.innerHTML = '<span class="beam kick"></span><span class="beam twitch"></span><span class="beam youtube"></span><span class="flash"></span>';
+  document.body.prepend(ambient);
+}

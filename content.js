@@ -229,6 +229,144 @@ document.getElementById("clear-queue").addEventListener("click", () => {
   render();
 });
 
+// ---------- Browse YouTube ----------
+// Search results come from the Worker (YouTube has no keyless search for websites).
+
+const API = WORKER_URL.replace(/\/$/, "");
+const CHIPS = [
+  ["🎮 Gaming", "gaming"],
+  ["🔴 Live now", "gaming", true],
+  ["🎬 Streamer highlights", "streamer highlights"],
+  ["🏆 Esports", "esports highlights"],
+  ["🔫 CS2", "cs2"],
+  ["🎯 Valorant", "valorant"],
+  ["⛏️ Minecraft", "minecraft"],
+  ["🚗 GTA", "gta"],
+  ["🎵 Music", "music mix"],
+  ["🎙️ Podcasts", "podcast"],
+  ["😂 Funny", "funny moments"],
+  ["⚽ Football", "football highlights"],
+];
+
+const chipsBox = document.getElementById("yt-chips");
+const grid = document.getElementById("yt-grid");
+const searchForm = document.getElementById("yt-search");
+const searchInput = document.getElementById("yt-q");
+const browseMsg = document.getElementById("yt-msg");
+let searchId = 0;
+
+function renderChips(active) {
+  chipsBox.replaceChildren(
+    ...CHIPS.map(([label, q, live], i) => {
+      const chip = el("button", "yt-chip" + (i === active ? " active" : ""), label);
+      chip.type = "button";
+      chip.setAttribute("role", "tab");
+      chip.setAttribute("aria-selected", i === active);
+      chip.addEventListener("click", () => {
+        searchInput.value = "";
+        renderChips(i);
+        search(q, live);
+      });
+      return chip;
+    })
+  );
+}
+
+function skeletons() {
+  grid.replaceChildren(...Array.from({ length: 8 }, () => el("div", "video-card skeleton")));
+}
+
+async function search(q, live = false) {
+  const id = ++searchId;
+  browseMsg.textContent = "";
+  browseMsg.className = "form-msg";
+  skeletons();
+  let videos;
+  try {
+    const res = await fetch(`${API}/youtube/search?q=${encodeURIComponent(q)}${live ? "&live=1" : ""}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    videos = data.videos || [];
+  } catch (e) {
+    if (id !== searchId) return;
+    grid.replaceChildren();
+    browseMsg.textContent = "Couldn't load YouTube right now. Try again in a moment.";
+    browseMsg.className = "form-msg error";
+    return;
+  }
+  if (id !== searchId) return; // a newer search started meanwhile
+  if (!videos.length) {
+    grid.replaceChildren();
+    browseMsg.textContent = `No videos found for "${q}".`;
+    return;
+  }
+  grid.replaceChildren(...videos.map(videoCard));
+}
+
+function videoCard(v) {
+  const card = el("article", "video-card");
+  const thumb = el("button", "video-thumb");
+  thumb.type = "button";
+  thumb.setAttribute("aria-label", `Play ${v.title}`);
+  const img = el("img");
+  img.src = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
+  img.alt = "";
+  img.loading = "lazy";
+  thumb.append(img, el("span", "video-play", "▶"));
+  if (v.live) thumb.append(el("span", "video-badge live", "● LIVE"));
+  else if (v.length) thumb.append(el("span", "video-badge", v.length));
+  thumb.addEventListener("click", () => playVideo(v));
+
+  const body = el("div", "video-body");
+  const title = el("h3", "video-title", v.title);
+  title.title = v.title;
+  const channel = el("button", "video-channel", v.channel);
+  channel.type = "button";
+  channel.title = `More from ${v.channel}`;
+  channel.addEventListener("click", () => {
+    searchInput.value = v.channel;
+    renderChips(-1);
+    search(v.channel);
+  });
+  const meta = el("span", "video-meta", [v.views, v.published].filter(Boolean).join(" · "));
+  const add = el("button", "video-add", "+ Queue");
+  add.type = "button";
+  add.title = "Add to your queue";
+  add.addEventListener("click", async () => {
+    const added = await addToQueue({ type: "video", yt: v.id, title: v.title });
+    add.textContent = added ? "✓ Queued" : "✓ In queue";
+    add.disabled = true;
+  });
+  body.append(title, channel, meta, add);
+  card.append(thumb, body);
+  return card;
+}
+
+function playVideo(v) {
+  addToQueue({ type: "video", yt: v.id, title: v.title }, { playNow: true });
+  if (!mini.isMini()) playerBox.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+searchForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = searchInput.value.trim();
+  if (!q) return;
+  // A pasted YouTube link goes straight to the player
+  if (/youtu\.?be/i.test(q)) {
+    try {
+      addToQueue(parseYouTube(q), { playNow: true });
+      searchInput.value = "";
+      playerBox.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    } catch (err) {}
+  }
+  renderChips(-1);
+  search(q);
+});
+
+renderChips(0);
+search(CHIPS[0][1]);
+
 // ---------- Start ----------
 
 render();

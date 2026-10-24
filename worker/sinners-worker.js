@@ -12,6 +12,17 @@
 // YouTube channels
 //   GET  /youtube/channel?q=<@handle | name | channel link | UC id>  -> { id, name }
 //   GET  /youtube/live?channel=<UC id>                               -> { live, videoId, title, name }
+//   GET  /youtube/search?q=<words>&live=1?                           -> { videos: [...] } (Content page browsing)
+//
+// Shop (Games page; items are bought with points)
+//   GET  /shop                         -> { items: [...] }
+//   GET  /shop/image/<id>              -> the item's picture
+//   GET  /shop/mine                    -> your purchases   (logged in)
+//   POST /shop/buy                     -> { id }   (logged in)
+//   GET  /shop-admin                   -> items and recent purchases   (admin)
+//   POST /shop-admin                   -> { action: "add", name, description, price, stock?, image: <data URL> }
+//                                         | { action: "update", id, ...same fields, image optional } | { action: "delete", id }
+//                                         | { action: "deliver", purchaseId, delivered }   (admin)
 //
 // Mini game leaderboards (Games page)
 //   GET  /games/leaderboard?game=<id>   -> { game, scores: [top 10] }
@@ -90,6 +101,22 @@ export default {
 
       if (path === "/youtube/channel" && request.method === "GET") return await youtubeChannel(url, cors);
       if (path === "/youtube/live" && request.method === "GET") return await youtubeLive(url, cors);
+      if (path === "/youtube/search" && request.method === "GET") return await youtubeSearch(url, cors);
+
+      const shopImage = path.match(/^\/shop\/image\/(\d+)$/);
+      if (shopImage && request.method === "GET") {
+        if (!env.GALLERY) return text("Not found", 404, cors);
+        return await shopImageGet(shopImage[1], env, cors);
+      }
+      if (path.startsWith("/shop")) {
+        if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
+        await ensureSchema(env);
+        if (path === "/shop" && request.method === "GET") return await shopList(env, cors);
+        if (path === "/shop/mine" && request.method === "GET") return await shopMine(request, env, cors);
+        if (path === "/shop/buy" && request.method === "POST") return await shopBuy(request, env, cors);
+        if (path === "/shop-admin" && request.method === "GET") return await shopAdminList(request, env, cors);
+        if (path === "/shop-admin" && request.method === "POST") return await shopAdminAction(request, env, cors);
+      }
 
       // Login pages are opened by the browser directly, so they answer with redirects
       if (path === "/auth/discord") return await discordStart(url, env);
@@ -231,6 +258,59 @@ async function youtubeLive(url, cors) {
     200,
     { ...cors, "Cache-Control": "public, max-age=60" }
   );
+}
+
+// Search results for the Content page. The page's data sits in a "ytInitialData" JSON blob;
+// every video in it is a "videoRenderer" object.
+const SEARCH_LIVE = "EgJAAQ%253D%253D"; // YouTube's "Live" search filter
+
+async function youtubeSearch(url, cors) {
+  const q = clean(url.searchParams.get("q"), 100);
+  if (!q) fail("Type something to search for.");
+  const live = url.searchParams.get("live") === "1";
+  const html = await youtubePage(`/results?search_query=${encodeURIComponent(q)}${live ? `&sp=${SEARCH_LIVE}` : ""}`);
+  if (!html) fail("Couldn't reach YouTube", 502);
+  const start = html.indexOf("var ytInitialData = ");
+  let data = null;
+  if (start !== -1) {
+    const from = start + "var ytInitialData = ".length;
+    try {
+      data = JSON.parse(html.slice(from, html.indexOf(";</script>", from)));
+    } catch (e) {}
+  }
+  if (!data) fail("Couldn't read YouTube's results", 502);
+
+  const words = (t) => (t ? t.simpleText || (t.runs || []).map((r) => r.text).join("") : "");
+  const videos = [];
+  const seen = new Set();
+  (function walk(node) {
+    if (!node || typeof node !== "object" || videos.length >= 40) return;
+    if (Array.isArray(node)) return node.forEach(walk);
+    for (const key in node) {
+      const v = node[key];
+      if (key !== "videoRenderer") {
+        walk(v);
+        continue;
+      }
+      if (!v || !v.videoId || seen.has(v.videoId)) continue;
+      seen.add(v.videoId);
+      const owner = ((v.ownerText || v.longBylineText || {}).runs || [])[0] || {};
+      const isLive =
+        (v.badges || []).some((b) => /LIVE/.test((b.metadataBadgeRenderer || {}).style || "")) ||
+        (v.thumbnailOverlays || []).some((o) => (o.thumbnailOverlayTimeStatusRenderer || {}).style === "LIVE");
+      videos.push({
+        id: v.videoId,
+        title: clean(words(v.title), 150),
+        channel: clean(owner.text, 80),
+        channelId: ((owner.navigationEndpoint || {}).browseEndpoint || {}).browseId || "",
+        length: clean(words(v.lengthText), 12),
+        views: clean(words(v.shortViewCountText) || words(v.viewCountText), 40).replace(/^[\d.,]+[KMB]?$/, "$& views"),
+        published: clean(words(v.publishedTimeText), 40),
+        live: isLive,
+      });
+    }
+  })(data);
+  return json({ videos }, 200, { ...cors, "Cache-Control": "public, max-age=600" });
 }
 
 // ---------- Kick HD ----------
@@ -555,6 +635,15 @@ async function ensureSchema(env) {
         "winners INTEGER NOT NULL DEFAULT 0, paid INTEGER NOT NULL DEFAULT 0, settled_at INTEGER NOT NULL, PRIMARY KEY (game, round))"
     ),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS pools (game TEXT PRIMARY KEY, jackpot INTEGER NOT NULL DEFAULT 0)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS shop_items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', " +
+        "price INTEGER NOT NULL, stock INTEGER, created INTEGER NOT NULL)"
+    ),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS purchases (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL, item_name TEXT NOT NULL, " +
+        "user_id TEXT NOT NULL, name TEXT NOT NULL, avatar TEXT, price INTEGER NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)"
+    ),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS purchases_user ON purchases (user_id, id)"),
   ]);
   schemaReady = true;
 }
@@ -929,6 +1018,143 @@ async function betPlace(request, env, cors) {
   }
   const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
   return json({ ok: true, points: w.points, round }, 200, cors);
+}
+
+// ---------- Shop ----------
+// Admin adds items (picture, name, description, price, optional stock); players buy them with points.
+// Pictures are stored in the GALLERY KV namespace; purchases are listed for the admin to hand out.
+
+const SHOP_IMAGE_MAX = 1500000; // bytes
+const SHOP_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const SHOP_COLUMNS = "id, name, description, price, stock, created";
+
+function shopItemOut(item) {
+  return { ...item, image: `/shop/image/${item.id}?v=${item.created}` };
+}
+
+async function shopImageGet(id, env, cors) {
+  const { value, metadata } = await env.GALLERY.getWithMetadata(`shop-img:${id}`, "arrayBuffer");
+  if (!value) return text("Not found", 404, cors);
+  return new Response(value, {
+    headers: { ...cors, "Content-Type": (metadata && metadata.type) || "image/jpeg", "Cache-Control": "public, max-age=31536000, immutable" },
+  });
+}
+
+async function shopList(env, cors) {
+  const { results } = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items ORDER BY price, id`).all();
+  return json({ items: results.map(shopItemOut) }, 200, cors);
+}
+
+async function shopMine(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { results } = await env.DB.prepare(
+    "SELECT id, item_id AS itemId, item_name AS name, price, delivered, created FROM purchases WHERE user_id = ? ORDER BY id DESC LIMIT 50"
+  )
+    .bind(user.id)
+    .all();
+  return json({ purchases: results }, 200, cors);
+}
+
+async function shopBuy(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { id } = await readJson(request);
+  const item = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items WHERE id = ?`).bind(Math.floor(Number(id)) || 0).first();
+  if (!item) fail("That item isn't in the shop anymore.", 404);
+  await wallet(env, user);
+
+  // Hold one from the stock first (no limit when stock is empty), then take the points
+  const hold = await env.DB.prepare("UPDATE shop_items SET stock = stock - 1 WHERE id = ? AND (stock IS NULL OR stock > 0)").bind(item.id).run();
+  if (!hold.meta || hold.meta.changes !== 1) fail("Sold out.", 409);
+  const take = await env.DB.prepare("UPDATE wallets SET points = points - ? WHERE user_id = ? AND points >= ?")
+    .bind(item.price, user.id, item.price)
+    .run();
+  if (!take.meta || take.meta.changes !== 1) {
+    await env.DB.prepare("UPDATE shop_items SET stock = stock + 1 WHERE id = ? AND stock IS NOT NULL").bind(item.id).run();
+    fail("You don't have enough points for that.", 400);
+  }
+  await env.DB.prepare(
+    "INSERT INTO purchases (item_id, item_name, user_id, name, avatar, price, created) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  )
+    .bind(item.id, item.name, user.id, user.name, user.avatar, item.price, Date.now())
+    .run();
+  const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
+  const left = await env.DB.prepare("SELECT stock FROM shop_items WHERE id = ?").bind(item.id).first();
+  return json({ ok: true, points: w.points, stock: left ? left.stock : null }, 200, cors);
+}
+
+async function shopAdminList(request, env, cors) {
+  checkAdmin(request, env);
+  const { results: items } = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items ORDER BY price, id`).all();
+  const { results: purchases } = await env.DB.prepare(
+    "SELECT id, item_name AS item, user_id AS userId, name, price, delivered, created FROM purchases ORDER BY id DESC LIMIT 100"
+  ).all();
+  return json({ items: items.map(shopItemOut), purchases }, 200, cors);
+}
+
+// "data:image/png;base64,...." -> { type, bytes }
+function decodeImage(dataUrl) {
+  const match = String(dataUrl || "").match(/^data:(image\/[a-z]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match || !SHOP_IMAGE_TYPES.includes(match[1])) fail("Pick a JPG, PNG, WebP or GIF picture.");
+  const bin = atob(match[2]);
+  if (bin.length > SHOP_IMAGE_MAX) fail("That picture is too big (1.5 MB max).");
+  return { type: match[1], bytes: Uint8Array.from(bin, (c) => c.charCodeAt(0)) };
+}
+
+function shopFields(body) {
+  const name = clean(body.name, 60);
+  if (!name) fail("Give the item a name.");
+  const price = Math.floor(Number(body.price));
+  if (!Number.isFinite(price) || price < 1 || price > 1000000) fail("Price must be between 1 and 1,000,000 points.");
+  let stock = null;
+  if (body.stock !== "" && body.stock != null) {
+    stock = Math.floor(Number(body.stock));
+    if (!Number.isFinite(stock) || stock < 0 || stock > 100000) fail("Stock must be a number (leave it empty for unlimited).");
+  }
+  return { name, description: clean(body.description, 300), price, stock };
+}
+
+async function shopAdminAction(request, env, cors) {
+  checkAdmin(request, env);
+  const body = await readJson(request);
+  const { action } = body;
+
+  if (action === "add" || action === "update") {
+    if (!env.GALLERY) fail("Picture storage isn't set up yet (GALLERY binding missing).", 503);
+    const f = shopFields(body);
+    const image = action === "add" || body.image ? decodeImage(body.image) : null;
+    const created = Date.now();
+    let id;
+    if (action === "add") {
+      const row = await env.DB.prepare("INSERT INTO shop_items (name, description, price, stock, created) VALUES (?, ?, ?, ?, ?) RETURNING id")
+        .bind(f.name, f.description, f.price, f.stock, created)
+        .first();
+      id = row.id;
+    } else {
+      id = Math.floor(Number(body.id)) || 0;
+      // "created" also versions the picture's address, so a new picture isn't hidden by the browser cache
+      const res = await env.DB.prepare(
+        `UPDATE shop_items SET name = ?, description = ?, price = ?, stock = ?${image ? ", created = ?" : ""} WHERE id = ?`
+      )
+        .bind(f.name, f.description, f.price, f.stock, ...(image ? [created] : []), id)
+        .run();
+      if (!res.meta || res.meta.changes !== 1) fail("That item doesn't exist anymore.", 404);
+    }
+    if (image) await env.GALLERY.put(`shop-img:${id}`, image.bytes, { metadata: { type: image.type } });
+    return json({ ok: true, id }, 200, cors);
+  }
+  if (action === "delete") {
+    const id = Math.floor(Number(body.id)) || 0;
+    await env.DB.prepare("DELETE FROM shop_items WHERE id = ?").bind(id).run();
+    if (env.GALLERY) await env.GALLERY.delete(`shop-img:${id}`);
+    return json({ ok: true }, 200, cors);
+  }
+  if (action === "deliver") {
+    await env.DB.prepare("UPDATE purchases SET delivered = ? WHERE id = ?")
+      .bind(body.delivered ? 1 : 0, Math.floor(Number(body.purchaseId)) || 0)
+      .run();
+    return json({ ok: true }, 200, cors);
+  }
+  fail("Unknown action", 400);
 }
 
 // ---------- Helpers ----------

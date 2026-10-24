@@ -43,6 +43,207 @@ async function refresh() {
   }
   refreshChat();
   refreshGames();
+  refreshShop();
+}
+
+// ---------- Shop ----------
+
+const shopForm = document.getElementById("shop-form");
+const shopFile = document.getElementById("shop-file");
+const shopPreview = document.getElementById("shop-preview");
+const shopDropText = document.getElementById("shop-drop-text");
+const shopMsg = document.getElementById("shop-msg");
+const shopFields = ["name", "desc", "price", "stock"].map((f) => document.getElementById(`shop-${f}`));
+let shopImage = ""; // data URL of the picked picture
+let editingItem = null;
+
+function setShopMsg(text, type) {
+  shopMsg.className = "form-msg" + (type ? ` ${type}` : "");
+  shopMsg.textContent = text;
+}
+
+// Pictures are shrunk to at most 800px in the browser so they load fast. GIFs are kept as they are (to keep the animation).
+function readPicture(file) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return reject(new Error("Pick a JPG, PNG, WebP or GIF picture."));
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Couldn't read that file."));
+    reader.onload = () => {
+      if (file.type === "image/gif") {
+        if (file.size > 1500000) return reject(new Error("GIFs can be at most 1.5 MB."));
+        return resolve(reader.result);
+      }
+      const img = new Image();
+      img.onerror = () => reject(new Error("Couldn't open that picture."));
+      img.onload = () => {
+        const scale = Math.min(1, 800 / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        let url = canvas.toDataURL("image/webp", 0.85);
+        if (!url.startsWith("data:image/webp")) url = canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.85);
+        resolve(url);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function pickPicture(file) {
+  if (!file) return;
+  try {
+    shopImage = await readPicture(file);
+    shopPreview.src = shopImage;
+    shopPreview.hidden = false;
+    shopDropText.hidden = true;
+    setShopMsg("");
+  } catch (err) {
+    setShopMsg(err.message, "error");
+  }
+}
+
+shopFile.addEventListener("change", () => pickPicture(shopFile.files[0]));
+const drop = document.getElementById("shop-drop");
+drop.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  drop.classList.add("over");
+});
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.classList.remove("over");
+  pickPicture(e.dataTransfer.files[0]);
+});
+
+function resetShopForm() {
+  editingItem = null;
+  shopImage = "";
+  shopForm.reset();
+  shopPreview.hidden = true;
+  shopPreview.removeAttribute("src");
+  shopDropText.hidden = false;
+  document.getElementById("shop-form-title").textContent = "Add an item";
+  document.getElementById("shop-save").textContent = "Add to shop";
+  document.getElementById("shop-cancel").hidden = true;
+}
+
+function editItem(item) {
+  editingItem = item;
+  shopImage = "";
+  const [name, desc, price, stock] = shopFields;
+  name.value = item.name;
+  desc.value = item.description;
+  price.value = item.price;
+  stock.value = item.stock == null ? "" : item.stock;
+  shopPreview.src = API + item.image;
+  shopPreview.hidden = false;
+  shopDropText.hidden = true;
+  document.getElementById("shop-form-title").textContent = `Edit "${item.name}"`;
+  document.getElementById("shop-save").textContent = "Save changes";
+  document.getElementById("shop-cancel").hidden = false;
+  setShopMsg("Pick a new picture only if you want to change it.");
+  shopForm.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+document.getElementById("shop-cancel").addEventListener("click", () => {
+  resetShopForm();
+  setShopMsg("");
+});
+
+shopForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!editingItem && !shopImage) return setShopMsg("Choose a picture for the item.", "error");
+  const [name, desc, price, stock] = shopFields.map((f) => f.value.trim());
+  const body = { action: editingItem ? "update" : "add", name, description: desc, price, stock };
+  if (editingItem) body.id = editingItem.id;
+  if (shopImage) body.image = shopImage;
+  const save = document.getElementById("shop-save");
+  save.disabled = true;
+  setShopMsg("Saving…");
+  try {
+    await api("/shop-admin", { method: "POST", body: JSON.stringify(body) });
+    const added = !editingItem;
+    resetShopForm();
+    setShopMsg(added ? `"${name}" is in the shop now.` : "Saved.", "ok");
+    await refreshShop();
+  } catch (err) {
+    setShopMsg(err.message, "error");
+  } finally {
+    save.disabled = false;
+  }
+});
+
+async function shopAction(body, confirmText, button) {
+  if (confirmText && !confirm(confirmText)) return;
+  button.disabled = true;
+  try {
+    await api("/shop-admin", { method: "POST", body: JSON.stringify(body) });
+    await refreshShop();
+  } catch (err) {
+    button.disabled = false;
+    alert(err.message);
+  }
+}
+
+async function refreshShop() {
+  const list = document.getElementById("shop-list");
+  const bought = document.getElementById("purchase-list");
+  let data;
+  try {
+    data = await api("/shop-admin");
+  } catch (err) {
+    list.replaceChildren(el("p", "gallery-empty", `Shop unavailable: ${err.message}`));
+    bought.replaceChildren();
+    return;
+  }
+  const items = data.items || [];
+  document.getElementById("shop-count").textContent = items.length ? `(${items.length})` : "";
+  if (!items.length) list.replaceChildren(el("p", "gallery-empty", "The shop is empty. Add the first item above."));
+  else
+    list.replaceChildren(
+      ...items.map((item) => {
+        const row = el("div", "review-item");
+        const pic = el("div", "review-preview");
+        const img = el("img");
+        img.src = API + item.image;
+        img.alt = "";
+        pic.append(img);
+        const info = el("div", "review-info");
+        info.append(el("strong", null, item.name));
+        if (item.description) info.append(el("span", null, item.description));
+        info.append(el("small", null, `🪙 ${item.price} · ${item.stock == null ? "unlimited" : `${item.stock} left`}`));
+        const actions = el("div", "review-actions");
+        const edit = el("button", "button ghost", "Edit");
+        edit.type = "button";
+        edit.addEventListener("click", () => editItem(item));
+        const del = el("button", "button ghost", "Delete");
+        del.type = "button";
+        del.addEventListener("click", () => shopAction({ action: "delete", id: item.id }, `Delete "${item.name}" from the shop?`, del));
+        actions.append(edit, del);
+        row.append(pic, info, actions);
+        return row;
+      })
+    );
+
+  const purchases = data.purchases || [];
+  if (!purchases.length) return bought.replaceChildren(el("p", "gallery-empty", "Nobody has bought anything yet."));
+  bought.replaceChildren(
+    ...purchases.map((p) => {
+      const row = el("div", "review-item chat-review" + (p.delivered ? " delivered" : ""));
+      const info = el("div", "review-info");
+      info.append(el("strong", null, `${p.name} bought ${p.item}`));
+      info.append(el("small", null, `🪙 ${p.price} · ${new Date(p.created).toLocaleString()} · Discord ID ${p.userId}`));
+      const actions = el("div", "review-actions");
+      const mark = el("button", p.delivered ? "button ghost" : "button", p.delivered ? "Undo" : "✓ Mark delivered");
+      mark.type = "button";
+      mark.addEventListener("click", () => shopAction({ action: "deliver", purchaseId: p.id, delivered: !p.delivered }, null, mark));
+      actions.append(mark);
+      row.append(info, actions);
+      return row;
+    })
+  );
 }
 
 // ---------- Game leaderboards ----------
