@@ -671,10 +671,78 @@ function fromB64url(str) {
 // ---------- Sinners chat ----------
 // Messages live in D1. Viewers poll for new messages every few seconds.
 
+// The first Discord bot saved players under their bare Discord id while the website uses
+// "discord:<id>", so playing on both made two accounts. This folds each bare-id account into the
+// website one: the stronger adventurer is kept and gets every item, coins earned on Discord are added
+// (minus the second free 100), and scores, bets, boss damage, quests and streaks move over.
+async function mergeSplitAccounts(env) {
+  const run = (sql, ...args) => env.DB.prepare(sql).bind(...args).run();
+  const one = (sql, ...args) => env.DB.prepare(sql).bind(...args).first();
+  const ids = new Set();
+  for (const table of ["wallets", "heroes", "hero_items", "bets", "scores", "purchases", "boss_hits", "daily", "streaks"]) {
+    try {
+      const { results } = await env.DB.prepare(`SELECT DISTINCT user_id AS id FROM ${table} WHERE user_id NOT LIKE 'discord:%'`).all();
+      results.forEach((r) => /^\d{5,25}$/.test(r.id) && ids.add(r.id));
+    } catch (e) {} // table not made yet
+  }
+  for (const raw of ids) {
+    const to = `discord:${raw}`;
+    // Wallet: add what was earned on Discord, not its starting 100
+    const oldW = await one("SELECT points FROM wallets WHERE user_id = ?", raw);
+    if (oldW) {
+      const newW = await one("SELECT points FROM wallets WHERE user_id = ?", to);
+      if (newW) await run("UPDATE wallets SET points = points + ? WHERE user_id = ?", Math.max(0, oldW.points - START_POINTS), to);
+      else await run("UPDATE wallets SET user_id = ? WHERE user_id = ?", to, raw);
+      await run("DELETE FROM wallets WHERE user_id = ?", raw);
+    }
+    // Adventurer: keep the one with more progress; items from both end up with it
+    const oldH = await one("SELECT level, xp FROM heroes WHERE user_id = ?", raw);
+    if (oldH) {
+      const newH = await one("SELECT level, xp FROM heroes WHERE user_id = ?", to);
+      const keepOld = !newH || oldH.level > newH.level || (oldH.level === newH.level && oldH.xp > newH.xp);
+      if (keepOld) {
+        // The Discord adventurer stays (with its gear on); the website one's gear goes to the bag
+        if (newH) {
+          await run("DELETE FROM heroes WHERE user_id = ?", to);
+          await run("UPDATE hero_items SET equipped = 0 WHERE user_id = ?", to);
+        }
+        await run("UPDATE heroes SET user_id = ? WHERE user_id = ?", to, raw);
+        await run("UPDATE hero_items SET user_id = ? WHERE user_id = ?", to, raw);
+      } else {
+        await run("UPDATE hero_items SET user_id = ?, equipped = 0 WHERE user_id = ?", to, raw);
+        await run("DELETE FROM heroes WHERE user_id = ?", raw);
+      }
+    } else {
+      await run("UPDATE hero_items SET user_id = ?, equipped = 0 WHERE user_id = ?", to, raw);
+    }
+    // Rows keyed by user: move them, and combine where both accounts have one
+    await run(
+      "UPDATE boss_hits SET damage = damage + COALESCE((SELECT o.damage FROM boss_hits o WHERE o.week = boss_hits.week AND o.user_id = ?), 0), " +
+        "hits = hits + COALESCE((SELECT o.hits FROM boss_hits o WHERE o.week = boss_hits.week AND o.user_id = ?), 0) WHERE user_id = ?",
+      raw,
+      raw,
+      to
+    );
+    await run(
+      "UPDATE daily SET " +
+        DAILY_COUNTERS.map((k) => `${k} = ${k} + COALESCE((SELECT o.${k} FROM daily o WHERE o.day = daily.day AND o.user_id = ?), 0)`).join(", ") +
+        " WHERE user_id = ?",
+      ...DAILY_COUNTERS.map(() => raw),
+      to
+    );
+    for (const table of ["bets", "scores", "purchases", "boss_hits", "daily", "streaks", "score_limits"]) {
+      try {
+        await run(`UPDATE OR IGNORE ${table} SET user_id = ? WHERE user_id = ?`, to, raw);
+        await run(`DELETE FROM ${table} WHERE user_id = ?`, raw);
+      } catch (e) {}
+    }
+  }
+}
+
 // Bump SCHEMA_VERSION whenever tables or columns change. The database remembers the version it has,
 // so the full setup below runs once per change instead of on every cold start (which was slow
 // enough to miss Discord's 3-second limit).
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -788,6 +856,7 @@ async function ensureSchema(env) {
       await env.DB.prepare(sql).run();
     } catch (e) {}
   }
+  await mergeSplitAccounts(env);
   await env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
     env.DB.prepare("INSERT INTO meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(SCHEMA_VERSION)),
@@ -1253,7 +1322,7 @@ async function shopBuy(request, env, cors, ctx) {
   const left = await env.DB.prepare("SELECT stock FROM shop_items WHERE id = ?").bind(item.id).first();
   later(ctx, discordNotify(env, {
     title: "🛒 New shop purchase",
-    description: `<@${user.id}> (${user.name}) bought **${item.name}** for ${item.price} 🪙.\nHand it out, then mark it delivered on the admin page.`,
+    description: `<@${discordIdOf(user.id)}> (${user.name}) bought **${item.name}** for ${item.price} 🪙.\nHand it out, then mark it delivered on the admin page.`,
     url: `${SITE_URL}/admin`,
   }));
   return json({ ok: true, points: w.points, stock: left ? left.stock : null }, 200, cors);
@@ -2606,15 +2675,8 @@ async function botCommand(interaction, env, origin) {
   const caller = (interaction.member && interaction.member.user) || interaction.user || {};
 
   if (name === "dungeon") {
-    if (!caller.id) return botReply("Use this in a server or DM with me.", { ephemeral: true });
-    const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(caller.id).first();
-    if (banned && banned.banned) return botReply("Your account is banned from Sinners.", { ephemeral: true });
-    // Same shape as a site login, so the wallet keeps the right name and avatar
-    const user = {
-      id: caller.id,
-      name: caller.global_name || caller.username || "Adventurer",
-      avatar: caller.avatar ? `https://cdn.discordapp.com/avatars/${caller.id}/${caller.avatar}.png?size=64` : "",
-    };
+    const user = await discordPlayer(env, caller);
+    if (user.error) return botReply(user.error, { ephemeral: true });
     const sub = options[0] || { name: "status", options: [] };
     const RARITY_DOT = { common: "⚪", uncommon: "🟢", rare: "🔵", epic: "🟣", legendary: "🟠" };
     await wallet(env, user);
@@ -2675,14 +2737,8 @@ async function botCommand(interaction, env, origin) {
   }
 
   if (name === "boss") {
-    if (!caller.id) return botReply("Use this in a server or DM with me.", { ephemeral: true });
-    const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(caller.id).first();
-    if (banned && banned.banned) return botReply("Your account is banned from Sinners.", { ephemeral: true });
-    const user = {
-      id: caller.id,
-      name: caller.global_name || caller.username || "Adventurer",
-      avatar: caller.avatar ? `https://cdn.discordapp.com/avatars/${caller.id}/${caller.avatar}.png?size=64` : "",
-    };
+    const user = await discordPlayer(env, caller);
+    if (user.error) return botReply(user.error, { ephemeral: true });
     await wallet(env, user);
     const lines = [];
     const sub = (options[0] || {}).name || "status";
@@ -2735,14 +2791,8 @@ async function botCommand(interaction, env, origin) {
   }
 
   if (name === "daily") {
-    if (!caller.id) return botReply("Use this in a server or DM with me.", { ephemeral: true });
-    const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(caller.id).first();
-    if (banned && banned.banned) return botReply("Your account is banned from Sinners.", { ephemeral: true });
-    const user = {
-      id: caller.id,
-      name: caller.global_name || caller.username || "Adventurer",
-      avatar: caller.avatar ? `https://cdn.discordapp.com/avatars/${caller.id}/${caller.avatar}.png?size=64` : "",
-    };
+    const user = await discordPlayer(env, caller);
+    if (user.error) return botReply(user.error, { ephemeral: true });
     await wallet(env, user);
     const got = [];
     // Check in, claim finished quests and the chest, all in one go
@@ -2783,18 +2833,12 @@ async function botCommand(interaction, env, origin) {
   }
 
   if (name === "duel") {
-    if (!caller.id) return botReply("Use this in a server or DM with me.", { ephemeral: true });
-    const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(caller.id).first();
-    if (banned && banned.banned) return botReply("Your account is banned from Sinners.", { ephemeral: true });
-    const user = {
-      id: caller.id,
-      name: caller.global_name || caller.username || "Adventurer",
-      avatar: caller.avatar ? `https://cdn.discordapp.com/avatars/${caller.id}/${caller.avatar}.png?size=64` : "",
-    };
+    const user = await discordPlayer(env, caller);
+    if (user.error) return botReply(user.error, { ephemeral: true });
     await wallet(env, user);
     let r;
     try {
-      r = await duel(env, user, opt("opponent"));
+      r = await duel(env, user, opt("opponent") && `discord:${opt("opponent")}`);
     } catch (err) {
       return botReply(`⚠️ ${err.message}`, { ephemeral: true });
     }
@@ -2822,8 +2866,9 @@ async function botCommand(interaction, env, origin) {
   }
 
   if (name === "points") {
-    const id = opt("user") || caller.id;
-    const discordUser = (resolved.users && resolved.users[id]) || caller;
+    const raw = opt("user") || caller.id;
+    const id = `discord:${raw}`;
+    const discordUser = (resolved.users && resolved.users[raw]) || caller;
     const label = discordUser.global_name || discordUser.username || "That player";
     const w = await env.DB.prepare("SELECT points, earned_day AS day, earned_today AS today FROM wallets WHERE user_id = ?").bind(id).first();
     if (!w) return botReply(`${label} hasn't played on Sinners yet. Log in at ${SITE_URL}/games to get 100 free points.`, { ephemeral: !opt("user") });
@@ -3094,6 +3139,22 @@ function helpMessage(topic, admin) {
     components: rows,
   };
 }
+
+// The Discord member using a command, as their Sinners account. The website logs people in as
+// "discord:<Discord ID>", so the bot uses the same id: one account, whichever side they play on.
+async function discordPlayer(env, caller) {
+  if (!caller || !caller.id) return { error: "Use this in a server or DM with me." };
+  const id = `discord:${caller.id}`;
+  const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(id).first();
+  if (banned && banned.banned) return { error: "Your account is banned from Sinners." };
+  return {
+    id,
+    name: clean(caller.global_name || caller.username, 32) || "Adventurer",
+    avatar: caller.avatar ? `https://cdn.discordapp.com/avatars/${caller.id}/${caller.avatar}.png?size=64` : "",
+  };
+}
+
+const discordIdOf = (userId) => String(userId).replace(/^discord:/, "");
 
 // Fills in a deferred reply ("Sinners is thinking…") with the real answer
 async function editOriginal(env, interaction, build) {
