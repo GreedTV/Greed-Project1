@@ -2,7 +2,12 @@
 // Each entry: { platform: "twitch" | "kick", channel: "name" }
 //         or: { platform: "youtube", video: "VIDEO_ID" } / { platform: "youtube", channel: "UC..." }
 // Add a "label" to show a different display name.
-const DEFAULT_STREAMERS = [];
+const DEFAULT_STREAMERS = [
+  { platform: "kick", channel: "lexor2k", label: "Lexor2k" },
+  { platform: "kick", channel: "st0pcs", label: "St0pCS" },
+  { platform: "twitch", channel: "kaicenat", label: "Kai Cenat" },
+  { platform: "youtube", channel: "UCWsDFcIhY2DBi3GB5uykGXA", label: "IShowSpeed" },
+];
 
 const STORAGE_KEY = "sinners-streamers";
 const MAX_MULTI = 4;
