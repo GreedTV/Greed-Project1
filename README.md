@@ -51,7 +51,7 @@ Live at https://sinnerstv.com/
 
 ## Cloudflare Worker
 
-`worker/sinners-worker.js``worker/sinners-worker.js` does five jobs:
+`worker/sinners-worker.js` does five jobs:
 
 1. **Kick HD:** asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers. Video chunks load straight from Kick's servers. Kick may change or block this at any time.
 2. **Gallery:** stores shared links in Workers KV and handles the review queue.
