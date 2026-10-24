@@ -313,7 +313,7 @@ function renderTrip() {
     [m.emoji, `Boss: ${m.name} (⚔️ ${m.atk} · 🛡️ ${m.def} · ❤️ ${m.hp})`],
     ["🎯", `${d.chance}% chance to win (your power ${powerOf(state.hero.fighting)} vs. ${d.monsterPower})`],
     ["⏱️", `${d.minutes >= 60 ? `${d.minutes / 60} h` : `${d.minutes} min`} · ✨ ${d.xp[0]}–${d.xp[1]} XP`],
-    ["🎁", `${Math.round(d.loot * 100)}% chance of loot when you win`],
+    ["🎁", `Win: 🪙 ${d.coins[0]}–${d.coins[1]} coins and a ${Math.round(d.loot * 100)}% chance of loot`],
   ].forEach(([i, t]) => {
     const li = el("li");
     li.append(el("span", null, i), document.createTextNode(` ${t}`));
@@ -366,7 +366,7 @@ async function collect() {
     clockSkew = state.now - Date.now();
     const m = r.dungeon.monster;
     const lines = [
-      r.won ? `🏆 Beat the ${m.name} in ${r.dungeon.name}! +${r.xp} XP` : `💀 The ${m.name} won this time… but you still learned something: +${r.xp} XP`,
+      r.won ? `🏆 Beat the ${m.name} in ${r.dungeon.name}! +${r.xp} XP · +${r.coins} 🪙` : `💀 The ${m.name} won this time… but you still learned something: +${r.xp} XP`,
     ];
     if (r.item) {
       const [label] = RARITY[r.item.rarity];
