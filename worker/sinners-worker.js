@@ -9,6 +9,10 @@
 //   GET  /gallery/pending       -> pending items             (admin: "Authorization: Bearer <ADMIN_PASSWORD>")
 //   POST /gallery/moderate      -> { id, action: "approve" | "reject" | "delete" }   (admin)
 //
+// YouTube channels
+//   GET  /youtube/channel?q=<@handle | name | channel link | UC id>  -> { id, name }
+//   GET  /youtube/live?channel=<UC id>                               -> { live, videoId, title, name }
+//
 // Discord login
 //   GET  /auth/discord?return=<page url>  -> sends the visitor to Discord, then back to the page with #session=<token>
 //   GET  /me                              -> the logged-in user ("Authorization: Bearer <session token>")
@@ -71,6 +75,9 @@ export default {
       const kick = path.match(/^\/kick\/([a-zA-Z0-9_-]{2,30})\.m3u8$/);
       if (kick && request.method === "GET") return await kickPlaylist(kick[1].toLowerCase(), cors);
 
+      if (path === "/youtube/channel" && request.method === "GET") return await youtubeChannel(url, cors);
+      if (path === "/youtube/live" && request.method === "GET") return await youtubeLive(url, cors);
+
       // Login pages are opened by the browser directly, so they answer with redirects
       if (path === "/auth/discord") return await discordStart(url, env);
       if (path === "/auth/discord/callback") return await discordCallback(url, env);
@@ -99,6 +106,84 @@ export default {
     }
   },
 };
+
+// ---------- YouTube channels ----------
+// YouTube has no public way to look up a channel or its live stream without an API key, so this reads
+// the public channel pages. The SOCS cookie answers YouTube's cookie-consent page ("reject all"),
+// which would otherwise be shown instead of the channel in some countries.
+
+const YT_HEADERS = {
+  "User-Agent": BROWSER_HEADERS["User-Agent"],
+  "Accept-Language": "en",
+  Cookie: "SOCS=CAI",
+};
+const UC_ID = /^UC[\w-]{22}$/;
+
+async function youtubePage(path) {
+  const res = await fetch(`https://www.youtube.com${path}`, { headers: YT_HEADERS, redirect: "follow" });
+  return res.ok ? await res.text() : null;
+}
+
+function decodeHtml(text) {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function channelFromPage(html) {
+  if (!html) return null;
+  const id = (html.match(/<meta itemprop="identifier" content="(UC[\w-]{22})"/) ||
+    html.match(/"externalId":"(UC[\w-]{22})"/) ||
+    html.match(/channel_id=(UC[\w-]{22})/) || [])[1];
+  const name = (html.match(/<meta property="og:title" content="([^"]*)"/) || [])[1];
+  return id ? { id, name: clean(decodeHtml(name || ""), 80) } : null;
+}
+
+async function youtubeChannel(url, cors) {
+  let q = String(url.searchParams.get("q") || "").trim();
+  if (!q) fail("Type a YouTube channel name or @handle.");
+
+  // Links: youtube.com/@name, /channel/UC..., /c/name, /user/name
+  const link = q.match(/youtube\.com\/(@[\w.-]+|channel\/UC[\w-]{22}|c\/[\w.-]+|user\/[\w.-]+)/i);
+  if (link) q = link[1].startsWith("channel/") ? link[1].slice(8) : link[1];
+
+  let channel = null;
+  if (UC_ID.test(q)) channel = channelFromPage(await youtubePage(`/channel/${q}`));
+  else if (/^(c|user)\//.test(q)) channel = channelFromPage(await youtubePage(`/${q}`));
+  else {
+    const handle = q.replace(/^@/, "").replace(/\s+/g, "");
+    if (/^[\w.-]{3,30}$/.test(handle)) channel = channelFromPage(await youtubePage(`/@${encodeURIComponent(handle)}`));
+    // Not a handle: search YouTube for a channel with that name
+    if (!channel) {
+      const results = await youtubePage(`/results?search_query=${encodeURIComponent(q)}&sp=EgIQAg%253D%253D`);
+      const id = results && (results.match(/"channelRenderer":\{"channelId":"(UC[\w-]{22})"/) || [])[1];
+      if (id) channel = channelFromPage(await youtubePage(`/channel/${id}`));
+    }
+  }
+  if (!channel) fail("Couldn't find that YouTube channel. Try their @handle or channel link.", 404);
+  return json(channel, 200, { ...cors, "Cache-Control": "public, max-age=86400" });
+}
+
+async function youtubeLive(url, cors) {
+  const id = url.searchParams.get("channel") || "";
+  if (!UC_ID.test(id)) fail("Unknown YouTube channel", 400);
+  const html = await youtubePage(`/channel/${id}/live`);
+  if (!html) fail("Couldn't reach YouTube", 502);
+
+  // While live, the channel's /live page is the stream itself; otherwise it's the channel page
+  const videoId = (html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})"/) || [])[1];
+  const live = !!videoId && /"isLive":true/.test(html) && !/"isUpcoming":true/.test(html);
+  const title = (html.match(/<meta name="title" content="([^"]*)"/) || [])[1];
+  const name = (html.match(/"author":"([^"]*)"/) || html.match(/<meta property="og:title" content="([^"]*)"/) || [])[1];
+  return json(
+    { live, videoId: live ? videoId : null, title: live ? clean(decodeHtml(title || ""), 120) : "", name: clean(decodeHtml(name || ""), 80) },
+    200,
+    { ...cors, "Cache-Control": "public, max-age=60" }
+  );
+}
 
 // ---------- Kick HD ----------
 // Only this first playlist is fetched here. Browsers load the quality playlists and video

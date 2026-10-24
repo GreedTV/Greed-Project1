@@ -32,8 +32,8 @@ Live at https://sinnerstv.com/
 ## Watch page
 
 - Visitors add streamers by name or link; they're saved in their own browser. To show streamers to everyone, add them to `DEFAULT_STREAMERS` at the top of `watch.js`.
-- YouTube can't look up names, so use a live video link (`youtube.com/watch?v=…`) or a channel link with `/channel/UC…`.
-- Volume works for all platforms; the quality menu works for Twitch and Kick. YouTube quality is set from the ⚙ in its player.
+- YouTube channels can be added by name, @handle or channel link (looked up by the Worker). When the channel isn't live, the player says so and checks again every minute. YouTube video links work too.
+- Volume works for all platforms; the quality menu works for Twitch and Kick. YouTube doesn't allow websites to change its quality, so it's set from the ⚙ in the YouTube player.
 - Kick streams play in HD through the Worker (see below). If it's unavailable, Kick's own player is used.
 
 ## Chat and login
@@ -51,12 +51,13 @@ Live at https://sinnerstv.com/
 
 ## Cloudflare Worker
 
-`worker/sinners-worker.js` does four jobs:
+`worker/sinners-worker.js``worker/sinners-worker.js` does five jobs:
 
 1. **Kick HD:** asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers. Video chunks load straight from Kick's servers. Kick may change or block this at any time.
 2. **Gallery:** stores shared links in Workers KV and handles the review queue.
 3. **Discord login:** sends visitors to Discord and back with a signed session token.
 4. **Sinners chat:** stores messages in D1, with admin delete and ban.
+5. **YouTube channels:** finds a channel by name or @handle and checks whether it's live, by reading YouTube's public channel pages.
 
 Setup in the Cloudflare dashboard (Workers & Pages → the Worker → Settings):
 

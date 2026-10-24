@@ -65,14 +65,24 @@ function parse(text, platform) {
   text = text.trim();
   if (!text) throw new Error("Type a name or paste a link.");
   const s = looksLikeLink(text) ? parseLink(text) : parseName(text.replace(/^@/, ""), platform);
-  return s.platform === "youtube" ? checkYouTube(s) : s;
+  return s.platform === "youtube" && !s.lookup ? checkYouTube(s) : s;
+}
+
+// parse(), plus looking up YouTube channels by name or @handle (needs the Worker)
+async function parseFull(text, platform) {
+  const s = parse(text, platform);
+  if (!s.lookup) return s;
+  const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/youtube/channel?q=${encodeURIComponent(s.lookup)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.id) throw new Error(data.error || "Couldn't find that YouTube channel.");
+  return { platform: "youtube", channel: data.id, label: data.name || s.lookup };
 }
 
 function parseName(name, platform) {
   if (platform === "youtube") {
     if (/^UC[\w-]{22}$/.test(name)) return { platform, channel: name };
-    if (/^[\w-]{11}$/.test(name)) return { platform, video: name };
-    throw new Error("YouTube names can't be looked up. Paste the live video link (youtube.com/watch?v=…) instead.");
+    // A channel name or @handle: looked up in parseFull()
+    return { platform, lookup: name };
   }
   if (!NAME_RULES[platform].test(name)) {
     throw new Error(`"${name}" isn't a valid ${cap(platform)} name. Try pasting their channel link.`);
@@ -107,10 +117,10 @@ function parseLink(text) {
     if (v) return { platform: "youtube", video: v };
     if ((parts[0] === "live" || parts[0] === "embed") && parts[1]) return { platform: "youtube", video: parts[1] };
     if (parts[0] === "channel" && parts[1]) return { platform: "youtube", channel: parts[1] };
-    if (parts[0] && parts[0].startsWith("@")) {
-      throw new Error("YouTube @handle links can't be embedded. Open their live stream and paste that video link instead.");
+    if (parts[0] && (parts[0].startsWith("@") || ((parts[0] === "c" || parts[0] === "user") && parts[1]))) {
+      return { platform: "youtube", lookup: url.href };
     }
-    throw new Error("Paste a YouTube live video link, like youtube.com/watch?v=….");
+    throw new Error("Paste a YouTube channel or video link.");
   }
 
   throw new Error("Only Twitch, YouTube and Kick links work here.");
@@ -139,8 +149,22 @@ function playerUrl(s, muted) {
 
 function chatUrl(s) {
   if (s.platform === "twitch") return `https://www.twitch.tv/embed/${s.channel}/chat?parent=${HOST}&darkpopout`;
-  if (s.platform === "youtube" && s.video) return `https://www.youtube.com/live_chat?v=${s.video}&embed_domain=${HOST}`;
+  const video = s.video || s.liveVideo;
+  if (s.platform === "youtube" && video) return `https://www.youtube.com/live_chat?v=${video}&embed_domain=${HOST}`;
   return null;
+}
+
+// Is this YouTube channel live, and with which video? Remembered for a minute.
+const ytLiveCache = new Map();
+async function youtubeLiveStatus(s, { fresh = false } = {}) {
+  const cached = ytLiveCache.get(s.channel);
+  if (!fresh && cached && Date.now() - cached.at < 60000) return cached.data;
+  const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/youtube/live?channel=${s.channel}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Couldn't check YouTube");
+  ytLiveCache.set(s.channel, { at: Date.now(), data });
+  s.liveVideo = data.live ? data.videoId : null; // only kept in memory, not saved
+  return data;
 }
 
 function pageUrl(s) {
@@ -350,9 +374,18 @@ async function setupPlayer(s, box, controls, muted) {
         if (api.qualities().length > 1) onReady();
       }, 1500);
     } else {
-      const quality = el("span", "controls-note", "Quality: ⚙ in the player");
+      // YouTube doesn't let websites change the quality, so point to its own setting
+      const quality = el("span", "controls-note", "Quality: click ⚙ in the YouTube player");
       controls.append(quality);
-      const frame = makeFrame(`${playerUrl(s, muted)}&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, s);
+
+      let src = playerUrl(s, muted);
+      if (s.channel && !s.video) {
+        const status = await youtubeLiveStatus(s);
+        if (!box.isConnected) return;
+        if (!status.live) return youtubeOffline(s, box, controls, muted, status);
+        src = `https://www.youtube.com/embed/${status.videoId}?autoplay=1&mute=${muted ? 1 : 0}`;
+      }
+      const frame = makeFrame(`${src}&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`, s);
       box.append(frame);
       await loadYouTube();
       if (!box.isConnected) return;
@@ -376,6 +409,33 @@ async function setupPlayer(s, box, controls, muted) {
   } catch (err) {
     controls.replaceChildren(el("span", "controls-note", "Controls couldn't load. Use the player's own controls."));
   }
+}
+
+// A YouTube channel that isn't live: say so, and check again every minute
+function youtubeOffline(s, box, controls, muted, status) {
+  controls.replaceChildren(el("span", "controls-note", "Not live right now. Checking every minute."));
+  const offline = el("div", "player-offline");
+  const again = el("button", "button ghost", "Check now");
+  again.type = "button";
+  const wait = el("a", null, "Watch something while you wait →");
+  wait.href = "content.html";
+  offline.append(el("p", null, `${status.name || displayName(s)} isn't live on YouTube right now.`), again, wait);
+  box.replaceChildren(offline);
+
+  const recheck = async () => {
+    if (!box.isConnected) return clearInterval(timer);
+    try {
+      const now = await youtubeLiveStatus(s, { fresh: true });
+      if (now.live && box.isConnected) {
+        clearInterval(timer);
+        box.replaceChildren();
+        controls.replaceChildren();
+        setupPlayer(s, box, controls, muted);
+      }
+    } catch (e) {}
+  };
+  const timer = setInterval(recheck, 60000);
+  again.addEventListener("click", recheck);
 }
 
 function volumeControl(startMuted) {
@@ -687,6 +747,17 @@ function buildChat(playing) {
       stopChat = mountSinnersChat(body, s.id);
       return;
     }
+    if (s.platform === "youtube" && s.channel && !s.video && !s.liveVideo) {
+      body.append(el("p", "chat-status", "Checking if they're live…"));
+      youtubeLiveStatus(s)
+        .then((status) => {
+          if (!body.isConnected || chatTab !== "platform") return;
+          if (status.live) return showBody(s);
+          body.replaceChildren(el("div", "chat-none", "YouTube chat appears here when they go live."));
+        })
+        .catch(() => body.replaceChildren(el("div", "chat-none", "Couldn't check YouTube right now.")));
+      return;
+    }
     const url = chatUrl(s);
     if (url) {
       const frame = document.createElement("iframe");
@@ -788,14 +859,18 @@ function showMsg(text, type) {
   msg.className = "form-msg" + (type ? ` ${type}` : "");
 }
 
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
   let s;
+  submitBtn.disabled = true;
+  if (platformSelect.value === "youtube" && !looksLikeLink(input.value)) showMsg("Looking up the YouTube channel…");
   try {
-    s = parse(input.value, platformSelect.value);
+    s = await parseFull(input.value, platformSelect.value);
   } catch (err) {
     showMsg(err.message, "error");
     return;
+  } finally {
+    submitBtn.disabled = false;
   }
   s.id = makeId(s);
 
@@ -843,14 +918,14 @@ function cap(word) {
 }
 
 // Coming from the home page: watch.html?platform=kick&add=name-or-link
-function addFromUrl() {
+async function addFromUrl() {
   const params = new URLSearchParams(location.search);
   const text = params.get("add");
-  if (!text) return;
+  if (!text) return false;
   history.replaceState(null, "", location.pathname);
   const platform = ["twitch", "youtube", "kick"].includes(params.get("platform")) ? params.get("platform") : "twitch";
   try {
-    const s = parse(text, platform);
+    const s = await parseFull(text, platform);
     s.id = makeId(s);
     if (!streamers.some((x) => x.id === s.id)) {
       streamers.push(s);
@@ -862,10 +937,11 @@ function addFromUrl() {
     platformSelect.value = platform;
     showMsg(err.message, "error");
   }
+  return true;
 }
 
-addFromUrl();
 render();
+addFromUrl().then((added) => added && render());
 
 // In-site navigation (nav.js): stop players and chat when this page closes,
 // and pick up a new streamer link (watch.html?add=...) when coming back to it
@@ -876,6 +952,5 @@ SinnersNav.onLeave(() => {
 });
 SinnersNav.onReturn(() => {
   if (!new URLSearchParams(location.search).has("add")) return;
-  addFromUrl();
-  render();
+  addFromUrl().then(render);
 });
