@@ -1,6 +1,6 @@
 // Live visitor count, shared by all pages: tells the Worker this tab is open (once a minute, only while
 // visible) and counts one view per page opened. The visitor ID is random and stays in this browser;
-// nothing else about the visitor is sent. Shows "🟢 N online" in the header, linking to the Stats page.
+// nothing else about the visitor is sent. Shows "🟢 N online" next to the logo, linking to the Stats page.
 
 (() => {
   const API = WORKER_URL.replace(/\/$/, "");
@@ -28,8 +28,9 @@
   label.className = "online-label";
   label.textContent = " online";
   pill.append(count, label);
-  const actions = document.getElementById("nav-actions");
-  if (actions) actions.prepend(pill);
+  // Next to the logo, in the open space on the left of the header
+  const logo = document.querySelector(".site-header .logo");
+  if (logo) logo.after(pill);
 
   const page = () => location.pathname.split("/").pop().replace(/\.html$/, "") || "index";
   let lastSent = 0;

@@ -35,7 +35,7 @@ function tile(label, value, note, live) {
 
 function renderTiles(s) {
   document.getElementById("stat-tiles").replaceChildren(
-    tile("Online now", s.online, "people on the site", true),
+    tile("Online now", s.online, `peak today: ${fmt(Math.max(s.today.peak || 0, s.online))}`, true),
     tile("Visitors today", s.today.visitors, `${fmt(s.today.views)} page views`),
     tile("Visitors this week", s.weekTotals.visitors, `${fmt(s.weekTotals.views)} page views`),
     tile("All-time visitors", s.allTime.visitors, s.allTime.since ? `since ${dayLabel(s.allTime.since)}` : "counting starts now")

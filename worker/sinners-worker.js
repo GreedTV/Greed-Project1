@@ -676,16 +676,18 @@ async function ensureSchema(env) {
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS purchases_user ON purchases (user_id, id)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS presence (visitor TEXT PRIMARY KEY, page TEXT NOT NULL, seen INTEGER NOT NULL)"),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS site_days (day TEXT PRIMARY KEY, views INTEGER NOT NULL DEFAULT 0, visitors INTEGER NOT NULL DEFAULT 0)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS site_days (day TEXT PRIMARY KEY, views INTEGER NOT NULL DEFAULT 0, visitors INTEGER NOT NULL DEFAULT 0, peak INTEGER NOT NULL DEFAULT 0)"),
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS site_pages (day TEXT NOT NULL, page TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, page))"
     ),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS day_visitors (day TEXT NOT NULL, visitor TEXT NOT NULL, PRIMARY KEY (day, visitor))"),
   ]);
   // Added later: tables made before this need the column (fails harmlessly when it's already there)
-  try {
-    await env.DB.prepare("ALTER TABLE bets ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0").run();
-  } catch (e) {}
+  for (const sql of ["ALTER TABLE bets ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0", "ALTER TABLE site_days ADD COLUMN peak INTEGER NOT NULL DEFAULT 0"]) {
+    try {
+      await env.DB.prepare(sql).run();
+    } catch (e) {}
+  }
   schemaReady = true;
 }
 
@@ -1275,18 +1277,20 @@ async function presence(request, env, cors) {
   }
   await env.DB.batch(writes);
   const { online } = await onlineCounts(env);
+  // Only writes when it's a new high for the day
+  await env.DB.prepare("UPDATE site_days SET peak = ? WHERE day = ? AND peak < ?").bind(online, day, online).run();
   return json({ online }, 200, cors);
 }
 
 async function siteStats(env) {
   const day = today();
   const since = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
-  const { results: days } = await env.DB.prepare("SELECT day, views, visitors FROM site_days WHERE day >= ? ORDER BY day").bind(since).all();
+  const { results: days } = await env.DB.prepare("SELECT day, views, visitors, peak FROM site_days WHERE day >= ? ORDER BY day").bind(since).all();
   // All 7 days, including ones without visits
   const week = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().slice(0, 10);
     const row = days.find((r) => r.day === d);
-    return { day: d, views: row ? row.views : 0, visitors: row ? row.visitors : 0 };
+    return { day: d, views: row ? row.views : 0, visitors: row ? row.visitors : 0, peak: row ? row.peak : 0 };
   });
   const { results: topPages } = await env.DB.prepare("SELECT page, views FROM site_pages WHERE day = ? ORDER BY views DESC LIMIT 6").bind(day).all();
   const all = await env.DB.prepare("SELECT COALESCE(SUM(views), 0) AS views, COALESCE(SUM(visitors), 0) AS visitors, MIN(day) AS since FROM site_days").first();
@@ -1339,7 +1343,7 @@ const BOARD_FORMAT = {
 };
 
 const BOT_COMMANDS = [
-  { name: "stats", description: "How the Sinners website is doing right now" },
+  { name: "stats", description: "Sinners site report: visitors, players, games, betting, chat, shop" },
   { name: "points", description: "Show someone's Sinners points", options: [{ type: 6, name: "user", description: "Whose points (you if empty)" }] },
   { name: "top", description: "Sinners leaderboards", options: [{ type: 3, name: "board", description: "Which leaderboard", choices: BOARD_CHOICES }] },
   { name: "shop", description: "What's in the Sinners shop" },
@@ -1401,6 +1405,11 @@ async function discordInteraction(request, env, ctx) {
   try {
     if (!env.DB) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
     await ensureSchema(env);
+    if (interaction.data.name === "stats") {
+      // Lots to gather: say "thinking…" now, then fill in the message (Discord allows 3 s for a first answer)
+      later(ctx, editOriginal(env, interaction, () => statsReport(env, interaction)));
+      return json({ type: 5 }, 200, {});
+    }
     return await botCommand(interaction, env, new URL(request.url).origin);
   } catch (err) {
     return botReply(`Something went wrong: ${err.message}`, { ephemeral: true });
@@ -1411,38 +1420,6 @@ async function botCommand(interaction, env, origin) {
   const { name, options = [], resolved = {} } = interaction.data;
   const opt = (key) => (options.find((o) => o.name === key) || {}).value;
   const caller = (interaction.member && interaction.member.user) || interaction.user || {};
-
-  if (name === "stats") {
-    const s = await siteStats(env);
-    const names = { index: "Home", watch: "Watch", content: "Content", games: "Games", gallery: "Gallery", about: "About", stats: "Stats", terms: "Terms", privacy: "Privacy" };
-    const where = Object.entries(s.pages)
-      .filter(([p]) => p !== "admin")
-      .sort((a, b) => b[1] - a[1])
-      .map(([p, n]) => `${names[p] || p} ${n}`)
-      .join(" · ");
-    const bars = "▁▂▃▄▅▆▇█";
-    const peak = Math.max(1, ...s.week.map((d) => d.visitors));
-    const spark = s.week.map((d) => bars[Math.round((d.visitors / peak) * 7)]).join("");
-    const c = s.community;
-    return botReply(null, {
-      embeds: [
-        embed({
-          title: "📊 Sinners right now",
-          url: `${SITE_URL}/stats`,
-          description: `🟢 **${s.online}** online${where ? `\n${where}` : ""}`,
-          fields: [
-            { name: "Today", value: `${s.today.visitors} visitors\n${s.today.views} page views`, inline: true },
-            { name: "Last 7 days", value: `${s.weekTotals.visitors} visitors\n${s.weekTotals.views} page views\n\`${spark}\``, inline: true },
-            { name: "All time", value: `${s.allTime.visitors} visitors\n${s.allTime.views} page views`, inline: true },
-            { name: "Players", value: `${c.players} with points\n${c.pointsTotal} 🪙 in total`, inline: true },
-            { name: "Activity", value: `${c.chatToday} chat messages today\n${c.betsToday} bets today`, inline: true },
-            { name: "Community", value: `${c.gamesPlayed} leaderboard scores\n${c.purchases} shop purchases\n${c.galleryItems} gallery posts`, inline: true },
-          ],
-          timestamp: new Date().toISOString(),
-        }),
-      ],
-    });
-  }
 
   if (name === "points") {
     const id = opt("user") || caller.id;
@@ -1562,6 +1539,140 @@ async function botCommand(interaction, env, origin) {
     );
   }
   return botReply("Unknown command. The admin may need to press Register commands again.", { ephemeral: true });
+}
+
+// Fills in a deferred reply ("Sinners is thinking…") with the real answer
+async function editOriginal(env, interaction, build) {
+  let message;
+  try {
+    message = await build();
+  } catch (err) {
+    message = { content: `Something went wrong: ${err.message}` };
+  }
+  await fetch(`${DISCORD_API}/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ allowed_mentions: { parse: [] }, ...message }),
+  });
+}
+
+const PAGE_LABELS = { index: "Home", watch: "Watch", content: "Content", games: "Games", gallery: "Gallery", about: "About", stats: "Stats", terms: "Terms", privacy: "Privacy" };
+
+function change(now, before) {
+  if (!before) return now ? "🆕 new" : "–";
+  const pct = Math.round(((now - before) / before) * 100);
+  return pct === 0 ? "➖ same as the week before" : `${pct > 0 ? "📈 +" : "📉 "}${pct}% vs the week before`;
+}
+
+// The full /stats report: visitors, players, games, betting, chat, shop, gallery and this Discord server
+async function statsReport(env, interaction) {
+  const day = today();
+  const startOfDay = Date.parse(day + "T00:00:00Z");
+  const dayAgo = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const one = (sql, ...args) => env.DB.prepare(sql).bind(...args).first();
+  const many = async (sql, ...args) => (await env.DB.prepare(sql).bind(...args).all()).results;
+  const n = (row) => (row ? row.n : 0);
+  const guild = interaction.guild_id && env.DISCORD_BOT_TOKEN
+    ? fetch(`${DISCORD_API}/guilds/${interaction.guild_id}?with_counts=true`, { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+    : Promise.resolve(null);
+
+  const [s, prevWeek, newToday, newWeek, rich, bigWin, roundsToday, betsToday, pools, lastColors, lastLucky, newBests, chatter, shopItems, soldToday, waiting, pending, server] =
+    await Promise.all([
+      siteStats(env),
+      one("SELECT COALESCE(SUM(views), 0) AS views, COALESCE(SUM(visitors), 0) AS visitors FROM site_days WHERE day >= ? AND day <= ?", dayAgo(13), dayAgo(7)),
+      one("SELECT COUNT(*) AS n FROM users WHERE created >= ?", startOfDay),
+      one("SELECT COUNT(*) AS n FROM users WHERE created >= ?", startOfDay - 6 * 86400000),
+      many("SELECT name, points FROM wallets ORDER BY points DESC LIMIT 3"),
+      one("SELECT name, game, amount, payout + bonus AS won FROM bets WHERE created >= ? AND payout > 0 ORDER BY payout + bonus - amount DESC LIMIT 1", startOfDay - ROUND_MS),
+      one("SELECT COUNT(*) AS n FROM rounds WHERE settled_at >= ?", startOfDay),
+      one("SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS points FROM bets WHERE created >= ?", startOfDay),
+      many("SELECT game, jackpot FROM pools"),
+      many("SELECT outcome FROM rounds WHERE game = 'colors' ORDER BY round DESC LIMIT 6"),
+      many("SELECT outcome FROM rounds WHERE game = 'lucky' ORDER BY round DESC LIMIT 6"),
+      one("SELECT COUNT(*) AS n FROM scores WHERE created >= ?", startOfDay),
+      one("SELECT name, COUNT(*) AS n FROM messages WHERE deleted = 0 AND created >= ? GROUP BY user_id ORDER BY n DESC LIMIT 1", startOfDay),
+      one("SELECT COUNT(*) AS n FROM shop_items"),
+      one("SELECT COUNT(*) AS n FROM purchases WHERE created >= ?", startOfDay),
+      one("SELECT COUNT(*) AS n FROM purchases WHERE delivered = 0"),
+      env.GALLERY ? getList(env, "pending").then((l) => l.length) : 0,
+      guild,
+    ]);
+
+  const c = s.community;
+  const where = Object.entries(s.pages)
+    .filter(([p]) => p !== "admin")
+    .sort((a, b) => b[1] - a[1])
+    .map(([p, k]) => `${PAGE_LABELS[p] || p} ${k}`)
+    .join(" · ");
+  const bars = "▁▂▃▄▅▆▇█";
+  const peakWeek = Math.max(1, ...s.week.map((d) => d.visitors));
+  const spark = s.week.map((d) => bars[Math.round((d.visitors / peakWeek) * 7)]).join("");
+  const medals = ["🥇", "🥈", "🥉"];
+  const jackpot = (g) => (pools.find((p) => p.game === g) || {}).jackpot || 0;
+  const dot = { red: "🔴", green: "🟢", blue: "🔵" };
+  const topPage = s.topPages.find((p) => p.page !== "admin");
+
+  const fields = [
+    { name: "📅 Today", value: `**${s.today.visitors}** visitors\n**${s.today.views}** page views\n**${n(newToday)}** new players`, inline: true },
+    {
+      name: "📈 Last 7 days",
+      value: `**${s.weekTotals.visitors}** visitors\n**${s.weekTotals.views}** page views\n\`${spark}\`\n${change(s.weekTotals.visitors, prevWeek.visitors)}`,
+      inline: true,
+    },
+    { name: "🌍 All time", value: `**${s.allTime.visitors}** visitors\n**${s.allTime.views}** page views\n**${c.players}** players (${n(newWeek)} new this week)`, inline: true },
+    {
+      name: "🏆 Richest players",
+      value: rich.length ? rich.map((r, i) => `${medals[i]} ${r.name} · ${r.points} 🪙`).join("\n") : "Nobody yet",
+      inline: true,
+    },
+    {
+      name: "🎲 Betting today",
+      value:
+        `**${n(roundsToday)}** rounds played\n**${betsToday.n}** bets · ${betsToday.points} 🪙\n` +
+        (bigWin && bigWin.won > bigWin.amount ? `Biggest win: ${bigWin.name} +${bigWin.won - bigWin.amount} 🪙` : "No big wins yet"),
+      inline: true,
+    },
+    {
+      name: "💰 Jackpots",
+      value:
+        `🎨 Color Clash: **${jackpot("colors")}** 🪙\n${lastColors.map((r) => dot[r.outcome] || r.outcome).join(" ") || "no rounds yet"}\n` +
+        `🍀 Lucky Number: **${jackpot("lucky")}** 🪙\n${lastLucky.map((r) => `\`${r.outcome}\``).join(" ") || "no rounds yet"}`,
+      inline: true,
+    },
+    { name: "🎮 Games", value: `**${n(newBests)}** new best scores today\n**${c.gamesPlayed}** leaderboard entries\n**${c.pointsTotal}** 🪙 owned in total`, inline: true },
+    {
+      name: "💬 Chat",
+      value: `**${c.chatToday}** messages today\n**${c.chatMessages}** in total\n${chatter ? `Most active today: ${chatter.name} (${chatter.n})` : "Quiet so far today"}`,
+      inline: true,
+    },
+    {
+      name: "🛒 Shop · 🖼️ Gallery",
+      value: `**${n(shopItems)}** items for sale · **${n(soldToday)}** sold today\n${n(waiting) ? `⚠️ **${n(waiting)}** waiting to be delivered` : "✓ All purchases delivered"}\n**${c.galleryItems}** gallery posts${pending ? ` · ⚠️ **${pending}** to review` : ""}`,
+      inline: true,
+    },
+  ];
+  if (server) {
+    fields.push({
+      name: "👥 This server",
+      value: `**${server.approximate_member_count ?? "?"}** members\n**${server.approximate_presence_count ?? "?"}** online in Discord`,
+      inline: true,
+    });
+  }
+  if (topPage) fields.push({ name: "📄 Most viewed today", value: `${PAGE_LABELS[topPage.page] || topPage.page} · ${topPage.views} views`, inline: true });
+
+  return {
+    embeds: [
+      embed({
+        title: "📊 Sinners · site report",
+        url: `${SITE_URL}/stats`,
+        description: `🟢 **${s.online} online now** · peak today **${Math.max(s.today.peak || 0, s.online)}**${where ? `\n${where}` : ""}`,
+        fields,
+        timestamp: new Date().toISOString(),
+      }),
+    ],
+  };
 }
 
 // A message from the bot in the /notify-here channel (does nothing if that isn't set up)
