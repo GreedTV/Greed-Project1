@@ -54,7 +54,7 @@
 
     <section class="section" style="padding-top:24px">
       <div class="container legal">
-        <p>This policy explains what information sinnerstv.com ("Sinners", "we") collects, why, and what you can do about it. Short version: we keep only what the site needs to work, we don't show ads, we don't use tracking or analytics, and we never sell your data.</p>
+        <p>This policy explains what information sinnerstv.com ("Sinners", "we") collects, why, and what you can do about it. Short version: we keep only what the site needs to work, we don't show ads, we don't use third-party trackers or analytics services, and we never sell your data.</p>
 
         <h2>1. What we collect</h2>
         <h3>When you log in with Discord</h3>
@@ -67,10 +67,11 @@
           <li><strong>Gallery:</strong> links you share, with the title and name you type.</li>
         </ul>
         <h3>Technical information</h3>
+        <p><strong>Anonymous visit counts:</strong> to show how many people are online and how many visit each day (on the <a href="/stats">Stats</a> page), your browser makes a random ID for itself. While a Sinners tab is open it tells our server, about once a minute, that this ID is on a certain page. We don't store your IP address, account or device details with it, so it isn't linked to you. Only daily totals are kept; the per-ID records are deleted after two days.</p>
         <p>To stop spam, the number of gallery links shared from your IP address is counted for about an hour, then deleted. Our hosting providers (see below) may keep standard server logs, such as IP addresses, for security.</p>
 
         <h2>2. What stays in your browser</h2>
-        <p>Some things are saved only in your own browser (local storage), not on our servers: your login session (valid for 30 days), light/dark theme, the streamers on your Watch page, your YouTube queue, live-alert settings and the mini player's position. Logging out removes the session; clearing your browser's site data removes everything. We don't use cookies for tracking.</p>
+        <p>Some things are saved only in your own browser (local storage), not on our servers: your login session (valid for 30 days), light/dark theme, the streamers on your Watch page, your YouTube queue, live-alert settings and the mini player's position, and the random visitor ID used for the anonymous counts above. Logging out removes the session; clearing your browser's site data removes everything. We don't use cookies for tracking.</p>
 
         <h2>3. How we use it</h2>
         <ul>
@@ -117,12 +118,13 @@
   <footer class="site-footer">
     <div class="container">
       <p>&copy; <span id="year"></span> Sinners</p>
-      <p><a href="/watch">Watch</a><a href="/content">Content</a><a href="/games">Games</a><a href="/gallery">Gallery</a><a href="/about">About</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></p>
+      <p><a href="/watch">Watch</a><a href="/content">Content</a><a href="/games">Games</a><a href="/gallery">Gallery</a><a href="/about">About</a><a href="/stats">Stats</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></p>
     </div>
   </footer>
 
   <script src="script.js"></script>
   <script src="config.js"></script>
+  <script src="presence.js"></script>
   <script src="auth.js"></script>
   <script src="alerts.js"></script>
   <script src="chat.js"></script>

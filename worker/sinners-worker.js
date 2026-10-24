@@ -37,8 +37,12 @@
 //   GET  /bets/state?game=colors|lucky -> the current round, its bets, recent results (and your bet if logged in)
 //   POST /bets/place                   -> { game, choice, amount }   (logged in)
 //
+// Site stats (anonymous: a random ID kept in the visitor's browser, no IPs or accounts)
+//   POST /presence                     -> { visitor, page, view? }  heartbeat every minute; returns { online }
+//   GET  /stats                        -> online now, visitors and views (today, 7 days), community numbers
+//
 // Discord bot (slash commands arrive here from Discord; set this as the app's Interactions Endpoint URL)
-//   POST /discord/interactions         -> /points, /top, /shop, /round, /sinners, /notify-here, /notify-off
+//   POST /discord/interactions         -> /stats, /points, /top, /shop, /round, /sinners, /notify-here, /notify-off
 //   GET  /discord-admin                -> bot setup status and invite link   (admin)
 //   POST /discord-admin                -> { action: "register" }  (re)creates the slash commands   (admin)
 //
@@ -111,6 +115,13 @@ export default {
       if (path === "/discord-admin") {
         if (request.method === "GET") return await discordAdminStatus(request, env, cors);
         if (request.method === "POST") return await discordAdminAction(request, env, cors);
+      }
+
+      if (path === "/presence" || path === "/stats") {
+        if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
+        await ensureSchema(env);
+        if (path === "/presence" && request.method === "POST") return await presence(request, env, cors);
+        if (path === "/stats" && request.method === "GET") return json(await siteStats(env), 200, { ...cors, "Cache-Control": "public, max-age=30" });
       }
 
       if (path === "/youtube/channel" && request.method === "GET") return await youtubeChannel(url, cors);
@@ -664,6 +675,12 @@ async function ensureSchema(env) {
         "user_id TEXT NOT NULL, name TEXT NOT NULL, avatar TEXT, price INTEGER NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)"
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS purchases_user ON purchases (user_id, id)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS presence (visitor TEXT PRIMARY KEY, page TEXT NOT NULL, seen INTEGER NOT NULL)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS site_days (day TEXT PRIMARY KEY, views INTEGER NOT NULL DEFAULT 0, visitors INTEGER NOT NULL DEFAULT 0)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS site_pages (day TEXT NOT NULL, page TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, page))"
+    ),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS day_visitors (day TEXT NOT NULL, visitor TEXT NOT NULL, PRIMARY KEY (day, visitor))"),
   ]);
   // Added later: tables made before this need the column (fails harmlessly when it's already there)
   try {
@@ -1208,6 +1225,95 @@ async function shopAdminAction(request, env, cors) {
   fail("Unknown action", 400);
 }
 
+// ---------- Site stats ----------
+// Every open tab sends a heartbeat once a minute (only while it's visible), plus one "view" per page
+// opened. A visitor is a random ID the browser makes for itself; no IP, account or device data is kept.
+// "Online" = tabs heard from in the last 90 seconds. Daily totals are kept; the per-visitor rows that
+// make daily unique counts possible are deleted after two days.
+
+const STAT_PAGES = ["index", "watch", "content", "games", "gallery", "about", "stats", "terms", "privacy", "admin"];
+const ONLINE_MS = 90000;
+const VISITOR_ID = /^[a-f0-9-]{36}$/;
+
+async function onlineCounts(env) {
+  const { results } = await env.DB.prepare("SELECT page, COUNT(*) AS n FROM presence WHERE seen > ? GROUP BY page")
+    .bind(Date.now() - ONLINE_MS)
+    .all();
+  const pages = Object.fromEntries(results.map((r) => [r.page, r.n]));
+  return { online: results.reduce((sum, r) => sum + r.n, 0), pages };
+}
+
+async function presence(request, env, cors) {
+  const { visitor, page: rawPage, view } = await readJson(request);
+  if (!VISITOR_ID.test(String(visitor))) fail("Bad visitor", 400);
+  const page = STAT_PAGES.includes(rawPage) ? rawPage : "index";
+  const now = Date.now();
+  const day = today();
+  const writes = [
+    env.DB.prepare("INSERT INTO presence (visitor, page, seen) VALUES (?, ?, ?) ON CONFLICT(visitor) DO UPDATE SET page = excluded.page, seen = excluded.seen").bind(
+      visitor,
+      page,
+      now
+    ),
+  ];
+  if (view && page !== "admin") {
+    const first = await env.DB.prepare("INSERT INTO day_visitors (day, visitor) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(day, visitor).run();
+    const isNew = first.meta && first.meta.changes === 1 ? 1 : 0;
+    writes.push(
+      env.DB.prepare(
+        "INSERT INTO site_days (day, views, visitors) VALUES (?, 1, ?) ON CONFLICT(day) DO UPDATE SET views = views + 1, visitors = visitors + ?"
+      ).bind(day, isNew, isNew),
+      env.DB.prepare("INSERT INTO site_pages (day, page, views) VALUES (?, ?, 1) ON CONFLICT(day, page) DO UPDATE SET views = views + 1").bind(day, page)
+    );
+  }
+  // Now and then, tidy up rows that aren't needed anymore
+  if (Math.random() < 0.02) {
+    writes.push(
+      env.DB.prepare("DELETE FROM presence WHERE seen < ?").bind(now - 3600000),
+      env.DB.prepare("DELETE FROM day_visitors WHERE day < ?").bind(new Date(now - 2 * 86400000).toISOString().slice(0, 10))
+    );
+  }
+  await env.DB.batch(writes);
+  const { online } = await onlineCounts(env);
+  return json({ online }, 200, cors);
+}
+
+async function siteStats(env) {
+  const day = today();
+  const since = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+  const { results: days } = await env.DB.prepare("SELECT day, views, visitors FROM site_days WHERE day >= ? ORDER BY day").bind(since).all();
+  // All 7 days, including ones without visits
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(Date.now() - (6 - i) * 86400000).toISOString().slice(0, 10);
+    const row = days.find((r) => r.day === d);
+    return { day: d, views: row ? row.views : 0, visitors: row ? row.visitors : 0 };
+  });
+  const { results: topPages } = await env.DB.prepare("SELECT page, views FROM site_pages WHERE day = ? ORDER BY views DESC LIMIT 6").bind(day).all();
+  const all = await env.DB.prepare("SELECT COALESCE(SUM(views), 0) AS views, COALESCE(SUM(visitors), 0) AS visitors, MIN(day) AS since FROM site_days").first();
+  const startOfDay = Date.parse(day + "T00:00:00Z");
+  const count = async (sql, ...args) => (await env.DB.prepare(sql).bind(...args).first()).n;
+  const approved = env.GALLERY ? (await getList(env, "approved")).length : 0;
+
+  return {
+    ...(await onlineCounts(env)),
+    today: week[6],
+    week,
+    weekTotals: { views: week.reduce((s, d) => s + d.views, 0), visitors: week.reduce((s, d) => s + d.visitors, 0) },
+    allTime: all,
+    topPages,
+    community: {
+      players: await count("SELECT COUNT(*) AS n FROM wallets"),
+      chatMessages: await count("SELECT COUNT(*) AS n FROM messages WHERE deleted = 0"),
+      chatToday: await count("SELECT COUNT(*) AS n FROM messages WHERE deleted = 0 AND created >= ?", startOfDay),
+      gamesPlayed: await count("SELECT COUNT(*) AS n FROM scores"),
+      betsToday: await count("SELECT COUNT(*) AS n FROM bets WHERE created >= ?", startOfDay),
+      pointsTotal: await count("SELECT COALESCE(SUM(points), 0) AS n FROM wallets"),
+      purchases: await count("SELECT COUNT(*) AS n FROM purchases"),
+      galleryItems: approved,
+    },
+  };
+}
+
 // ---------- Discord bot ----------
 // Slash commands are sent by Discord to /discord/interactions as signed HTTP requests, so the bot needs no
 // server of its own. Players log in to the site with Discord, so a Discord user ID is also their site
@@ -1233,6 +1339,7 @@ const BOARD_FORMAT = {
 };
 
 const BOT_COMMANDS = [
+  { name: "stats", description: "How the Sinners website is doing right now" },
   { name: "points", description: "Show someone's Sinners points", options: [{ type: 6, name: "user", description: "Whose points (you if empty)" }] },
   { name: "top", description: "Sinners leaderboards", options: [{ type: 3, name: "board", description: "Which leaderboard", choices: BOARD_CHOICES }] },
   { name: "shop", description: "What's in the Sinners shop" },
@@ -1304,6 +1411,38 @@ async function botCommand(interaction, env, origin) {
   const { name, options = [], resolved = {} } = interaction.data;
   const opt = (key) => (options.find((o) => o.name === key) || {}).value;
   const caller = (interaction.member && interaction.member.user) || interaction.user || {};
+
+  if (name === "stats") {
+    const s = await siteStats(env);
+    const names = { index: "Home", watch: "Watch", content: "Content", games: "Games", gallery: "Gallery", about: "About", stats: "Stats", terms: "Terms", privacy: "Privacy" };
+    const where = Object.entries(s.pages)
+      .filter(([p]) => p !== "admin")
+      .sort((a, b) => b[1] - a[1])
+      .map(([p, n]) => `${names[p] || p} ${n}`)
+      .join(" · ");
+    const bars = "▁▂▃▄▅▆▇█";
+    const peak = Math.max(1, ...s.week.map((d) => d.visitors));
+    const spark = s.week.map((d) => bars[Math.round((d.visitors / peak) * 7)]).join("");
+    const c = s.community;
+    return botReply(null, {
+      embeds: [
+        embed({
+          title: "📊 Sinners right now",
+          url: `${SITE_URL}/stats`,
+          description: `🟢 **${s.online}** online${where ? `\n${where}` : ""}`,
+          fields: [
+            { name: "Today", value: `${s.today.visitors} visitors\n${s.today.views} page views`, inline: true },
+            { name: "Last 7 days", value: `${s.weekTotals.visitors} visitors\n${s.weekTotals.views} page views\n\`${spark}\``, inline: true },
+            { name: "All time", value: `${s.allTime.visitors} visitors\n${s.allTime.views} page views`, inline: true },
+            { name: "Players", value: `${c.players} with points\n${c.pointsTotal} 🪙 in total`, inline: true },
+            { name: "Activity", value: `${c.chatToday} chat messages today\n${c.betsToday} bets today`, inline: true },
+            { name: "Community", value: `${c.gamesPlayed} leaderboard scores\n${c.purchases} shop purchases\n${c.galleryItems} gallery posts`, inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+        }),
+      ],
+    });
+  }
 
   if (name === "points") {
     const id = opt("user") || caller.id;

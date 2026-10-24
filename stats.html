@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stats — Sinners</title>
+  <meta name="description" content="Live numbers for Sinners: who is online, visitors, page views and community activity.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0c0a0d">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sinners">
+  <meta property="og:title" content="Stats — Sinners">
+  <meta property="og:description" content="Live numbers for Sinners: who is online, visitors, page views and community activity.">
+  <meta property="og:url" content="https://sinnerstv.com/stats">
+  <meta property="og:image" content="https://sinnerstv.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a href="/" class="logo"><span class="logo-mark" aria-hidden="true">S</span><span>SINNERS<span class="logo-dot">.</span></span></a>
+      <nav>
+        <ul id="nav-links">
+          <li><a href="/">Home</a></li>
+          <li><a href="/watch">Watch</a></li>
+          <li><a href="/content">Content</a></li>
+          <li><a href="/games">Games</a></li>
+          <li><a href="/gallery">Gallery</a></li>
+          <li><a href="/about">About</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions" id="nav-actions"></div>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container reveal">
+        <h1>Site <span class="gradient-text">Stats</span></h1>
+        <p>Live numbers for sinnerstv.com, updated every 30 seconds.</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:24px">
+      <div class="container wide stats-page">
+        <div class="stat-tiles" id="stat-tiles"></div>
+
+        <div class="stats-grid">
+          <div class="side-box stats-card stats-chart-card">
+            <h3>Visitors, last 7 days</h3>
+            <div class="week-chart" id="week-chart" role="img"></div>
+            <details class="stats-table">
+              <summary>Show as table</summary>
+              <table id="week-table"></table>
+            </details>
+          </div>
+          <div class="side-box stats-card">
+            <h3>🟢 Where people are right now</h3>
+            <ul class="stat-list" id="online-pages"></ul>
+            <h3>📄 Top pages today</h3>
+            <ul class="stat-list" id="top-pages"></ul>
+          </div>
+        </div>
+
+        <div class="side-box stats-card">
+          <h3>Community</h3>
+          <div class="community-grid" id="community"></div>
+        </div>
+
+        <p class="hint stats-note">Visitor counts are anonymous: each browser gets a random ID, and no IP addresses or accounts are used. See the <a href="/privacy">Privacy Policy</a>. Days follow UTC time.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span id="year"></span> Sinners</p>
+      <p><a href="/watch">Watch</a><a href="/content">Content</a><a href="/games">Games</a><a href="/gallery">Gallery</a><a href="/about">About</a><a href="/stats">Stats</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+  <script src="config.js"></script>
+  <script src="presence.js"></script>
+  <script src="auth.js"></script>
+  <script src="alerts.js"></script>
+  <script src="chat.js"></script>
+  <script src="mini.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

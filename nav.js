@@ -17,6 +17,7 @@ const SinnersNav = (() => {
     gallery: "gallery.js",
     games: "games.js",
     admin: "admin.js",
+    stats: "stats.js",
   };
 
   // "/watch", "/watch.html" -> "watch"; "/", "/index.html" -> "index"
@@ -126,6 +127,7 @@ const SinnersNav = (() => {
       document.title = next.title;
       if (next.description) document.querySelector('meta[name="description"]')?.setAttribute("content", next.description);
       updateMenu();
+      document.dispatchEvent(new CustomEvent("sinners:page"));
       window.scrollTo(0, 0);
       observeReveals(next.main);
 
