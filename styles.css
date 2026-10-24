@@ -2899,6 +2899,57 @@ img {
   color: var(--muted);
 }
 
+/* "How this game works" box on the betting games */
+.bet-help {
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 0.92rem;
+}
+
+.bet-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bet-help[open] summary {
+  margin-bottom: 8px;
+}
+
+.bet-help-steps,
+.bet-help-notes {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+}
+
+.bet-help-notes {
+  list-style: none;
+  padding-left: 0;
+  margin: 10px 0 2px;
+}
+
+.bet-help-notes strong,
+.bet-help-example strong {
+  color: var(--text);
+}
+
+.bet-help-example {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--muted);
+}
+
 .bet-history {
   display: flex;
   align-items: center;
@@ -3589,4 +3640,33 @@ img {
 .video-add:disabled {
   color: #4ade80;
   cursor: default;
+}
+
+/* ---------- Terms and Privacy pages ---------- */
+.legal {
+  max-width: 760px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.legal h2 {
+  margin: 34px 0 8px;
+  font-size: 1.5rem;
+  color: var(--text);
+}
+
+.legal h3 {
+  margin: 18px 0 4px;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+
+.legal strong {
+  color: var(--text);
+}
+
+.legal ul {
+  padding-left: 22px;
+  display: grid;
+  gap: 6px;
 }

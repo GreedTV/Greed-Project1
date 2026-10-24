@@ -35,6 +35,8 @@ const GAMES = {
     title: "Color Clash",
     blurb: "Bet points on red, green or blue. Every minute one color wins, and its backers split the whole pot.",
     bet: true,
+    odds: "1 in 3",
+    example: ["Red", "Blue"],
     choices: [
       ["red", "Red"],
       ["green", "Green"],
@@ -46,6 +48,8 @@ const GAMES = {
     title: "Lucky Number",
     blurb: "Pick a number from 1 to 10 and bet. Every minute one number is drawn; if nobody picked it, the pot grows into a jackpot.",
     bet: true,
+    odds: "1 in 10",
+    example: ["7", "3"],
     choices: Array.from({ length: 10 }, (_, i) => [String(i + 1), String(i + 1)]),
   },
 };
@@ -613,12 +617,56 @@ async function loadMine() {
 
 // ---------- Betting games (Color Clash, Lucky Number) ----------
 
+function howItWorks(g) {
+  const [mine, other] = g.example;
+  const box = el("details", "bet-help");
+  // Open until the visitor has looked at it once
+  try {
+    box.open = !localStorage.getItem("sinners-bet-help-seen");
+  } catch (e) {
+    box.open = true;
+  }
+  box.addEventListener("toggle", () => {
+    try {
+      localStorage.setItem("sinners-bet-help-seen", "1");
+    } catch (e) {}
+  });
+  box.append(el("summary", null, "❓ How this game works"));
+  const steps = el("ol", "bet-help-steps");
+  [
+    "A new round starts every 60 seconds. Everyone on Sinners plays the same round.",
+    `Pick ${g.choices.length > 3 ? "a number" : "a color"}, choose how many points to bet, and press Place bet. One bet per round; betting closes 5 seconds before the end.`,
+    `When the timer hits 0, one ${g.choices.length > 3 ? "number" : "color"} wins at random. Each has the same ${g.odds} chance.`,
+    "Every bet goes into one shared pot. The players who picked the winner split the whole pot, by how much each of them bet.",
+  ].forEach((s) => steps.append(el("li", null, s)));
+  const example = el("div", "bet-help-example");
+  example.append(
+    el("strong", null, "Example"),
+    el("span", null, `You bet 90 on ${mine}, Alex bets 60 on ${other}, Sam bets 30 on ${mine}. The pot is 180.`),
+    el("span", null, `${mine} wins: ${mine}'s players put in 120, so you get 90/120 of the pot = 135 (+45), and Sam gets 45. Alex loses 60.`)
+  );
+  const notes = el("ul", "bet-help-notes");
+  [
+    ["Playing alone?", " If nobody else bets, the pot is only your own points, so a win just gives them back. You win more when other people bet on the other options."],
+    ["Nobody picked the winner?", " Then the pot goes into the jackpot, and the next round's winners get it on top."],
+    ["Where do points come from?", " You start with 100, and the solo games (Quick Draw, Target Rush, Chat Typer) earn up to 300 more a day. Points are just for fun: they can't be bought or turned into money."],
+  ].forEach(([q, a]) => {
+    const li = el("li");
+    li.append(el("strong", null, q), document.createTextNode(a));
+    notes.append(li);
+  });
+  box.append(steps, example, notes);
+  return box;
+}
+
 function startBet(id) {
   const g = GAMES[id];
   let state = null;
   let picked = null;
   let clockSkew = 0; // server time minus our time
   let lastRound = null;
+
+  stage.append(howItWorks(g));
 
   const top = el("div", "bet-top");
   const timer = el("div", "bet-timer");
@@ -661,6 +709,8 @@ function startBet(id) {
   const place = el("button", "button", "Place bet");
   place.type = "submit";
   controls.append(amount, quick, place);
+  amount.addEventListener("input", draw);
+  quick.addEventListener("click", draw);
 
   const note = el("p", "bet-note");
   const history = el("div", "bet-history");
@@ -691,7 +741,21 @@ function startBet(id) {
     else if (state.myBet) note.textContent = `You bet ${state.myBet.amount} on ${labelOf(state.myBet.choice)}. Good luck!`;
     else if (closed) note.textContent = "The next round starts in a moment.";
     else if (!picked) note.textContent = "Pick an option, choose how many points, then place your bet.";
-    else note.textContent = `Betting on ${labelOf(picked)}.`;
+    else note.textContent = preview();
+  }
+
+  // What the visitor would get back if their pick wins, with the bets placed so far
+  function preview() {
+    const bet = Math.floor(Number(amount.value));
+    const name = labelOf(picked);
+    if (!(bet > 0)) return `Betting on ${name}.`;
+    const total = state.pot + state.jackpot + bet;
+    const side = state.choices[picked].total + bet;
+    const payout = Math.floor((total * bet) / side);
+    const others = state.pot - state.choices[picked].total;
+    if (payout <= bet)
+      return `If ${name} wins you get your ${bet} back. Nobody has bet on the other ${g.choices.length > 3 ? "numbers" : "colors"} yet, so there's nothing extra to win (yet).`;
+    return `If ${name} wins you'd get about ${payout} (+${payout - bet}), from the ${others + state.jackpot} points on the others${state.jackpot ? " and the jackpot" : ""}. More bets can change this.`;
   }
 
   const labelOf = (value) => (g.choices.find(([v]) => v === value) || [value, value])[1];
@@ -713,16 +777,12 @@ function startBet(id) {
   function announceLast() {
     const m = state.myLast;
     if (!m || m.round !== state.round - 1) return;
-    const won = m.payout > 0;
-    result.replaceChildren(
-      el(
-        "div",
-        "result-line",
-        won
-          ? `🎉 ${labelOf(m.outcome)} won! You got ${m.payout} points for your ${m.amount}.`
-          : `${labelOf(m.outcome)} won. You lost your ${m.amount} on ${labelOf(m.choice)}.`
-      )
-    );
+    let text;
+    if (m.payout > m.amount) text = `🎉 ${labelOf(m.outcome)} won! You got ${m.payout} back for your ${m.amount}: +${m.payout - m.amount} points from the other players.`;
+    else if (m.payout > 0)
+      text = `✅ ${labelOf(m.outcome)} won and you got your ${m.amount} back. No profit this time: nobody bet on the losing options, so there were no extra points to share.`;
+    else text = `${labelOf(m.outcome)} won. You lost your ${m.amount} on ${labelOf(m.choice)}; it went to the winners (or the jackpot).`;
+    result.replaceChildren(el("div", "result-line", text));
   }
 
   async function poll() {
