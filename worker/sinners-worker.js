@@ -1989,7 +1989,8 @@ async function siteStats(env) {
 const SITE_URL = "https://sinnerstv.com";
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_COLOR = 0xe11d48;
-const MANAGE_SERVER = 0x20;
+const ADMINISTRATOR = 0x8; // admin-only commands need Discord's Administrator permission
+const isAdmin = (interaction) => !!interaction.guild_id && (BigInt((interaction.member && interaction.member.permissions) || 0) & BigInt(ADMINISTRATOR)) !== 0n;
 const BOARD_CHOICES = [
   { name: "Most points", value: "points" },
   { name: "Quick Draw", value: "reaction" },
@@ -2038,7 +2039,13 @@ const BOT_COMMANDS = [
       { type: 1, name: "collect", description: "Collect the rewards from a finished adventure" },
     ],
   },
-  { name: "stats", description: "Sinners site report: visitors, players, games, betting, chat, shop" },
+  {
+    name: "stats",
+    description: "Sinners site report: visitors, players, games, betting, chat, shop (admins)",
+    default_member_permissions: String(ADMINISTRATOR),
+    dm_permission: false,
+  },
+  { name: "help", description: "How Sinners and this bot work: commands, adventure, arena, games, shop" },
   { name: "points", description: "Show someone's Sinners points", options: [{ type: 6, name: "user", description: "Whose points (you if empty)" }] },
   { name: "top", description: "Sinners leaderboards", options: [{ type: 3, name: "board", description: "Which leaderboard", choices: BOARD_CHOICES }] },
   { name: "shop", description: "What's in the Sinners shop" },
@@ -2051,7 +2058,7 @@ const BOT_COMMANDS = [
   {
     name: "stats-live",
     description: "Keep a site report in this channel that updates by itself",
-    default_member_permissions: String(MANAGE_SERVER),
+    default_member_permissions: String(ADMINISTRATOR),
     dm_permission: false,
     options: [
       { type: 4, name: "every", description: "How often to update (default 5 minutes)", choices: BOARD_INTERVALS },
@@ -2066,9 +2073,9 @@ const BOT_COMMANDS = [
       },
     ],
   },
-  { name: "stats-live-off", description: "Stop the self-updating site report", default_member_permissions: String(MANAGE_SERVER), dm_permission: false },
-  { name: "notify-here", description: "Post shop purchases and new gallery links in this channel", default_member_permissions: String(MANAGE_SERVER), dm_permission: false },
-  { name: "notify-off", description: "Stop posting site notifications", default_member_permissions: String(MANAGE_SERVER), dm_permission: false },
+  { name: "stats-live-off", description: "Stop the self-updating site report", default_member_permissions: String(ADMINISTRATOR), dm_permission: false },
+  { name: "notify-here", description: "Post shop purchases and new gallery links in this channel", default_member_permissions: String(ADMINISTRATOR), dm_permission: false },
+  { name: "notify-off", description: "Stop posting site notifications", default_member_permissions: String(ADMINISTRATOR), dm_permission: false },
 ];
 
 function later(ctx, promise) {
@@ -2115,12 +2122,18 @@ async function discordInteraction(request, env, ctx) {
   if (!(await discordVerified(request, env, body))) return text("Bad signature", 401, {});
   const interaction = JSON.parse(body);
   if (interaction.type === 1) return json({ type: 1 }, 200, {}); // Discord checking the endpoint
+  // A button on the /help guide: show that topic in the same message
+  if (interaction.type === 3 && String((interaction.data || {}).custom_id).startsWith("help:")) {
+    return json({ type: 7, data: helpMessage(interaction.data.custom_id.slice(5), isAdmin(interaction)) }, 200, {});
+  }
   if (interaction.type !== 2) return botReply("Unknown interaction.", { ephemeral: true });
   try {
     if (!env.DB) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
     await ensureSchema(env);
     if (interaction.data.name === "stats-live" || interaction.data.name === "stats-live-off") return await statsLiveCommand(interaction, env, ctx);
+    if (interaction.data.name === "help") return json({ type: 4, data: helpMessage("home", isAdmin(interaction)) }, 200, {});
     if (interaction.data.name === "stats") {
+      if (!isAdmin(interaction)) return botReply("🔒 Only server admins can see the site report.", { ephemeral: true });
       // Lots to gather: say "thinking…" now, then fill in the message (Discord allows 3 s for a first answer)
       later(ctx, editOriginal(env, interaction, () => statsReport(env, interaction)));
       return json({ type: 5 }, 200, {});
@@ -2346,8 +2359,7 @@ async function botCommand(interaction, env, origin) {
   }
 
   if (name === "notify-here" || name === "notify-off") {
-    const perms = BigInt((interaction.member && interaction.member.permissions) || 0);
-    if (!interaction.guild_id || !(perms & BigInt(MANAGE_SERVER))) return botReply("Only server managers can do that.", { ephemeral: true });
+    if (!isAdmin(interaction)) return botReply("🔒 Only server admins can do that.", { ephemeral: true });
     if (!env.GALLERY) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
     if (name === "notify-off") {
       await env.GALLERY.delete("discord:notify");
@@ -2366,6 +2378,150 @@ async function botCommand(interaction, env, origin) {
 
 function statText(s) {
   return [s.atk && `+${s.atk} ATK`, s.def && `+${s.def} DEF`, s.hp && `+${s.hp} HP`].filter(Boolean).join(" ");
+}
+
+// ---------- /help guide ----------
+// One message (only the asker sees it) with buttons that switch between topics. The Admin topic only
+// appears for members with the Administrator permission.
+
+const HELP_TOPICS = {
+  home: {
+    label: "Overview",
+    emoji: "📖",
+    title: "📖 Sinners bot guide",
+    description:
+      `Sinners (${SITE_URL}) is where we watch Kick, Twitch and YouTube together, chat, play games and level up an adventurer.\n` +
+      "Your Discord account **is** your Sinners account: log in on the website with Discord and everything here and there is shared.\n\n" +
+      "Pick a topic below to learn more.",
+    fields: [
+      {
+        name: "Commands for everyone",
+        value: [
+          "`/help` this guide",
+          "`/dungeon status | go | collect` your adventurer",
+          "`/duel [@player]` fight in the arena",
+          "`/points [@player]` points and rank",
+          "`/top [board]` leaderboards",
+          "`/shop` rewards you can redeem",
+          "`/round [game]` the current betting round",
+          "`/sinners` website links",
+        ].join("\n"),
+      },
+    ],
+  },
+  start: {
+    label: "Getting started",
+    emoji: "👋",
+    title: "👋 Getting started",
+    fields: [
+      { name: "1. Log in", value: `Open ${SITE_URL} and press **Log in** (Discord). You get **🪙 100 points** to start.` },
+      { name: "2. Make your adventurer", value: `Open your **Profile** (click your name at the top of the site) or type \`/dungeon status\` here. A pixel adventurer is made for you.` },
+      { name: "3. Earn points (🪙)", value: "Play the mini games, win adventures and duels, bet in Color Clash / Lucky Number, and level up. Games and duels earn up to 300 a day." },
+      { name: "4. Spend them", value: `Gear, potions and scrolls in the **Shop** (${SITE_URL}/shop), or special rewards in its Redeem tab.` },
+      { name: "Good to know", value: "Points are just for fun: they can't be bought or turned into money." },
+    ],
+  },
+  adventure: {
+    label: "Adventure",
+    emoji: "⚔️",
+    title: "⚔️ Adventure",
+    description: "Send your adventurer to a region. They come back after real time with XP, coins and sometimes loot.",
+    fields: [
+      {
+        name: "Commands",
+        value: "`/dungeon status` level, stats, gear, regions\n`/dungeon go place:` send them out\n`/dungeon collect` get the rewards when they're back",
+      },
+      {
+        name: "Regions",
+        value: DUNGEONS.map((d) => `${d.emoji} **${d.name}** · level ${TIER_LEVELS[d.tier - 1]} · ${d.minutes >= 60 ? `${d.minutes / 60} h` : `${d.minutes} min`} · 🪙 ${d.coins[0]}–${d.coins[1]}`).join("\n"),
+      },
+      { name: "Winning", value: "Each region has a boss. Your **Attack, Defense and HP** decide the chance to win (shown before you go). A loss still gives some XP." },
+      { name: "Getting stronger", value: "Level up (base stats grow), wear better gear (8 slots, rarer = stronger), and drink potions for +25% on the next 3 fights." },
+      { name: "On the website", value: `${SITE_URL}/profile has the world map, your bag and a live replay of every fight.` },
+    ],
+  },
+  arena: {
+    label: "Arena",
+    emoji: "🏟️",
+    title: "🏟️ Arena",
+    description: "Duel another player's adventurer. They don't need to be online.",
+    fields: [
+      { name: "Commands", value: "`/duel` a random opponent near your rating\n`/duel opponent:@player` someone specific" },
+      { name: "Rating", value: "Everyone starts at **1000**. Beating stronger players earns more rating; losing to weaker ones costs more." },
+      { name: "Rewards", value: `A win pays **🪙 10** and 25 XP, a loss still 8 XP. **${DUELS_PER_DAY} duels a day.**` },
+      { name: "Leaderboard", value: `${SITE_URL}/profile#arena shows the top players and lets you pick who to fight.` },
+    ],
+  },
+  games: {
+    label: "Games & points",
+    emoji: "🎮",
+    title: "🎮 Games & points",
+    fields: [
+      { name: "Mini games", value: `${SITE_URL}/games: ⚡ Quick Draw, 🎯 Target Rush, ⌨️ Chat Typer. Better scores earn more points and adventurer XP.` },
+      {
+        name: "Betting games",
+        value: "🎨 **Color Clash** and 🍀 **Lucky Number**: a new round every minute for everyone. Winners split the pot plus a small site bonus. `/round` shows the current one.",
+      },
+      { name: "Watching streams", value: "While you watch on the Watch page, your adventurer earns a little XP every minute (up to 2 hours a day)." },
+      { name: "Check your progress", value: "`/points` your points and rank\n`/top` leaderboards (points, Quick Draw, Target Rush, Chat Typer)" },
+    ],
+  },
+  shop: {
+    label: "Shop",
+    emoji: "🛒",
+    title: "🛒 Shop",
+    description: `Everything is on the website: ${SITE_URL}/shop`,
+    fields: [
+      { name: "⚔️ Adventure", value: "Gear for all 8 slots in 5 tiers (unlock at adventurer level 1 / 5 / 10 / 20 / 30). Never sells out; sells back for half." },
+      { name: "🧪 Extras", value: "Potions (+25% Attack, Defense or HP) and scrolls (+50% XP, +15% loot) for your next 3 fights or adventures." },
+      { name: "🎁 Redeem", value: "Special rewards from the Sinners team, handed out after you buy them. `/shop` lists them here." },
+    ],
+  },
+  site: {
+    label: "Website",
+    emoji: "🌐",
+    title: "🌐 The website",
+    fields: [
+      { name: "▶️ Watch", value: `${SITE_URL}/watch: Kick, Twitch and YouTube side by side, HD, mini player, Sinners chat and live alerts.` },
+      { name: "📺 Content", value: `${SITE_URL}/content: browse and search YouTube while you wait for a stream.` },
+      { name: "🖼️ Gallery", value: `${SITE_URL}/gallery: share clip and image links (checked before they appear).` },
+      { name: "👤 Profile", value: "Click your name at the top: your stats, adventurer, world map and arena." },
+    ],
+  },
+  admin: {
+    label: "Admin",
+    emoji: "🛠️",
+    admin: true,
+    title: "🛠️ Admin commands",
+    description: "Only members with the **Administrator** permission can see and use these.",
+    fields: [
+      { name: "`/stats`", value: "Full site report: who's online, visitors, players, betting, chat, shop and this server." },
+      { name: "`/stats-live [every] [mode]`", value: "Keeps the report in this channel, updated every 5 min to once a day (or posts a new one each time). `/stats-live-off` stops it." },
+      { name: "`/notify-here`", value: "Posts new shop purchases (to hand out) and gallery links waiting for review in this channel. `/notify-off` stops it." },
+      { name: "Admin page", value: `${SITE_URL}/admin (password): gallery review, chat moderation, leaderboards and points resets, shop rewards, and **Register commands** after a bot update.` },
+    ],
+  },
+};
+
+function helpMessage(topic, admin) {
+  const keys = Object.keys(HELP_TOPICS).filter((k) => admin || !HELP_TOPICS[k].admin);
+  if (!keys.includes(topic)) topic = "home";
+  const t = HELP_TOPICS[topic];
+  const buttons = keys.map((k) => ({
+    type: 2,
+    style: k === topic ? 1 : 2,
+    label: HELP_TOPICS[k].label,
+    emoji: { name: HELP_TOPICS[k].emoji },
+    custom_id: `help:${k}`,
+  }));
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 5) rows.push({ type: 1, components: buttons.slice(i, i + 5) });
+  return {
+    flags: 64,
+    allowed_mentions: { parse: [] },
+    embeds: [embed({ title: t.title, description: t.description, fields: t.fields, url: SITE_URL })],
+    components: rows,
+  };
 }
 
 // Fills in a deferred reply ("Sinners is thinking…") with the real answer
@@ -2553,8 +2709,7 @@ async function updateStatsBoard(env) {
 }
 
 async function statsLiveCommand(interaction, env, ctx) {
-  const perms = BigInt((interaction.member && interaction.member.permissions) || 0);
-  if (!interaction.guild_id || !(perms & BigInt(MANAGE_SERVER))) return botReply("Only server managers can do that.", { ephemeral: true });
+  if (!isAdmin(interaction)) return botReply("🔒 Only server admins can do that.", { ephemeral: true });
   if (!env.GALLERY || !env.DB) return botReply("The site's storage isn't set up yet.", { ephemeral: true });
   if (interaction.data.name === "stats-live-off") {
     await env.GALLERY.delete(BOARD_KEY);
