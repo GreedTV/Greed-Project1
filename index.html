@@ -3,20 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Greed Project</title>
-  <meta name="description" content="A simple starter website.">
+  <title>Sinners — Gaming & Streams</title>
+  <meta name="description" content="Sinners: live gaming streams, clips and community.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header">
     <div class="container nav">
-      <a href="#" class="logo">Greed<span>.</span></a>
-      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">◐</button>
+      <a href="index.html" class="logo">SINNERS<span>.</span></a>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
       <nav>
-        <ul>
-          <li><a href="#about">About</a></li>
-          <li><a href="#features">Features</a></li>
-          <li><a href="#contact">Contact</a></li>
+        <ul id="nav-links">
+          <li><a href="index.html" aria-current="page">Home</a></li>
+          <li><a href="schedule.html">Schedule</a></li>
+          <li><a href="gallery.html">Gallery</a></li>
+          <li><a href="about.html">About</a></li>
         </ul>
       </nav>
     </div>
@@ -25,50 +29,84 @@
   <main>
     <section class="hero">
       <div class="container">
-        <h1>Welcome to Greed Project</h1>
-        <p>A clean, simple starting point. Edit <code>index.html</code> to make it yours.</p>
-        <a href="#about" class="button">Get started</a>
+        <div class="live-badge" id="live-badge"><span class="dot"></span><span id="live-text">Offline</span></div>
+        <h1>Welcome to <span class="gradient-text">SINNERS</span></h1>
+        <p>Late-night streams, ranked grinds and chaotic clips. Pull up a chair and join the crew.</p>
+        <div class="hero-actions">
+          <!-- Replace # with your channel link -->
+          <a href="#" class="button">▶ Watch live</a>
+          <a href="schedule.html" class="button ghost">See schedule</a>
+        </div>
       </div>
     </section>
 
-    <section id="about" class="section">
+    <section class="section">
       <div class="container">
-        <h2>About</h2>
-        <p>This site is plain HTML, CSS and JavaScript — no build tools, no installs. Open <code>index.html</code> in a browser and you're running.</p>
+        <div class="stats">
+          <div class="stat reveal"><strong class="gradient-text" data-count="1200">0</strong><span>Followers</span></div>
+          <div class="stat reveal"><strong class="gradient-text" data-count="350">0</strong><span>Streams</span></div>
+          <div class="stat reveal"><strong class="gradient-text" data-count="85">0</strong><span>Clips</span></div>
+          <div class="stat reveal"><strong class="gradient-text" data-count="5">0</strong><span>Days a week</span></div>
+        </div>
       </div>
     </section>
 
-    <section id="features" class="section alt">
+    <section class="section alt">
       <div class="container">
-        <h2>Features</h2>
+        <div class="section-head reveal">
+          <h2>Latest clips</h2>
+          <a href="gallery.html">View all →</a>
+        </div>
         <div class="cards">
-          <article class="card">
-            <h3>Responsive</h3>
-            <p>Looks good on phones, tablets and desktops.</p>
+          <article class="card reveal">
+            <img src="images/clip-1.svg" alt="Clutch 1v4 clip thumbnail">
+            <div class="card-body">
+              <span class="tag">Valorant</span>
+              <h3>The 1v4 clutch</h3>
+              <p>Down to the last round and somehow it worked.</p>
+            </div>
           </article>
-          <article class="card">
-            <h3>Dark mode</h3>
-            <p>Follows your system setting, with a toggle in the header.</p>
+          <article class="card reveal">
+            <img src="images/clip-2.svg" alt="Boss fight clip thumbnail">
+            <div class="card-body">
+              <span class="tag">Elden Ring</span>
+              <h3>Boss down, first try</h3>
+              <p>No summons, no excuses, a lot of screaming.</p>
+            </div>
           </article>
-          <article class="card">
-            <h3>Easy to edit</h3>
-            <p>Three small files. Change the text, colors and sections as you like.</p>
+          <article class="card reveal">
+            <img src="images/clip-3.svg" alt="Victory royale clip thumbnail">
+            <div class="card-body">
+              <span class="tag">Fortnite</span>
+              <h3>Squad wipe finale</h3>
+              <p>Final circle chaos with the whole squad.</p>
+            </div>
           </article>
         </div>
       </div>
     </section>
 
-    <section id="contact" class="section">
+    <section class="section">
       <div class="container">
-        <h2>Contact</h2>
-        <p>Find this project on <a href="https://github.com/GreedTV/Greed-Project1">GitHub</a>.</p>
+        <div class="cta reveal">
+          <h2>Join the <span class="gradient-text">Sinners</span></h2>
+          <p>Hang out between streams, share clips and find people to play with.</p>
+          <div class="socials" style="justify-content:center">
+            <!-- Replace # with your real links -->
+            <a href="#">Twitch</a>
+            <a href="#">YouTube</a>
+            <a href="#">Discord</a>
+            <a href="#">TikTok</a>
+          </div>
+        </div>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="container">
-      <p>&copy; <span id="year"></span> Greed Project</p>
+      <p>&copy; <span id="year"></span> Sinners</p>
+      <p><a href="schedule.html">Schedule</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
     </div>
   </footer>
 

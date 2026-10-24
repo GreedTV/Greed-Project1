@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gallery — Sinners</title>
+  <meta name="description" content="Clips and screenshots from Sinners streams.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a href="index.html" class="logo">SINNERS<span>.</span></a>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
+      <nav>
+        <ul id="nav-links">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="schedule.html">Schedule</a></li>
+          <li><a href="gallery.html" aria-current="page">Gallery</a></li>
+          <li><a href="about.html">About</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container reveal">
+        <h1>The <span class="gradient-text">Gallery</span></h1>
+        <p>Best moments, screenshots and highlights. Click any image to view it bigger.</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:24px">
+      <div class="container">
+        <div class="filters reveal">
+          <button class="filter active" data-filter="all">All</button>
+          <button class="filter" data-filter="fps">FPS</button>
+          <button class="filter" data-filter="rpg">RPG</button>
+          <button class="filter" data-filter="horror">Horror</button>
+          <button class="filter" data-filter="irl">IRL</button>
+        </div>
+
+        <!-- To add your own: put an image in /images and copy one <button> block -->
+        <div class="gallery" id="gallery">
+          <button class="gallery-item reveal" data-category="fps"><figure style="margin:0"><img src="images/clip-1.svg" alt="The 1v4 clutch"><figcaption>The 1v4 clutch</figcaption></figure></button>
+          <button class="gallery-item reveal" data-category="rpg"><figure style="margin:0"><img src="images/clip-2.svg" alt="Boss down, first try"><figcaption>Boss down, first try</figcaption></figure></button>
+          <button class="gallery-item reveal" data-category="fps"><figure style="margin:0"><img src="images/clip-3.svg" alt="Squad wipe finale"><figcaption>Squad wipe finale</figcaption></figure></button>
+          <button class="gallery-item reveal" data-category="horror"><figure style="margin:0"><img src="images/clip-4.svg" alt="The jumpscare"><figcaption>The jumpscare</figcaption></figure></button>
+          <button class="gallery-item reveal" data-category="irl"><figure style="margin:0"><img src="images/clip-5.svg" alt="New setup reveal"><figcaption>New setup reveal</figcaption></figure></button>
+          <button class="gallery-item reveal" data-category="rpg"><figure style="margin:0"><img src="images/clip-6.svg" alt="Legendary drop"><figcaption>Legendary drop</figcaption></figure></button>
+          <button class="gallery-item reveal" data-category="horror"><figure style="margin:0"><img src="images/clip-7.svg" alt="Lights out"><figcaption>Lights out</figcaption></figure></button>
+          <button class="gallery-item reveal" data-category="irl"><figure style="margin:0"><img src="images/clip-8.svg" alt="1,000 followers night"><figcaption>1,000 followers night</figcaption></figure></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="lightbox" id="lightbox" aria-hidden="true">
+    <button class="close" aria-label="Close">✕</button>
+    <button class="prev" aria-label="Previous">‹</button>
+    <figure>
+      <img id="lightbox-img" src="" alt="">
+      <figcaption id="lightbox-caption"></figcaption>
+    </figure>
+    <button class="next" aria-label="Next">›</button>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>&copy; <span id="year"></span> Sinners</p>
+      <p><a href="schedule.html">Schedule</a><a href="gallery.html">Gallery</a><a href="about.html">About</a></p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
