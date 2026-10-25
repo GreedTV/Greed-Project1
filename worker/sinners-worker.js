@@ -68,6 +68,13 @@
 //   GET  /discord-admin                -> bot setup status and invite link   (admin)
 //   POST /discord-admin                -> { action: "register" }  (re)creates the slash commands   (admin)
 //
+// Linked accounts (chat as yourself on Twitch from the Watch page)
+//   GET  /link                         -> your linked accounts   (logged in)
+//   POST /link/start                   -> { platform, back }  a link to open to connect that account   (logged in)
+//   POST /link/remove                  -> { platform }   (logged in)
+//   GET  /auth/twitch, /auth/twitch/callback   Twitch's login pages (opened by the browser)
+//   POST /chat/send                    -> { platform: "twitch", channel, text }  sent as you   (logged in)
+//
 // Discord login
 //   GET  /auth/discord?return=<page url>  -> sends the visitor to Discord, then back to the page with #session=<token>
 //   GET  /me                              -> the logged-in user ("Authorization: Bearer <session token>")
@@ -84,6 +91,8 @@
 //   3. Settings -> Bindings -> Add -> D1 database -> variable name DB -> select a database.
 //   4. Settings -> Variables and Secrets -> add as Secret: ADMIN_PASSWORD, DISCORD_CLIENT_SECRET, SESSION_SECRET
 //      and as Text: DISCORD_CLIENT_ID.
+//   Twitch chat (optional): TWITCH_CLIENT_ID (Text) and TWITCH_CLIENT_SECRET (Secret) from a Twitch app whose
+//      OAuth Redirect URL is <this Worker>/auth/twitch/callback.
 //   5. Discord bot (optional): add DISCORD_BOT_TOKEN as Secret and DISCORD_PUBLIC_KEY as Text, then in the
 //      Discord Developer Portal set Interactions Endpoint URL to <this Worker>/discord/interactions.
 //   6. Live stats board (optional): Settings -> Trigger events -> Add -> Cron Triggers -> every 5 minutes (*/5 * * * *).
@@ -196,6 +205,16 @@ export default {
 
       // Login pages are opened by the browser directly, so they answer with redirects
       if (path === "/auth/discord") return await discordStart(url, env);
+      if (path === "/auth/twitch") return await twitchAuthStart(url, env);
+      if (path === "/auth/twitch/callback") return await twitchAuthCallback(url, env);
+      if (path === "/link" || path === "/link/start" || path === "/link/remove" || path === "/chat/send") {
+        if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
+        await ensureSchema(env);
+        if (path === "/link" && request.method === "GET") return await linksGet(request, env, cors);
+        if (path === "/link/start" && request.method === "POST") return await linkStart(request, env, cors);
+        if (path === "/link/remove" && request.method === "POST") return await linkRemove(request, env, cors);
+        if (path === "/chat/send" && request.method === "POST") return await chatSend(request, env, cors);
+      }
       if (path === "/auth/discord/callback") return await discordCallback(url, env);
       if (path === "/me" && request.method === "GET") return json({ user: await requireUser(request, env) }, 200, cors);
 
@@ -765,7 +784,7 @@ async function mergeSplitAccounts(env) {
 // Bump SCHEMA_VERSION whenever tables or columns change. The database remembers the version it has,
 // so the full setup below runs once per change instead of on every cold start (which was slow
 // enough to miss Discord's 3-second limit).
-const SCHEMA_VERSION = 15;
+const SCHEMA_VERSION = 16;
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -843,6 +862,10 @@ async function ensureSchema(env) {
     ),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS streaks (user_id TEXT PRIMARY KEY, last_day TEXT NOT NULL, streak INTEGER NOT NULL, best INTEGER NOT NULL)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS bets_user ON bets (user_id, created)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS linked_accounts (user_id TEXT NOT NULL, platform TEXT NOT NULL, ext_id TEXT NOT NULL, ext_name TEXT NOT NULL, " +
+        "access_token TEXT NOT NULL, refresh_token TEXT NOT NULL, expires_at INTEGER NOT NULL, last_sent INTEGER, created INTEGER NOT NULL, PRIMARY KEY (user_id, platform))"
+    ),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS achievements (user_id TEXT NOT NULL, id TEXT NOT NULL, earned INTEGER NOT NULL, PRIMARY KEY (user_id, id))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS cosmetics (user_id TEXT NOT NULL, id TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (user_id, id))"),
     env.DB.prepare(
@@ -896,6 +919,7 @@ async function ensureSchema(env) {
     "ALTER TABLE heroes ADD COLUMN duel_wins_total INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE messages ADD COLUMN badge TEXT",
     "ALTER TABLE messages ADD COLUMN color TEXT",
+    "ALTER TABLE daily ADD COLUMN chats INTEGER NOT NULL DEFAULT 0",
   ]) {
     try {
       await env.DB.prepare(sql).run();
@@ -2085,9 +2109,9 @@ const QUEST_POOL = [
   { id: "duel2", family: "arena", kind: "duels", target: 2, emoji: "🏟️", text: "Fight 2 arena duels", coins: 40 },
   { id: "duelwin1", family: "arena", kind: "duel_wins", target: 1, emoji: "⚔️", text: "Win an arena duel", coins: 45 },
   { id: "bet2", family: "bets", kind: "bets", target: 2, emoji: "🎲", text: "Place 2 bets in Color Clash or Lucky Number", coins: 30 },
-  { id: "chat3", family: "chat", kind: "chats", target: 3, emoji: "💬", text: "Send 3 messages in Sinners chat", coins: 30 },
+  { id: "chat3", family: "chat", kind: "chats", target: 3, emoji: "💬", text: "Send 3 chat messages on Sinners", coins: 30 },
 ];
-const DAILY_COUNTERS = ["games", "dungeons", "dungeon_wins", "duels", "duel_wins"];
+const DAILY_COUNTERS = ["games", "dungeons", "dungeon_wins", "duels", "duel_wins", "chats"];
 const QUEST_BONUS_COINS = 60;
 const levelScale = (level) => 1 + level / 10; // rewards grow with the adventurer's level
 
@@ -2146,7 +2170,7 @@ async function dailyState(env, user) {
     ...Object.fromEntries(DAILY_COUNTERS.map((k) => [k, row ? row[k] : 0])),
     watch: hero && hero.watchDay === day ? hero.watchMinutes : 0,
     bets: bets.n,
-    chats: chats.n,
+    chats: chats.n + (row ? row.chats : 0), // Sinners chat + messages sent to Twitch from Sinners
   };
   const claimed = String((row && row.claimed) || "");
   const quests = questsFor(user.id, day).map((q, index) => {
@@ -2823,6 +2847,176 @@ async function profileExtrasAction(request, env, cors) {
     200,
     cors
   );
+}
+
+// ---------- Linked accounts (chat as yourself on Twitch) ----------
+// Discord stays the Sinners login. A logged-in player can link Twitch, then type in the Watch page's
+// Twitch chat and the message is sent as them through Twitch's official API (Helix "Send Chat
+// Message"). Their Twitch tokens are kept encrypted (AES-GCM, key from SESSION_SECRET) and never sent
+// to the browser. Reading Twitch chat happens in the browser (Twitch's public chat connection).
+// Setup: a Twitch app at dev.twitch.tv with the redirect URL <this Worker>/auth/twitch/callback, and the
+// Worker variables TWITCH_CLIENT_ID (Text) and TWITCH_CLIENT_SECRET (Secret).
+
+const LINK_PLATFORMS = ["twitch"];
+const TWITCH_SCOPES = "user:write:chat";
+const SEND_GAP_MS = 1200;
+
+async function tokenKey(env) {
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`link-tokens:${env.SESSION_SECRET}`));
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function sealToken(env, text) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await tokenKey(env), new TextEncoder().encode(text)));
+  return `${b64url(iv)}.${b64url(data)}`;
+}
+
+async function openToken(env, sealed) {
+  const [iv, data] = String(sealed || "").split(".");
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64url(iv) }, await tokenKey(env), fromB64url(data));
+  return new TextDecoder().decode(plain);
+}
+
+// Step 1 (logged in, from the page): a short-lived signed link to start linking
+async function linkStart(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { platform, back } = await readJson(request);
+  if (!LINK_PLATFORMS.includes(platform)) fail("That platform can't be linked yet.", 400);
+  if (platform === "twitch" && (!env.TWITCH_CLIENT_ID || !env.TWITCH_CLIENT_SECRET)) fail("Twitch linking isn't set up yet.", 503);
+  const returnUrl = ALLOWED_ORIGINS.some((o) => String(back || "").startsWith(o + "/")) ? String(back) : `${SITE_URL}/profile`;
+  const state = await signToken(env, { kind: "link", platform, userId: user.id, back: returnUrl, exp: Date.now() + 10 * 60000 });
+  return json({ url: `${new URL(request.url).origin}/auth/${platform}?state=${encodeURIComponent(state)}` }, 200, cors);
+}
+
+// Step 2: off to Twitch
+async function twitchAuthStart(url, env) {
+  const state = url.searchParams.get("state") || "";
+  const data = await verifyToken(env, state);
+  if (!data || data.kind !== "link") return text("This link expired. Go back to Sinners and try again.", 400, {});
+  const auth = new URL("https://id.twitch.tv/oauth2/authorize");
+  auth.search = new URLSearchParams({
+    client_id: env.TWITCH_CLIENT_ID,
+    redirect_uri: `${url.origin}/auth/twitch/callback`,
+    response_type: "code",
+    scope: TWITCH_SCOPES,
+    state,
+  }).toString();
+  return Response.redirect(auth.toString(), 302);
+}
+
+// Step 3: back from Twitch with a code
+async function twitchAuthCallback(url, env) {
+  const state = await verifyToken(env, url.searchParams.get("state") || "");
+  if (!state || state.kind !== "link") return text("This link expired. Go back to Sinners and try again.", 400, {});
+  const back = (result) => Response.redirect(`${state.back.split("#")[0]}#linked=${result}`, 302);
+  const code = url.searchParams.get("code");
+  if (!code) return back("cancelled");
+  const res = await fetch("https://id.twitch.tv/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.TWITCH_CLIENT_ID,
+      client_secret: env.TWITCH_CLIENT_SECRET,
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: `${url.origin}/auth/twitch/callback`,
+    }),
+  });
+  if (!res.ok) return back("failed");
+  const tok = await res.json();
+  const me = await fetch("https://api.twitch.tv/helix/users", { headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${tok.access_token}` } });
+  const who = me.ok ? ((await me.json()).data || [])[0] : null;
+  if (!who) return back("failed");
+  await ensureSchema(env);
+  await env.DB.prepare(
+    "INSERT INTO linked_accounts (user_id, platform, ext_id, ext_name, access_token, refresh_token, expires_at, created) VALUES (?, 'twitch', ?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT(user_id, platform) DO UPDATE SET ext_id = excluded.ext_id, ext_name = excluded.ext_name, access_token = excluded.access_token, " +
+      "refresh_token = excluded.refresh_token, expires_at = excluded.expires_at"
+  )
+    .bind(state.userId, who.id, who.display_name || who.login, await sealToken(env, tok.access_token), await sealToken(env, tok.refresh_token || ""), Date.now() + (tok.expires_in || 3600) * 1000, Date.now())
+    .run();
+  return back("twitch");
+}
+
+// A working Twitch access token for this player (refreshed when it's about to expire)
+async function twitchToken(env, link, force = false) {
+  if (!force && link.expires_at > Date.now() + 60000) return openToken(env, link.access_token);
+  const res = await fetch("https://id.twitch.tv/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.TWITCH_CLIENT_ID,
+      client_secret: env.TWITCH_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: await openToken(env, link.refresh_token),
+    }),
+  });
+  if (!res.ok) {
+    await env.DB.prepare("DELETE FROM linked_accounts WHERE user_id = ? AND platform = 'twitch'").bind(link.user_id).run();
+    fail("Your Twitch link expired. Link Twitch again to chat.", 401);
+  }
+  const tok = await res.json();
+  await env.DB.prepare("UPDATE linked_accounts SET access_token = ?, refresh_token = ?, expires_at = ? WHERE user_id = ? AND platform = 'twitch'")
+    .bind(await sealToken(env, tok.access_token), await sealToken(env, tok.refresh_token || ""), Date.now() + (tok.expires_in || 3600) * 1000, link.user_id)
+    .run();
+  return tok.access_token;
+}
+
+const twitchIds = new Map(); // channel name -> Twitch user id (per Worker instance)
+
+async function twitchUserId(env, token, login) {
+  if (twitchIds.has(login)) return twitchIds.get(login);
+  const res = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`, { headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}` } });
+  const who = res.ok ? ((await res.json()).data || [])[0] : null;
+  if (!who) fail("Couldn't find that Twitch channel.", 404);
+  twitchIds.set(login, who.id);
+  return who.id;
+}
+
+async function chatSend(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { platform, channel, text: raw } = await readJson(request);
+  if (platform !== "twitch") fail("Sending isn't available for that platform.", 400);
+  const login = String(channel || "").toLowerCase();
+  if (!/^[a-z0-9_]{3,25}$/.test(login)) fail("Unknown channel.", 400);
+  const message = String(raw || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 500);
+  if (!message) fail("Type a message first.");
+  const link = await env.DB.prepare("SELECT * FROM linked_accounts WHERE user_id = ? AND platform = 'twitch'").bind(user.id).first();
+  if (!link) fail("Link your Twitch account to chat.", 409);
+  // A small gap between messages (Twitch has its own limits too)
+  const gap = await env.DB.prepare("UPDATE linked_accounts SET last_sent = ? WHERE user_id = ? AND platform = 'twitch' AND COALESCE(last_sent, 0) < ?")
+    .bind(Date.now(), user.id, Date.now() - SEND_GAP_MS)
+    .run();
+  if (!gap.meta || gap.meta.changes !== 1) fail("You're sending messages too fast.", 429);
+
+  const send = async (token) =>
+    fetch("https://api.twitch.tv/helix/chat/messages", {
+      method: "POST",
+      headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ broadcaster_id: await twitchUserId(env, token, login), sender_id: link.ext_id, message }),
+    });
+  let res = await send(await twitchToken(env, link));
+  if (res.status === 401) res = await send(await twitchToken(env, link, true));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) fail(data.message || "Twitch didn't accept that message.", res.status === 401 ? 401 : 400);
+  const result = (data.data || [])[0] || {};
+  if (!result.is_sent) fail((result.drop_reason && result.drop_reason.message) || "Twitch didn't send that message (slow mode, followers-only or a ban?).", 409);
+  await bumpDaily(env, user.id, { chats: 1 }); // counts for the daily chat quest
+  return json({ ok: true, as: link.ext_name }, 200, cors);
+}
+
+async function linksGet(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { results } = await env.DB.prepare("SELECT platform, ext_name AS name FROM linked_accounts WHERE user_id = ?").bind(user.id).all();
+  return json({ links: results, available: { twitch: !!(env.TWITCH_CLIENT_ID && env.TWITCH_CLIENT_SECRET) } }, 200, cors);
+}
+
+async function linkRemove(request, env, cors) {
+  const user = await requireUser(request, env);
+  const { platform } = await readJson(request);
+  await env.DB.prepare("DELETE FROM linked_accounts WHERE user_id = ? AND platform = ?").bind(user.id, String(platform)).run();
+  return linksGet(request, env, cors);
 }
 
 // ---------- Site stats ----------
@@ -3528,7 +3722,7 @@ const HELP_TOPICS = {
     emoji: "🌐",
     title: "🌐 The website",
     fields: [
-      { name: "▶️ Watch", value: `${SITE_URL}/watch: Kick, Twitch and YouTube side by side, HD, mini player, Sinners chat and live alerts.` },
+      { name: "▶️ Watch", value: `${SITE_URL}/watch: Kick, Twitch and YouTube side by side, HD, mini player, Sinners chat and live alerts. Link Twitch on your profile to type in Twitch chat right on the page.` },
       { name: "📺 Content", value: `${SITE_URL}/content: browse and search YouTube while you wait for a stream.` },
       { name: "🖼️ Gallery", value: `${SITE_URL}/gallery: share clip and image links (checked before they appear).` },
       { name: "👤 Profile", value: "Click your name at the top: your stats, adventurer, world map, arena, daily quests and 🏅 achievements (pick one as your badge in chat)." },

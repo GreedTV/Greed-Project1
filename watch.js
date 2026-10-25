@@ -728,7 +728,7 @@ function renderStage() {
 // Tabs: our own Sinners chat (chat.js) and the platform's real chat.
 
 let chatStreamId = null; // which stream's chat is shown (multi-view can switch)
-let chatTab = "sinners";
+let chatTab = "platform"; // the stream's own chat first
 let stopChat = null;
 let chatHidden = false;
 try {
@@ -761,8 +761,8 @@ function buildChat(playing) {
     const s = playing.find((x) => x.id === chatStreamId);
     tabRow.replaceChildren();
     [
-      ["sinners", "Sinners chat"],
       ["platform", `${cap(s.platform)} chat`],
+      ["sinners", "Sinners chat"],
     ].forEach(([key, label]) => {
       const btn = el("button", "chat-tab" + (chatTab === key ? " active" : ""), label);
       btn.type = "button";
@@ -792,6 +792,11 @@ function buildChat(playing) {
           body.replaceChildren(el("div", "chat-none", "YouTube chat appears here when they go live."));
         })
         .catch(() => body.replaceChildren(el("div", "chat-none", "Couldn't check YouTube right now.")));
+      return;
+    }
+    // Twitch: drawn by Sinners, and you can type in it as yourself (twitch-chat.js)
+    if (s.platform === "twitch") {
+      stopChat = mountTwitchChat(body, s.channel);
       return;
     }
     const url = chatUrl(s);

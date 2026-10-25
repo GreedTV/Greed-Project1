@@ -905,6 +905,50 @@ async function loadExtras() {
   } catch (e) {}
 }
 
+// ---------- Linked accounts ----------
+// Discord is the Sinners login; Twitch can be linked to chat as yourself on the Watch page.
+
+function renderLinks() {
+  const box = $("links-list");
+  const links = SinnersLinks.links;
+  if (!links) return box.replaceChildren(el("p", "hint", "…"));
+  const row = (icon, name, status, action) => {
+    const r = el("div", "link-row");
+    r.append(el("span", "link-icon", icon), el("div", "link-info"));
+    r.lastChild.append(el("strong", null, name), el("span", "hint", status));
+    if (action) r.append(action);
+    return r;
+  };
+  const rows = [row("💬", "Discord", `Logged in as ${SinnersAuth.user.name} · your Sinners account`)];
+  if (links.twitch) {
+    const b = el("button", "link-btn", "Unlink");
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      if (!(await SinnersDialog.confirm("You won't be able to chat on Twitch from Sinners until you link it again.", { title: "Unlink Twitch?", yes: "Unlink", icon: "💜" }))) return;
+      await SinnersLinks.unlink("twitch");
+    });
+    rows.push(row("💜", "Twitch", `Linked as ${links.twitch} · chat as yourself on the Watch page`, b));
+  } else {
+    const b = el("button", "button twitch-btn", "Link");
+    b.type = "button";
+    b.disabled = SinnersLinks.available.twitch === false;
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await SinnersLinks.link("twitch");
+      } catch (err) {
+        b.disabled = false;
+        showResult(`⚠️ ${err.message}`);
+      }
+    });
+    rows.push(row("💜", "Twitch", SinnersLinks.available.twitch === false ? "Coming soon" : "Link it to chat in Twitch streams from Sinners", b));
+  }
+  rows.push(row("🟢", "Kick", "Not available yet: Kick doesn't let other sites show its chat"));
+  rows.push(row("▶️", "YouTube", "Not available yet"));
+  box.replaceChildren(...rows);
+}
+const stopLinksWatch = SinnersLinks.onChange(renderLinks);
+
 // ---------- Profile numbers ----------
 
 const GAME_FORMAT = {
@@ -963,7 +1007,8 @@ async function start() {
     loadDaily();
     loadBoss();
     loadExtras();
-    if (["#arena", "#daily", "#boss", "#achievements", "#wardrobe"].includes(location.hash)) $(location.hash.slice(1)).scrollIntoView();
+    renderLinks();
+    if (["#arena", "#daily", "#boss", "#achievements", "#wardrobe", "#links"].includes(location.hash)) $(location.hash.slice(1)).scrollIntoView();
   } catch (err) {
     $("profile-head").replaceChildren(el("p", "hint", `Couldn't load your profile: ${err.message}`));
   }
@@ -989,6 +1034,7 @@ const ticker = setInterval(() => {
 }, 1000);
 
 SinnersNav.onLeave(() => {
+  stopLinksWatch();
   if (fightDone) fightDone();
   clearInterval(ticker);
   stopAuthWatch();
