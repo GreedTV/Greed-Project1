@@ -820,20 +820,22 @@ function buildChat(playing) {
       frame.src = url;
       frame.title = `${displayName(s)} chat`;
       body.append(frame);
-      // Kick chat works inside the page; typing needs a Kick login inside it, which browsers often
-      // forget for embedded sites (and Google sign-in never works there). Kick's chat in its own window
-      // is kick.com itself, so your normal Kick login (Google too) works there and stays.
+      // Kick chat works inside the page, but typing needs a kick.com login inside it. Our "Log in with
+      // Kick" can't do that, and Google / Apple sign-in are blocked inside other sites, so say so plainly.
       if (s.platform === "kick") {
         const bar = el("div", "kick-chat-bar");
-        const login = el("button", "link-btn", "Can't type? Open Kick chat window ↗");
-        login.type = "button";
-        login.title = "Kick's chat in its own window: your Kick login works there (Google too) and stays";
-        login.addEventListener("click", () => window.open(url, `kick-chat-${s.channel}`, "width=420,height=760"));
-        const reload = el("button", "link-btn", "⟳ Reload chat");
+        const note = el("p", "kick-chat-note");
+        note.append(
+          "To chat, log in above with your ",
+          el("strong", null, "Kick username (or email) and password"),
+          ". Google and Apple sign-in don't work inside Sinners, and logging in to Sinners doesn't log you in to Kick chat."
+        );
+        const reload = el("button", "link-btn", "⟳");
         reload.type = "button";
-        reload.title = "Reload Kick chat (after logging in)";
+        reload.title = "Reload Kick chat";
+        reload.setAttribute("aria-label", "Reload Kick chat");
         reload.addEventListener("click", () => (frame.src = url));
-        bar.append(login, reload);
+        bar.append(note, reload);
         body.append(bar);
       }
       return;

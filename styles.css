@@ -6297,7 +6297,24 @@ img {
   padding: 6px 14px;
 }
 
-/* Kick chat (embedded): login helper under it */
+/* Kick chat (embedded): how to log in, under it */
+.kick-chat-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.kick-chat-note strong {
+  color: var(--text);
+}
+
+.kick-chat-bar .link-btn {
+  flex: none;
+  align-self: flex-start;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .kick-chat-bar {
   flex: none;
   display: flex;
