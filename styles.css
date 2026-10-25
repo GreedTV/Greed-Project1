@@ -1661,7 +1661,7 @@ img {
   background: var(--surface);
   display: flex;
   flex-direction: column;
-  height: clamp(440px, 72vh, 760px);
+  height: clamp(560px, calc(100vh - 90px), 1000px);
 }
 
 .chat-head {
@@ -2066,7 +2066,7 @@ img {
   }
 
   .chat {
-    height: 480px;
+    height: 640px;
   }
 }
 
