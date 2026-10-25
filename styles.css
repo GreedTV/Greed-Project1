@@ -6313,6 +6313,15 @@ img {
   min-width: 0;
 }
 
+.tchat-msg.pending {
+  opacity: 0.55;
+}
+
+.tchat-msg.failed {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
 .tchat-reply {
   font-size: 0.78rem;
   color: var(--muted);

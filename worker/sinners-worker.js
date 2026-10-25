@@ -150,7 +150,7 @@ export default {
       const kickChat = path.match(/^\/kick\/chat\/([a-zA-Z0-9_-]{2,30})$/);
       if (kickChat && request.method === "GET") return await kickChatInfo(kickChat[1].toLowerCase(), cors);
       const kickMsgs = path.match(/^\/kick\/messages\/(\d{1,12})$/);
-      if (kickMsgs && request.method === "GET") return await kickMessages(kickMsgs[1], cors);
+      if (kickMsgs && request.method === "GET") return await kickMessages(kickMsgs[1], cors, url.searchParams.has("fresh"));
 
       // Discord calls this directly (no browser, no Origin)
       if (path === "/discord/interactions" && request.method === "POST") return await discordInteraction(request, env, ctx);
@@ -470,8 +470,9 @@ async function kickChatInfo(slug, cors) {
   );
 }
 
-async function kickMessages(channelId, cors) {
-  const messages = await cached(`msg:${channelId}`, 2000, async () => {
+async function kickMessages(channelId, cors, fresh = false) {
+  // fresh: right after someone sends, so their message shows without waiting for the cache
+  const messages = await cached(`msg:${channelId}`, fresh ? 300 : 2000, async () => {
     const res = await fetch(`https://kick.com/api/v2/channels/${channelId}/messages`, { headers: BROWSER_HEADERS });
     if (!res.ok) fail(`Kick chat didn't answer (${res.status}).`, 502);
     const data = ((await res.json()).data || {}).messages || [];
@@ -3025,18 +3026,22 @@ const CHAT_SENDERS = {
 
 async function chatSend(request, env, cors) {
   const user = await requireUser(request, env);
-  const { platform, channel, text: raw } = await readJson(request);
+  const { platform, channel, text: raw, broadcasterId } = await readJson(request);
   if (!CHAT_SENDERS[platform]) fail("Sending isn't available for that platform.", 400);
   const login = String(channel || "").toLowerCase();
   if (!(platform === "kick" ? /^[a-z0-9_-]{2,30}$/ : /^[a-z0-9_]{3,25}$/).test(login)) fail("Unknown channel.", 400);
   const message = String(raw || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 500);
   if (!message) fail("Type a message first.");
-  const link = await env.DB.prepare("SELECT * FROM linked_accounts WHERE user_id = ? AND platform = ?").bind(user.id, platform).first();
+  // The page already knows the Kick channel's owner id, which saves asking Kick for it
+  if (platform === "kick" && /^\d{1,12}$/.test(String(broadcasterId || "")) && !kickIds.has(login)) kickIds.set(login, Number(broadcasterId));
+  // A small gap between messages (Twitch and Kick have their own limits too), checked alongside the link
+  const [link, gap] = await Promise.all([
+    env.DB.prepare("SELECT * FROM linked_accounts WHERE user_id = ? AND platform = ?").bind(user.id, platform).first(),
+    env.DB.prepare("UPDATE linked_accounts SET last_sent = ? WHERE user_id = ? AND platform = ? AND COALESCE(last_sent, 0) < ?")
+      .bind(Date.now(), user.id, platform, Date.now() - SEND_GAP_MS)
+      .run(),
+  ]);
   if (!link) fail(`Connect your ${PLATFORM_NAMES[platform]} account to chat.`, 409);
-  // A small gap between messages (Twitch and Kick have their own limits too)
-  const gap = await env.DB.prepare("UPDATE linked_accounts SET last_sent = ? WHERE user_id = ? AND platform = ? AND COALESCE(last_sent, 0) < ?")
-    .bind(Date.now(), user.id, platform, Date.now() - SEND_GAP_MS)
-    .run();
   if (!gap.meta || gap.meta.changes !== 1) fail("You're sending messages too fast.", 429);
 
   const send = CHAT_SENDERS[platform];

@@ -237,9 +237,10 @@ function mountTwitchChat(container, channel) {
 
 // The "type as yourself" box under Twitch or Kick chat. Messages go through the Worker as your own
 // Twitch / Kick account (connected on your Profile, or the login you used).
-//   const stop = mountChatSend(footElement, "kick", "channelname", { picker, encode, onSent });
+//   const stop = mountChatSend(footElement, "kick", "channelname", { picker, encode, extra, onSending, onSent });
 // picker: () => [{ name, emotes: [{ name, src, note? }] }] adds a 😀 emote picker (inserts the name);
-// encode: (text) => text to send (e.g. emote names to codes); onSent: called after a message is sent.
+// encode: (text) => text to send (e.g. emote names to codes); extra: () => more fields for the Worker;
+// onSending: (text) => { fail() } shows the message at once; onSent: called after it was sent.
 function mountChatSend(foot, platform, channel, opts = {}) {
   const NAME = platform === "kick" ? "Kick" : "Twitch";
   const el = (tag, className, text) => {
@@ -310,25 +311,25 @@ function mountChatSend(foot, platform, channel, opts = {}) {
       const typed = input.value.trim();
       if (!typed) return;
       const text = opts.encode ? opts.encode(typed) : typed;
-      send.disabled = true;
       err.textContent = "";
+      input.value = ""; // cleared right away, so you can keep typing while it sends
+      input.focus();
+      foot.querySelector(".emote-picker")?.setAttribute("hidden", "");
+      const pending = opts.onSending ? opts.onSending(text) : null; // shown in the chat straight away
       try {
         const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/chat/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
-          body: JSON.stringify({ platform, channel, text }),
+          body: JSON.stringify({ platform, channel, text, ...(opts.extra ? opts.extra() : {}) }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.status === 401 && new RegExp(NAME).test(data.error || "")) SinnersLinks.load();
         if (!res.ok) throw new Error(data.error || "Couldn't send that.");
-        input.value = ""; // it shows up in the chat from the platform in a moment
-        foot.querySelector(".emote-picker")?.setAttribute("hidden", "");
         if (opts.onSent) opts.onSent();
       } catch (e2) {
         err.textContent = e2.message;
-      } finally {
-        send.disabled = false;
-        input.focus();
+        if (pending) pending.fail();
+        if (!input.value) input.value = typed; // back in the box to try again
       }
     });
     if (!opts.picker) foot.replaceChildren(form, err);

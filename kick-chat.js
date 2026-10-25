@@ -99,12 +99,35 @@ function mountKickChat(container, channel) {
     add(row);
   }
 
+  // Your own messages show at once (faded) and are swapped for Kick's copy when it arrives
+  const pending = [];
+  function sending(text) {
+    const me = (SinnersLinks.links && SinnersLinks.links.kick) || "You";
+    message({ id: "", user: me, color: "", badges: [], images: [], content: text, reply: null });
+    const row = list.lastElementChild;
+    row.classList.add("pending");
+    const item = { row, me: me.toLowerCase() };
+    pending.push(item);
+    const drop = () => {
+      row.remove();
+      const i = pending.indexOf(item);
+      if (i >= 0) pending.splice(i, 1);
+    };
+    setTimeout(drop, 20000);
+    return {
+      fail() {
+        row.classList.add("failed");
+        setTimeout(drop, 3000);
+      },
+    };
+  }
+
   // ---------- Reading ----------
-  async function poll() {
+  async function poll(fresh = false) {
     clearTimeout(timer);
     if (stopped) return;
     try {
-      const res = await fetch(`${API}/kick/messages/${info.channelId}`);
+      const res = await fetch(`${API}/kick/messages/${info.channelId}${fresh ? "?fresh=1" : ""}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       if (first) {
@@ -116,6 +139,8 @@ function mountKickChat(container, channel) {
       data.messages.forEach((m) => {
         if (seen.has(m.id)) return;
         seen.add(m.id);
+        const mine = pending.findIndex((p) => p.me === String(m.user || "").toLowerCase());
+        if (mine >= 0) pending.splice(mine, 1)[0].row.remove();
         message(m);
       });
       if (seen.size > 600) [...seen].slice(0, 300).forEach((id) => seen.delete(id));
@@ -172,9 +197,11 @@ function mountKickChat(container, channel) {
         .split(/(\s+)/)
         .map((w) => (kickEmotes.has(w) ? `[emote:${kickEmotes.get(w)}:${w}]` : w))
         .join(""),
+    extra: () => ({ broadcasterId: info && info.broadcasterId }),
+    onSending: sending,
     onSent: () => {
       clearTimeout(timer);
-      timer = setTimeout(poll, 700);
+      timer = setTimeout(() => poll(true), 400);
     },
   });
 
