@@ -6296,3 +6296,14 @@ img {
 .link-row .button {
   padding: 6px 14px;
 }
+
+/* Kick chat (embedded): login helper under it */
+.kick-chat-bar {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+}

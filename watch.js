@@ -157,6 +157,7 @@ function playerUrl(s, muted) {
 
 function chatUrl(s) {
   if (s.platform === "twitch") return `https://www.twitch.tv/embed/${s.channel}/chat?parent=${HOST}&darkpopout`;
+  if (s.platform === "kick") return `https://kick.com/popout/${s.channel}/chat`;
   const video = s.video || s.liveVideo;
   if (s.platform === "youtube" && video) return `https://www.youtube.com/live_chat?v=${video}&embed_domain=${HOST}`;
   return null;
@@ -805,6 +806,20 @@ function buildChat(playing) {
       frame.src = url;
       frame.title = `${displayName(s)} chat`;
       body.append(frame);
+      // Kick chat works inside the page; typing needs a Kick login in this browser, which some
+      // browsers only keep when you log in on kick.com itself. Log in there once, then reload the chat.
+      if (s.platform === "kick") {
+        const bar = el("div", "kick-chat-bar");
+        const login = el("button", "link-btn", "Can't type? Log in to Kick ↗");
+        login.type = "button";
+        login.addEventListener("click", () => window.open("https://kick.com/login", "kick-login", "width=480,height=720"));
+        const reload = el("button", "link-btn", "⟳ Reload chat");
+        reload.type = "button";
+        reload.title = "Reload Kick chat (after logging in)";
+        reload.addEventListener("click", () => (frame.src = url));
+        bar.append(login, reload);
+        body.append(bar);
+      }
       return;
     }
     const none = el("div", "chat-none");

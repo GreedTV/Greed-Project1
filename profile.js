@@ -943,7 +943,7 @@ function renderLinks() {
     });
     rows.push(row("💜", "Twitch", SinnersLinks.available.twitch === false ? "Coming soon" : "Link it to chat in Twitch streams from Sinners", b));
   }
-  rows.push(row("🟢", "Kick", "Not available yet: Kick doesn't let other sites show its chat"));
+  rows.push(row("🟢", "Kick", "No linking needed: Kick chat shows on the Watch page. Log in to Kick there once to type"));
   rows.push(row("▶️", "YouTube", "Not available yet"));
   box.replaceChildren(...rows);
 }
