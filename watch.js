@@ -833,6 +833,7 @@ chatToggle.addEventListener("click", () => {
   } catch (e) {}
   updateChatToggle();
   stage.classList.toggle("no-chat", chatHidden);
+  placePartyBar();
 });
 
 function updateChatToggle() {
@@ -843,6 +844,21 @@ updateChatToggle();
 function render() {
   renderList();
   renderStage();
+  placePartyBar();
+}
+
+// The watch-party bar (who's watching + reactions) sits right under the chat; with chat hidden or
+// nothing playing, it goes back under the video
+function placePartyBar() {
+  const bar = document.getElementById("party-bar");
+  const chat = stage.querySelector(".chat");
+  if (chat && !stage.classList.contains("no-chat")) {
+    if (bar.parentElement !== chat) chat.append(bar);
+    bar.classList.add("in-chat");
+  } else {
+    document.querySelector(".stage-wrap").after(bar);
+    bar.classList.remove("in-chat");
+  }
 }
 
 // ---------- Actions ----------

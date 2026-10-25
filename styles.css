@@ -5964,3 +5964,205 @@ img {
 .bet-result.quiet {
   opacity: 0.55;
 }
+
+/* Watch party bar inside the chat panel, right under the messages */
+.party-bar.in-chat {
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.party-bar.in-chat .party-reacts {
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.party-bar.in-chat .party-react {
+  width: auto;
+  flex: 1;
+  height: 32px;
+  font-size: 1.05rem;
+}
+
+.party-bar.in-chat .party-count {
+  font-size: 0.78rem;
+}
+
+/* ---------- About page ---------- */
+.about-hero {
+  padding-bottom: 50px;
+}
+
+.about-story {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 32px;
+  align-items: center;
+}
+
+.about-story-text h2 {
+  margin-top: 0;
+  font-size: 2rem;
+}
+
+.about-story-text p {
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.about-numbers {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.about-number {
+  display: grid;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.about-number:first-child {
+  grid-column: 1 / -1;
+  border-color: color-mix(in srgb, #22c55e 45%, var(--border));
+}
+
+.about-number strong {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 2.3rem;
+  line-height: 1.1;
+}
+
+.about-number span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.about-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.about-feature {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 20px;
+  text-decoration: none;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.about-feature:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: var(--glow);
+}
+
+.about-feature-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  font-size: 1.5rem;
+  border-radius: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, var(--bg)), var(--bg));
+}
+
+.about-feature strong {
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.35rem;
+}
+
+.about-feature > span:last-child {
+  color: var(--muted);
+  font-size: 0.93rem;
+}
+
+.about-values {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.about-value {
+  padding: 22px;
+  text-align: center;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.about-value > span {
+  font-size: 2.2rem;
+}
+
+.about-value strong {
+  display: block;
+  margin: 6px 0;
+  font-family: "Rajdhani", sans-serif;
+  font-size: 1.4rem;
+}
+
+.about-value p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.about-faq {
+  max-width: 820px;
+}
+
+.faq {
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.faq summary {
+  cursor: pointer;
+  padding: 14px 18px;
+  font-weight: 600;
+}
+
+.faq[open] summary {
+  color: var(--accent-2);
+}
+
+.faq p {
+  margin: 0;
+  padding: 0 18px 16px;
+  color: var(--muted);
+}
+
+.about-cta {
+  text-align: center;
+}
+
+.about-cta h2 {
+  font-size: 2.2rem;
+  margin: 0 0 6px;
+}
+
+.about-cta p {
+  color: var(--muted);
+  margin: 0 0 22px;
+}
+
+@media (max-width: 860px) {
+  .about-story,
+  .about-values {
+    grid-template-columns: 1fr;
+  }
+}
