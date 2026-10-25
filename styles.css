@@ -6358,3 +6358,21 @@ img {
   margin: 0 0 4px;
   font-size: 0.82rem;
 }
+
+/* Linked accounts at the top of the Profile: one card per login */
+.links-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.links-list .link-row {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.links-list .link-row:first-child {
+  border-top: 1px solid var(--border);
+}

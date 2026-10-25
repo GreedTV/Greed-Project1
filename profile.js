@@ -962,7 +962,7 @@ function renderLinks() {
   const youtube = el("div", "link-row");
   youtube.append(el("span", "link-icon", "▶️"), el("div", "link-info"));
   youtube.lastChild.append(el("strong", null, "YouTube"), el("span", "hint", "Not available yet"));
-  box.replaceChildren(el("p", "hint links-intro", "Log in with any connected account; they all open this same profile."), ...rows, youtube);
+  box.replaceChildren(...rows, youtube);
 }
 const stopLinksWatch = SinnersLinks.onChange(renderLinks);
 
