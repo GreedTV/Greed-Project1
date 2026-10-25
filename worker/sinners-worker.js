@@ -72,11 +72,11 @@
 //   GET  /link                         -> your linked accounts   (logged in)
 //   POST /link/start                   -> { platform, back }  a link to open to connect that account   (logged in)
 //   POST /link/remove                  -> { platform }   (logged in)
-//   GET  /auth/twitch, /auth/twitch/callback   Twitch's login pages (opened by the browser)
+//   GET  /auth/<discord|twitch|kick>[/callback]   log in, or connect another login (opened by the browser)
 //   POST /chat/send                    -> { platform: "twitch", channel, text }  sent as you   (logged in)
 //
-// Discord login
-//   GET  /auth/discord?return=<page url>  -> sends the visitor to Discord, then back to the page with #session=<token>
+// Login (Discord, Twitch or Kick; one account can have all three connected)
+//   GET  /auth/<provider>?return=<page url>  -> sends the visitor to that site, then back to the page with #session=<token>
 //   GET  /me                              -> the logged-in user ("Authorization: Bearer <session token>")
 //
 // Sinners chat (one room per stream, e.g. "kick:lexor2k")
@@ -91,8 +91,10 @@
 //   3. Settings -> Bindings -> Add -> D1 database -> variable name DB -> select a database.
 //   4. Settings -> Variables and Secrets -> add as Secret: ADMIN_PASSWORD, DISCORD_CLIENT_SECRET, SESSION_SECRET
 //      and as Text: DISCORD_CLIENT_ID.
-//   Twitch chat (optional): TWITCH_CLIENT_ID (Text) and TWITCH_CLIENT_SECRET (Secret) from a Twitch app whose
+//   Twitch login + chat (optional): TWITCH_CLIENT_ID (Text) and TWITCH_CLIENT_SECRET (Secret) from a Twitch app whose
 //      OAuth Redirect URL is <this Worker>/auth/twitch/callback.
+//   Kick login (optional): KICK_CLIENT_ID (Text) and KICK_CLIENT_SECRET (Secret) from a Kick app (kick.com/settings/developer)
+//      with the redirect URL <this Worker>/auth/kick/callback.
 //   5. Discord bot (optional): add DISCORD_BOT_TOKEN as Secret and DISCORD_PUBLIC_KEY as Text, then in the
 //      Discord Developer Portal set Interactions Endpoint URL to <this Worker>/discord/interactions.
 //   6. Live stats board (optional): Settings -> Trigger events -> Add -> Cron Triggers -> every 5 minutes (*/5 * * * *).
@@ -204,9 +206,9 @@ export default {
       }
 
       // Login pages are opened by the browser directly, so they answer with redirects
-      if (path === "/auth/discord") return await discordStart(url, env);
-      if (path === "/auth/twitch") return await twitchAuthStart(url, env);
-      if (path === "/auth/twitch/callback") return await twitchAuthCallback(url, env);
+      if (path === "/auth/providers") return json({ available: providerReady(env) }, 200, { ...cors, "Cache-Control": "public, max-age=300" });
+      const login = path.match(/^\/auth\/(discord|twitch|kick)(\/callback)?$/);
+      if (login) return login[2] ? await authCallback(login[1], url, env) : await authStart(login[1], url, env);
       if (path === "/link" || path === "/link/start" || path === "/link/remove" || path === "/chat/send") {
         if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
         await ensureSchema(env);
@@ -215,7 +217,6 @@ export default {
         if (path === "/link/remove" && request.method === "POST") return await linkRemove(request, env, cors);
         if (path === "/chat/send" && request.method === "POST") return await chatSend(request, env, cors);
       }
-      if (path === "/auth/discord/callback") return await discordCallback(url, env);
       if (path === "/me" && request.method === "GET") return json({ user: await requireUser(request, env) }, 200, cors);
 
       if (path.startsWith("/points") || path.startsWith("/bets")) {
@@ -593,74 +594,6 @@ async function clipItem(link) {
 // After Discord confirms who the visitor is, the Worker signs a session token and sends the
 // visitor back to the page they came from with it in the URL fragment (#session=...).
 
-async function discordStart(url, env) {
-  if (!env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || !env.SESSION_SECRET) {
-    return text("Discord login isn't set up yet.", 503, {});
-  }
-  const back = url.searchParams.get("return") || "";
-  if (!ALLOWED_ORIGINS.some((o) => back.startsWith(`${o}/`))) return text("Bad return address", 400, {});
-
-  const state = await signToken(env, { r: back, exp: Date.now() + 10 * 60000 });
-  const discord = new URL("https://discord.com/oauth2/authorize");
-  discord.search = new URLSearchParams({
-    client_id: env.DISCORD_CLIENT_ID,
-    response_type: "code",
-    redirect_uri: `${url.origin}/auth/discord/callback`,
-    scope: "identify",
-    state,
-    prompt: "none",
-  });
-  return Response.redirect(discord.href, 302);
-}
-
-async function discordCallback(url, env) {
-  const state = await verifyToken(env, url.searchParams.get("state"));
-  if (!state) return text("Login expired. Go back and try again.", 400, {});
-  const back = (hash) => Response.redirect(`${state.r}#${hash}`, 302);
-
-  const code = url.searchParams.get("code");
-  if (!code) return back("login=cancelled");
-
-  const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: env.DISCORD_CLIENT_ID,
-      client_secret: env.DISCORD_CLIENT_SECRET,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: `${url.origin}/auth/discord/callback`,
-    }),
-  });
-  if (!tokenRes.ok) return back("login=failed");
-  const { access_token } = await tokenRes.json();
-
-  const meRes = await fetch("https://discord.com/api/users/@me", { headers: { Authorization: `Bearer ${access_token}` } });
-  if (!meRes.ok) return back("login=failed");
-  const me = await meRes.json();
-
-  const user = {
-    id: `discord:${me.id}`,
-    name: clean(me.global_name || me.username, 32) || "Discord user",
-    avatar: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=64` : "",
-  };
-
-  if (env.DB) {
-    await ensureSchema(env);
-    const existing = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(user.id).first();
-    if (existing && existing.banned) return back("login=banned");
-    await env.DB.prepare(
-      "INSERT INTO users (id, name, avatar, banned, created) VALUES (?, ?, ?, 0, ?) " +
-        "ON CONFLICT(id) DO UPDATE SET name = excluded.name, avatar = excluded.avatar"
-    )
-      .bind(user.id, user.name, user.avatar, Date.now())
-      .run();
-  }
-
-  const session = await signToken(env, { ...user, exp: Date.now() + SESSION_DAYS * 86400000 });
-  return back(`session=${session}`);
-}
-
 // The logged-in user from "Authorization: Bearer <session>", or a 401 error
 async function requireUser(request, env) {
   const auth = request.headers.get("Authorization") || "";
@@ -713,78 +646,104 @@ function fromB64url(str) {
 // ---------- Sinners chat ----------
 // Messages live in D1. Viewers poll for new messages every few seconds.
 
-// The first Discord bot saved players under their bare Discord id while the website uses
-// "discord:<id>", so playing on both made two accounts. This folds each bare-id account into the
-// website one: the stronger adventurer is kept and gets every item, coins earned on Discord are added
-// (minus the second free 100), and scores, bets, boss damage, quests and streaks move over.
-async function mergeSplitAccounts(env) {
+// Folds account `from` into account `to` (used when two logins of the same person each had an account):
+// the stronger adventurer is kept and gets every item, coins earned on `from` are added (minus its free
+// starting 100), and scores, bets, boss damage, quests, streaks, achievements, cosmetics, logins and
+// chat links move over (combined where both have one).
+async function mergeAccount(env, from, to) {
+  if (!from || !to || from === to) return;
   const run = (sql, ...args) => env.DB.prepare(sql).bind(...args).run();
   const one = (sql, ...args) => env.DB.prepare(sql).bind(...args).first();
+  const tryRun = async (sql, ...args) => {
+    try {
+      await run(sql, ...args);
+    } catch (e) {} // table or column not there yet
+  };
+  // Wallet
+  const oldW = await one("SELECT points FROM wallets WHERE user_id = ?", from);
+  if (oldW) {
+    const newW = await one("SELECT points FROM wallets WHERE user_id = ?", to);
+    if (newW) await run("UPDATE wallets SET points = points + ? WHERE user_id = ?", Math.max(0, oldW.points - START_POINTS), to);
+    else await run("UPDATE wallets SET user_id = ? WHERE user_id = ?", to, from);
+    await run("DELETE FROM wallets WHERE user_id = ?", from);
+  }
+  // Adventurer: keep the one with more progress; items from both end up with it
+  const oldH = await one("SELECT level, xp FROM heroes WHERE user_id = ?", from);
+  if (oldH) {
+    const newH = await one("SELECT level, xp FROM heroes WHERE user_id = ?", to);
+    const keepOld = !newH || oldH.level > newH.level || (oldH.level === newH.level && oldH.xp > newH.xp);
+    if (keepOld) {
+      if (newH) {
+        await run("DELETE FROM heroes WHERE user_id = ?", to);
+        await run("UPDATE hero_items SET equipped = 0 WHERE user_id = ?", to);
+      }
+      await run("UPDATE heroes SET user_id = ? WHERE user_id = ?", to, from);
+      await run("UPDATE hero_items SET user_id = ? WHERE user_id = ?", to, from);
+    } else {
+      await run("UPDATE hero_items SET user_id = ?, equipped = 0 WHERE user_id = ?", to, from);
+      await run("DELETE FROM heroes WHERE user_id = ?", from);
+    }
+  } else {
+    await tryRun("UPDATE hero_items SET user_id = ?, equipped = 0 WHERE user_id = ?", to, from);
+  }
+  // Combine rows both accounts have
+  await tryRun(
+    "UPDATE boss_hits SET damage = damage + COALESCE((SELECT o.damage FROM boss_hits o WHERE o.week = boss_hits.week AND o.user_id = ?), 0), " +
+      "hits = hits + COALESCE((SELECT o.hits FROM boss_hits o WHERE o.week = boss_hits.week AND o.user_id = ?), 0) WHERE user_id = ?",
+    from,
+    from,
+    to
+  );
+  await tryRun(
+    "UPDATE daily SET " +
+      DAILY_COUNTERS.map((k) => `${k} = ${k} + COALESCE((SELECT o.${k} FROM daily o WHERE o.day = daily.day AND o.user_id = ?), 0)`).join(", ") +
+      " WHERE user_id = ?",
+    ...DAILY_COUNTERS.map(() => from),
+    to
+  );
+  await tryRun("UPDATE streaks SET best = MAX(best, COALESCE((SELECT o.best FROM streaks o WHERE o.user_id = ?), 0)) WHERE user_id = ?", from, to);
+  // Move the rest (where `to` already has a row, `to` keeps its own)
+  for (const table of ["bets", "scores", "purchases", "boss_hits", "daily", "streaks", "score_limits", "achievements", "cosmetics", "linked_accounts", "clip_votes", "party"]) {
+    await tryRun(`UPDATE OR IGNORE ${table} SET user_id = ? WHERE user_id = ?`, to, from);
+    await tryRun(`DELETE FROM ${table} WHERE user_id = ?`, from);
+  }
+  await tryRun("UPDATE messages SET user_id = ? WHERE user_id = ?", to, from);
+  await tryRun("UPDATE identities SET user_id = ? WHERE user_id = ?", to, from);
+  // A ban on either account stays
+  await tryRun("UPDATE users SET banned = MAX(banned, COALESCE((SELECT o.banned FROM users o WHERE o.id = ?), 0)) WHERE id = ?", from, to);
+}
+
+// The first Discord bot saved players under their bare Discord id while the website used
+// "discord:<id>"; this folds each of those into the website account (runs once with the schema update).
+async function mergeSplitAccounts(env) {
   const ids = new Set();
   for (const table of ["wallets", "heroes", "hero_items", "bets", "scores", "purchases", "boss_hits", "daily", "streaks"]) {
     try {
-      const { results } = await env.DB.prepare(`SELECT DISTINCT user_id AS id FROM ${table} WHERE user_id NOT LIKE 'discord:%'`).all();
+      const { results } = await env.DB.prepare(`SELECT DISTINCT user_id AS id FROM ${table} WHERE user_id NOT LIKE '%:%'`).all();
       results.forEach((r) => /^\d{5,25}$/.test(r.id) && ids.add(r.id));
     } catch (e) {} // table not made yet
   }
-  for (const raw of ids) {
-    const to = `discord:${raw}`;
-    // Wallet: add what was earned on Discord, not its starting 100
-    const oldW = await one("SELECT points FROM wallets WHERE user_id = ?", raw);
-    if (oldW) {
-      const newW = await one("SELECT points FROM wallets WHERE user_id = ?", to);
-      if (newW) await run("UPDATE wallets SET points = points + ? WHERE user_id = ?", Math.max(0, oldW.points - START_POINTS), to);
-      else await run("UPDATE wallets SET user_id = ? WHERE user_id = ?", to, raw);
-      await run("DELETE FROM wallets WHERE user_id = ?", raw);
-    }
-    // Adventurer: keep the one with more progress; items from both end up with it
-    const oldH = await one("SELECT level, xp FROM heroes WHERE user_id = ?", raw);
-    if (oldH) {
-      const newH = await one("SELECT level, xp FROM heroes WHERE user_id = ?", to);
-      const keepOld = !newH || oldH.level > newH.level || (oldH.level === newH.level && oldH.xp > newH.xp);
-      if (keepOld) {
-        // The Discord adventurer stays (with its gear on); the website one's gear goes to the bag
-        if (newH) {
-          await run("DELETE FROM heroes WHERE user_id = ?", to);
-          await run("UPDATE hero_items SET equipped = 0 WHERE user_id = ?", to);
-        }
-        await run("UPDATE heroes SET user_id = ? WHERE user_id = ?", to, raw);
-        await run("UPDATE hero_items SET user_id = ? WHERE user_id = ?", to, raw);
-      } else {
-        await run("UPDATE hero_items SET user_id = ?, equipped = 0 WHERE user_id = ?", to, raw);
-        await run("DELETE FROM heroes WHERE user_id = ?", raw);
-      }
-    } else {
-      await run("UPDATE hero_items SET user_id = ?, equipped = 0 WHERE user_id = ?", to, raw);
-    }
-    // Rows keyed by user: move them, and combine where both accounts have one
-    await run(
-      "UPDATE boss_hits SET damage = damage + COALESCE((SELECT o.damage FROM boss_hits o WHERE o.week = boss_hits.week AND o.user_id = ?), 0), " +
-        "hits = hits + COALESCE((SELECT o.hits FROM boss_hits o WHERE o.week = boss_hits.week AND o.user_id = ?), 0) WHERE user_id = ?",
-      raw,
-      raw,
-      to
-    );
-    await run(
-      "UPDATE daily SET " +
-        DAILY_COUNTERS.map((k) => `${k} = ${k} + COALESCE((SELECT o.${k} FROM daily o WHERE o.day = daily.day AND o.user_id = ?), 0)`).join(", ") +
-        " WHERE user_id = ?",
-      ...DAILY_COUNTERS.map(() => raw),
-      to
-    );
-    for (const table of ["bets", "scores", "purchases", "boss_hits", "daily", "streaks", "score_limits"]) {
-      try {
-        await run(`UPDATE OR IGNORE ${table} SET user_id = ? WHERE user_id = ?`, to, raw);
-        await run(`DELETE FROM ${table} WHERE user_id = ?`, raw);
-      } catch (e) {}
-    }
-  }
+  for (const raw of ids) await mergeAccount(env, raw, `discord:${raw}`);
+}
+
+// Every account made before logins could be combined gets its login written down (once)
+async function backfillIdentities(env) {
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO identities (provider, ext_id, user_id, name, avatar, created) " +
+        "SELECT 'discord', substr(id, 9), id, name, avatar, created FROM users WHERE id LIKE 'discord:%'"
+    ),
+    env.DB.prepare(
+      "INSERT OR IGNORE INTO identities (provider, ext_id, user_id, name, avatar, created) " +
+        "SELECT 'twitch', ext_id, user_id, ext_name, NULL, created FROM linked_accounts WHERE platform = 'twitch'"
+    ),
+  ]);
 }
 
 // Bump SCHEMA_VERSION whenever tables or columns change. The database remembers the version it has,
 // so the full setup below runs once per change instead of on every cold start (which was slow
 // enough to miss Discord's 3-second limit).
-const SCHEMA_VERSION = 16;
+const SCHEMA_VERSION = 17;
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -863,6 +822,11 @@ async function ensureSchema(env) {
     env.DB.prepare("CREATE TABLE IF NOT EXISTS streaks (user_id TEXT PRIMARY KEY, last_day TEXT NOT NULL, streak INTEGER NOT NULL, best INTEGER NOT NULL)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS bets_user ON bets (user_id, created)"),
     env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS identities (provider TEXT NOT NULL, ext_id TEXT NOT NULL, user_id TEXT NOT NULL, name TEXT, avatar TEXT, created INTEGER NOT NULL, " +
+        "PRIMARY KEY (provider, ext_id))"
+    ),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS identities_user ON identities (user_id)"),
+    env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS linked_accounts (user_id TEXT NOT NULL, platform TEXT NOT NULL, ext_id TEXT NOT NULL, ext_name TEXT NOT NULL, " +
         "access_token TEXT NOT NULL, refresh_token TEXT NOT NULL, expires_at INTEGER NOT NULL, last_sent INTEGER, created INTEGER NOT NULL, PRIMARY KEY (user_id, platform))"
     ),
@@ -926,6 +890,7 @@ async function ensureSchema(env) {
     } catch (e) {}
   }
   await mergeSplitAccounts(env);
+  await backfillIdentities(env);
   await env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
     env.DB.prepare("INSERT INTO meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(SCHEMA_VERSION)),
@@ -1404,7 +1369,7 @@ async function shopBuy(request, env, cors, ctx) {
   const left = await env.DB.prepare("SELECT stock FROM shop_items WHERE id = ?").bind(item.id).first();
   later(ctx, discordNotify(env, {
     title: "🛒 New shop purchase",
-    description: `<@${discordIdOf(user.id)}> (${user.name}) bought **${item.name}** for ${item.price} 🪙.\nHand it out, then mark it delivered on the admin page.`,
+    description: `${user.id.startsWith("discord:") ? `<@${discordIdOf(user.id)}> ` : ""}(${user.name}) bought **${item.name}** for ${item.price} 🪙.\nHand it out, then mark it delivered on the admin page.`,
     url: `${SITE_URL}/admin`,
   }));
   return json({ ok: true, points: w.points, stock: left ? left.stock : null }, 200, cors);
@@ -2857,7 +2822,7 @@ async function profileExtrasAction(request, env, cors) {
 // Setup: a Twitch app at dev.twitch.tv with the redirect URL <this Worker>/auth/twitch/callback, and the
 // Worker variables TWITCH_CLIENT_ID (Text) and TWITCH_CLIENT_SECRET (Secret).
 
-const LINK_PLATFORMS = ["twitch"];
+const LINK_PLATFORMS = ["discord", "twitch", "kick"];
 const TWITCH_SCOPES = "user:write:chat";
 const SEND_GAP_MS = 1200;
 
@@ -2883,60 +2848,10 @@ async function linkStart(request, env, cors) {
   const user = await requireUser(request, env);
   const { platform, back } = await readJson(request);
   if (!LINK_PLATFORMS.includes(platform)) fail("That platform can't be linked yet.", 400);
-  if (platform === "twitch" && (!env.TWITCH_CLIENT_ID || !env.TWITCH_CLIENT_SECRET)) fail("Twitch linking isn't set up yet.", 503);
+  if (!PROVIDERS[platform].ready(env)) fail(`${platform[0].toUpperCase() + platform.slice(1)} isn't set up yet.`, 503);
   const returnUrl = ALLOWED_ORIGINS.some((o) => String(back || "").startsWith(o + "/")) ? String(back) : `${SITE_URL}/profile`;
   const state = await signToken(env, { kind: "link", platform, userId: user.id, back: returnUrl, exp: Date.now() + 10 * 60000 });
   return json({ url: `${new URL(request.url).origin}/auth/${platform}?state=${encodeURIComponent(state)}` }, 200, cors);
-}
-
-// Step 2: off to Twitch
-async function twitchAuthStart(url, env) {
-  const state = url.searchParams.get("state") || "";
-  const data = await verifyToken(env, state);
-  if (!data || data.kind !== "link") return text("This link expired. Go back to Sinners and try again.", 400, {});
-  const auth = new URL("https://id.twitch.tv/oauth2/authorize");
-  auth.search = new URLSearchParams({
-    client_id: env.TWITCH_CLIENT_ID,
-    redirect_uri: `${url.origin}/auth/twitch/callback`,
-    response_type: "code",
-    scope: TWITCH_SCOPES,
-    state,
-  }).toString();
-  return Response.redirect(auth.toString(), 302);
-}
-
-// Step 3: back from Twitch with a code
-async function twitchAuthCallback(url, env) {
-  const state = await verifyToken(env, url.searchParams.get("state") || "");
-  if (!state || state.kind !== "link") return text("This link expired. Go back to Sinners and try again.", 400, {});
-  const back = (result) => Response.redirect(`${state.back.split("#")[0]}#linked=${result}`, 302);
-  const code = url.searchParams.get("code");
-  if (!code) return back("cancelled");
-  const res = await fetch("https://id.twitch.tv/oauth2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: env.TWITCH_CLIENT_ID,
-      client_secret: env.TWITCH_CLIENT_SECRET,
-      code,
-      grant_type: "authorization_code",
-      redirect_uri: `${url.origin}/auth/twitch/callback`,
-    }),
-  });
-  if (!res.ok) return back("failed");
-  const tok = await res.json();
-  const me = await fetch("https://api.twitch.tv/helix/users", { headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${tok.access_token}` } });
-  const who = me.ok ? ((await me.json()).data || [])[0] : null;
-  if (!who) return back("failed");
-  await ensureSchema(env);
-  await env.DB.prepare(
-    "INSERT INTO linked_accounts (user_id, platform, ext_id, ext_name, access_token, refresh_token, expires_at, created) VALUES (?, 'twitch', ?, ?, ?, ?, ?, ?) " +
-      "ON CONFLICT(user_id, platform) DO UPDATE SET ext_id = excluded.ext_id, ext_name = excluded.ext_name, access_token = excluded.access_token, " +
-      "refresh_token = excluded.refresh_token, expires_at = excluded.expires_at"
-  )
-    .bind(state.userId, who.id, who.display_name || who.login, await sealToken(env, tok.access_token), await sealToken(env, tok.refresh_token || ""), Date.now() + (tok.expires_in || 3600) * 1000, Date.now())
-    .run();
-  return back("twitch");
 }
 
 // A working Twitch access token for this player (refreshed when it's about to expire)
@@ -2983,7 +2898,7 @@ async function chatSend(request, env, cors) {
   const message = String(raw || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 500);
   if (!message) fail("Type a message first.");
   const link = await env.DB.prepare("SELECT * FROM linked_accounts WHERE user_id = ? AND platform = 'twitch'").bind(user.id).first();
-  if (!link) fail("Link your Twitch account to chat.", 409);
+  if (!link) fail("Connect your Twitch account to chat.", 409);
   // A small gap between messages (Twitch has its own limits too)
   const gap = await env.DB.prepare("UPDATE linked_accounts SET last_sent = ? WHERE user_id = ? AND platform = 'twitch' AND COALESCE(last_sent, 0) < ?")
     .bind(Date.now(), user.id, Date.now() - SEND_GAP_MS)
@@ -3006,17 +2921,191 @@ async function chatSend(request, env, cors) {
   return json({ ok: true, as: link.ext_name }, 200, cors);
 }
 
+// Your connected logins (identities) and chat links
 async function linksGet(request, env, cors) {
   const user = await requireUser(request, env);
-  const { results } = await env.DB.prepare("SELECT platform, ext_name AS name FROM linked_accounts WHERE user_id = ?").bind(user.id).all();
-  return json({ links: results, available: { twitch: !!(env.TWITCH_CLIENT_ID && env.TWITCH_CLIENT_SECRET) } }, 200, cors);
+  const [{ results: ids }, { results: chat }] = await Promise.all([
+    env.DB.prepare("SELECT provider, name FROM identities WHERE user_id = ? ORDER BY created").bind(user.id).all(),
+    env.DB.prepare("SELECT platform, ext_name AS name FROM linked_accounts WHERE user_id = ?").bind(user.id).all(),
+  ]);
+  return json({ identities: ids, links: chat, available: providerReady(env) }, 200, cors);
 }
 
 async function linkRemove(request, env, cors) {
   const user = await requireUser(request, env);
   const { platform } = await readJson(request);
-  await env.DB.prepare("DELETE FROM linked_accounts WHERE user_id = ? AND platform = ?").bind(user.id, String(platform)).run();
+  const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM identities WHERE user_id = ?").bind(user.id).first();
+  const has = await env.DB.prepare("SELECT 1 FROM identities WHERE user_id = ? AND provider = ?").bind(user.id, String(platform)).first();
+  if (has && n <= 1) fail("That's your only login. Connect another one first, so you can still get in.", 409);
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM identities WHERE user_id = ? AND provider = ?").bind(user.id, String(platform)),
+    env.DB.prepare("DELETE FROM linked_accounts WHERE user_id = ? AND platform = ?").bind(user.id, String(platform)),
+  ]);
   return linksGet(request, env, cors);
+}
+
+// ---------- Logins: Discord, Twitch and Kick, all on one Sinners account ----------
+// A Sinners account can have several connected logins ("identities"); any of them logs into the same
+// account. Logging in with a provider nobody has used makes a new account (id "<provider>:<id>").
+// While logged in, more providers can be connected from the Profile; if that provider already had its
+// own Sinners account, it's merged into this one. Twitch logins also keep a (encrypted) chat token so
+// players can type in Twitch chat on the Watch page.
+//   GET /auth/<provider>?return=<page>   log in           GET /auth/<provider>?state=<link>   connect
+//   GET /auth/<provider>/callback        back from the provider
+// Setup per provider (Worker variables): Discord DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET,
+// Twitch TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET, Kick KICK_CLIENT_ID / KICK_CLIENT_SECRET;
+// the redirect URL to register with each is <this Worker>/auth/<provider>/callback.
+
+const PROVIDERS = {
+  discord: {
+    ready: (env) => !!(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET),
+    authorize: (env, redirect, state) =>
+      "https://discord.com/oauth2/authorize?" +
+      new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID, response_type: "code", redirect_uri: redirect, scope: "identify", state, prompt: "none" }),
+    async exchange(env, code, redirect) {
+      const res = await fetch("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET, grant_type: "authorization_code", code, redirect_uri: redirect }),
+      });
+      if (!res.ok) return null;
+      const tok = await res.json();
+      const me = await fetch("https://discord.com/api/users/@me", { headers: { Authorization: `Bearer ${tok.access_token}` } });
+      if (!me.ok) return null;
+      const u = await me.json();
+      return { extId: u.id, name: u.global_name || u.username, avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=64` : "" };
+    },
+  },
+  twitch: {
+    ready: (env) => !!(env.TWITCH_CLIENT_ID && env.TWITCH_CLIENT_SECRET),
+    authorize: (env, redirect, state) =>
+      "https://id.twitch.tv/oauth2/authorize?" +
+      new URLSearchParams({ client_id: env.TWITCH_CLIENT_ID, redirect_uri: redirect, response_type: "code", scope: TWITCH_SCOPES, state }),
+    async exchange(env, code, redirect) {
+      const res = await fetch("https://id.twitch.tv/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: env.TWITCH_CLIENT_ID, client_secret: env.TWITCH_CLIENT_SECRET, code, grant_type: "authorization_code", redirect_uri: redirect }),
+      });
+      if (!res.ok) return null;
+      const tok = await res.json();
+      const me = await fetch("https://api.twitch.tv/helix/users", { headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${tok.access_token}` } });
+      const u = me.ok ? ((await me.json()).data || [])[0] : null;
+      if (!u) return null;
+      return { extId: u.id, name: u.display_name || u.login, avatar: u.profile_image_url || "", tokens: tok };
+    },
+  },
+  kick: {
+    ready: (env) => !!(env.KICK_CLIENT_ID && env.KICK_CLIENT_SECRET),
+    pkce: true,
+    authorize: (env, redirect, state, challenge) =>
+      "https://id.kick.com/oauth/authorize?" +
+      new URLSearchParams({
+        client_id: env.KICK_CLIENT_ID,
+        response_type: "code",
+        redirect_uri: redirect,
+        scope: "user:read",
+        state,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      }),
+    async exchange(env, code, redirect, verifier) {
+      const res = await fetch("https://id.kick.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: env.KICK_CLIENT_ID,
+          client_secret: env.KICK_CLIENT_SECRET,
+          redirect_uri: redirect,
+          code_verifier: verifier,
+          code,
+        }),
+      });
+      if (!res.ok) return null;
+      const tok = await res.json();
+      const me = await fetch("https://api.kick.com/public/v1/users", { headers: { Authorization: `Bearer ${tok.access_token}` } });
+      const u = me.ok ? ((await me.json()).data || [])[0] : null;
+      if (!u) return null;
+      return { extId: String(u.user_id), name: u.name, avatar: u.profile_picture || "" };
+    },
+  },
+};
+
+const providerReady = (env) => Object.fromEntries(Object.entries(PROVIDERS).map(([k, p]) => [k, p.ready(env)]));
+
+async function authStart(provider, url, env) {
+  const p = PROVIDERS[provider];
+  if (!p || !p.ready(env) || !env.SESSION_SECRET) return text(`${provider[0].toUpperCase() + provider.slice(1)} login isn't set up yet.`, 503, {});
+  let data;
+  if (url.searchParams.get("state")) {
+    // Connecting another login to the account you're in (made by /link/start)
+    data = await verifyToken(env, url.searchParams.get("state"));
+    if (!data || data.kind !== "link" || data.platform !== provider) return text("This link expired. Go back to Sinners and try again.", 400, {});
+  } else {
+    const back = url.searchParams.get("return") || "";
+    if (!ALLOWED_ORIGINS.some((o) => back.startsWith(`${o}/`))) return text("Bad return address", 400, {});
+    data = { kind: "login", platform: provider, back, exp: Date.now() + 10 * 60000 };
+  }
+  let challenge;
+  if (p.pkce) {
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+    data = { ...data, pv: await sealToken(env, verifier) }; // kept secret inside the state
+  }
+  const state = await signToken(env, data);
+  return Response.redirect(p.authorize(env, `${url.origin}/auth/${provider}/callback`, state, challenge), 302);
+}
+
+async function authCallback(provider, url, env) {
+  const p = PROVIDERS[provider];
+  const state = await verifyToken(env, url.searchParams.get("state") || "");
+  if (!p || !state || state.platform !== provider) return text("This login expired. Go back to Sinners and try again.", 400, {});
+  const linking = state.kind === "link";
+  const back = (hash) => Response.redirect(`${state.back.split("#")[0]}#${hash}`, 302);
+  const code = url.searchParams.get("code");
+  if (!code) return back(linking ? "linked=cancelled" : "login=cancelled");
+  const who = await p.exchange(env, code, `${url.origin}/auth/${provider}/callback`, state.pv ? await openToken(env, state.pv) : undefined);
+  if (!who) return back(linking ? "linked=failed" : "login=failed");
+  if (!env.DB) return text("Storage isn't set up yet (DB binding missing).", 503, {});
+  await ensureSchema(env);
+  const name = clean(who.name, 32) || `${provider} user`;
+  const owner = await env.DB.prepare("SELECT user_id FROM identities WHERE provider = ? AND ext_id = ?").bind(provider, who.extId).first();
+
+  let userId;
+  if (linking) {
+    userId = state.userId;
+    // That login already had its own account: fold it into this one
+    if (owner && owner.user_id !== userId) await mergeAccount(env, owner.user_id, userId);
+  } else {
+    userId = owner ? owner.user_id : `${provider}:${who.extId}`;
+  }
+  const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(userId).first();
+  if (banned && banned.banned) return back("login=banned");
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO identities (provider, ext_id, user_id, name, avatar, created) VALUES (?, ?, ?, ?, ?, ?) " +
+        "ON CONFLICT(provider, ext_id) DO UPDATE SET user_id = excluded.user_id, name = excluded.name, avatar = excluded.avatar"
+    ).bind(provider, who.extId, userId, name, who.avatar, Date.now()),
+    env.DB.prepare("INSERT INTO users (id, name, avatar, banned, created) VALUES (?, ?, ?, 0, ?) ON CONFLICT(id) DO NOTHING").bind(userId, name, who.avatar, Date.now()),
+  ]);
+  if (who.tokens) await saveTwitchTokens(env, userId, who.extId, name, who.tokens);
+  if (linking) return back(`linked=${provider}`);
+
+  // Logging in: the name and picture of the login they used
+  await env.DB.prepare("UPDATE users SET name = ?, avatar = ? WHERE id = ?").bind(name, who.avatar, userId).run();
+  const session = await signToken(env, { id: userId, name, avatar: who.avatar, via: provider, exp: Date.now() + SESSION_DAYS * 86400000 });
+  return back(`session=${session}`);
+}
+
+async function saveTwitchTokens(env, userId, extId, name, tok) {
+  await env.DB.prepare(
+    "INSERT INTO linked_accounts (user_id, platform, ext_id, ext_name, access_token, refresh_token, expires_at, created) VALUES (?, 'twitch', ?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT(user_id, platform) DO UPDATE SET ext_id = excluded.ext_id, ext_name = excluded.ext_name, access_token = excluded.access_token, " +
+      "refresh_token = excluded.refresh_token, expires_at = excluded.expires_at"
+  )
+    .bind(userId, extId, name, await sealToken(env, tok.access_token), await sealToken(env, tok.refresh_token || ""), Date.now() + (tok.expires_in || 3600) * 1000, Date.now())
+    .run();
 }
 
 // ---------- Site stats ----------
@@ -3460,7 +3549,8 @@ async function botCommand(interaction, env, origin) {
     await wallet(env, user);
     let r;
     try {
-      r = await duel(env, user, opt("opponent") && `discord:${opt("opponent")}`);
+      const foeRow = opt("opponent") ? await env.DB.prepare("SELECT user_id FROM identities WHERE provider = 'discord' AND ext_id = ?").bind(String(opt("opponent"))).first() : null;
+      r = await duel(env, user, opt("opponent") && (foeRow ? foeRow.user_id : `discord:${opt("opponent")}`));
     } catch (err) {
       return botReply(`⚠️ ${err.message}`, { ephemeral: true });
     }
@@ -3489,7 +3579,8 @@ async function botCommand(interaction, env, origin) {
 
   if (name === "points") {
     const raw = opt("user") || caller.id;
-    const id = `discord:${raw}`;
+    const idRow = await env.DB.prepare("SELECT user_id FROM identities WHERE provider = 'discord' AND ext_id = ?").bind(String(raw)).first();
+    const id = idRow ? idRow.user_id : `discord:${raw}`;
     const discordUser = (resolved.users && resolved.users[raw]) || caller;
     const label = discordUser.global_name || discordUser.username || "That player";
     const w = await env.DB.prepare("SELECT points, earned_day AS day, earned_today AS today FROM wallets WHERE user_id = ?").bind(id).first();
@@ -3770,7 +3861,14 @@ function helpMessage(topic, admin) {
 // "discord:<Discord ID>", so the bot uses the same id: one account, whichever side they play on.
 async function discordPlayer(env, caller) {
   if (!caller || !caller.id) return { error: "Use this in a server or DM with me." };
-  const id = `discord:${caller.id}`;
+  // Whichever login they made their account with, a connected Discord leads to it
+  const known = await env.DB.prepare("SELECT user_id FROM identities WHERE provider = 'discord' AND ext_id = ?").bind(String(caller.id)).first();
+  const id = known ? known.user_id : `discord:${caller.id}`;
+  if (!known) {
+    await env.DB.prepare("INSERT OR IGNORE INTO identities (provider, ext_id, user_id, name, avatar, created) VALUES ('discord', ?, ?, ?, NULL, ?)")
+      .bind(String(caller.id), id, clean(caller.global_name || caller.username, 32) || "Adventurer", Date.now())
+      .run();
+  }
   const banned = await env.DB.prepare("SELECT banned FROM users WHERE id = ?").bind(id).first();
   if (banned && banned.banned) return { error: "Your account is banned from Sinners." };
   return {

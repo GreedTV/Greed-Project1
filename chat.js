@@ -100,7 +100,7 @@ function mountSinnersChat(container, room) {
       const btn = Object.assign(document.createElement("button"), {
         type: "button",
         className: "button discord-btn",
-        textContent: "Log in with Discord to chat",
+        textContent: "Log in to chat",
       });
       btn.addEventListener("click", SinnersAuth.login);
       footer.append(btn);

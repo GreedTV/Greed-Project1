@@ -74,7 +74,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 
 1. **Kick HD:** asks Kick's (unofficial) API for the stream and returns its master playlist with CORS headers. Video chunks load straight from Kick's servers. Kick may change or block this at any time.
 2. **Gallery:** stores shared links in Workers KV and handles the review queue.
-3. **Discord login:** sends visitors to Discord and back with a signed session token.
+3. **Logins:** Discord, Twitch or Kick (`/auth/<provider>`), all on one account: any connected login opens the same account (`identities` table), more can be connected from the profile (an account that login already had is merged in), and the last one can't be removed. Sessions are signed tokens.
 4. **Sinners chat:** stores messages in D1, with admin delete and ban.
 5. **YouTube:** finds a channel by name or @handle, checks whether it's live, and searches videos for the Content page, by reading YouTube's public pages.
 6. **Game leaderboards:** saves logged-in players' best scores in D1, refuses impossible scores, and lets the admin remove entries or reset a game.

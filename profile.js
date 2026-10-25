@@ -906,46 +906,63 @@ async function loadExtras() {
 }
 
 // ---------- Linked accounts ----------
-// Discord is the Sinners login; Twitch can be linked to chat as yourself on the Watch page.
+// One Sinners account, several logins: connect Discord, Twitch and Kick here without logging out.
+// Any connected one logs you in; Twitch also lets you type in Twitch chat on the Watch page.
 
 function renderLinks() {
   const box = $("links-list");
   const links = SinnersLinks.links;
   if (!links) return box.replaceChildren(el("p", "hint", "…"));
-  const row = (icon, name, status, action) => {
+  const ids = SinnersLinks.identities;
+  const count = Object.keys(ids).length;
+  const PROVIDERS = [
+    ["discord", "💬", "Discord", "Use the Discord bot as yourself"],
+    ["twitch", "💜", "Twitch", "Type in Twitch chat on the Watch page"],
+    ["kick", "🟢", "Kick", "Log in with Kick too"],
+  ];
+  const rows = PROVIDERS.map(([id, icon, name, perk]) => {
     const r = el("div", "link-row");
-    r.append(el("span", "link-icon", icon), el("div", "link-info"));
-    r.lastChild.append(el("strong", null, name), el("span", "hint", status));
-    if (action) r.append(action);
+    const info = el("div", "link-info");
+    r.append(el("span", "link-icon", icon), info);
+    if (ids[id]) {
+      info.append(el("strong", null, `${name} · ${ids[id]}`), el("span", "hint", `Connected · ${perk}`));
+      const b = el("button", "link-btn", "Disconnect");
+      b.type = "button";
+      b.disabled = count <= 1;
+      b.title = count <= 1 ? "Your only login: connect another one first" : `Disconnect ${name}`;
+      b.addEventListener("click", async () => {
+        if (!(await SinnersDialog.confirm(`You won't be able to log in with ${name} until you connect it again.`, { title: `Disconnect ${name}?`, yes: "Disconnect", icon })))
+          return;
+        try {
+          await SinnersLinks.unlink(id);
+        } catch (err) {
+          showResult(`⚠️ ${err.message}`);
+        }
+      });
+      r.append(b);
+    } else {
+      const ready = SinnersLinks.available[id] !== false;
+      info.append(el("strong", null, name), el("span", "hint", ready ? perk : "Coming soon"));
+      const b = el("button", `button login-${id}-btn`, "Connect");
+      b.type = "button";
+      b.disabled = !ready;
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await SinnersLinks.link(id);
+        } catch (err) {
+          b.disabled = false;
+          showResult(`⚠️ ${err.message}`);
+        }
+      });
+      r.append(b);
+    }
     return r;
-  };
-  const rows = [row("💬", "Discord", `Logged in as ${SinnersAuth.user.name} · your Sinners account`)];
-  if (links.twitch) {
-    const b = el("button", "link-btn", "Unlink");
-    b.type = "button";
-    b.addEventListener("click", async () => {
-      if (!(await SinnersDialog.confirm("You won't be able to chat on Twitch from Sinners until you link it again.", { title: "Unlink Twitch?", yes: "Unlink", icon: "💜" }))) return;
-      await SinnersLinks.unlink("twitch");
-    });
-    rows.push(row("💜", "Twitch", `Linked as ${links.twitch} · chat as yourself on the Watch page`, b));
-  } else {
-    const b = el("button", "button twitch-btn", "Link");
-    b.type = "button";
-    b.disabled = SinnersLinks.available.twitch === false;
-    b.addEventListener("click", async () => {
-      b.disabled = true;
-      try {
-        await SinnersLinks.link("twitch");
-      } catch (err) {
-        b.disabled = false;
-        showResult(`⚠️ ${err.message}`);
-      }
-    });
-    rows.push(row("💜", "Twitch", SinnersLinks.available.twitch === false ? "Coming soon" : "Link it to chat in Twitch streams from Sinners", b));
-  }
-  rows.push(row("🟢", "Kick", "No linking needed: Kick chat shows on the Watch page. Log in to Kick there once to type"));
-  rows.push(row("▶️", "YouTube", "Not available yet"));
-  box.replaceChildren(...rows);
+  });
+  const youtube = el("div", "link-row");
+  youtube.append(el("span", "link-icon", "▶️"), el("div", "link-info"));
+  youtube.lastChild.append(el("strong", null, "YouTube"), el("span", "hint", "Not available yet"));
+  box.replaceChildren(el("p", "hint links-intro", "Log in with any connected account; they all open this same profile."), ...rows, youtube);
 }
 const stopLinksWatch = SinnersLinks.onChange(renderLinks);
 

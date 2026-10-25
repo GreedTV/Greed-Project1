@@ -6307,3 +6307,54 @@ img {
   border-top: 1px solid var(--border);
   font-size: 0.8rem;
 }
+
+/* ---------- Login chooser (auth.js) and connect buttons ---------- */
+.login-options {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 12px;
+}
+
+.login-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font: inherit;
+  font-weight: 700;
+  color: #fff;
+  background: var(--brand);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.15s, filter 0.15s;
+}
+
+.login-option.login-kick {
+  color: #0b0b0b;
+}
+
+.login-option:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+}
+
+.login-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.login-option svg {
+  width: 22px;
+  height: 22px;
+}
+
+.button.login-discord-btn { background: #5865f2; }
+.button.login-twitch-btn { background: #9146ff; }
+.button.login-kick-btn { background: #53fc18; color: #0b0b0b; }
+
+.links-intro {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+}

@@ -67,7 +67,7 @@ function renderBar() {
     const login = el("button", "button discord-btn", "Log in");
     login.type = "button";
     login.addEventListener("click", SinnersAuth.login);
-    bar.replaceChildren(el("span", null, "🪙 Log in with Discord to get 100 free points and start shopping."), login);
+    bar.replaceChildren(el("span", null, "🪙 Log in to get 100 free points and start shopping."), login);
     return;
   }
   const profile = el("a", "button ghost shop-jump", "🎒 Your bag");

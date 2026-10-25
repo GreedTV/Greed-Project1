@@ -4,7 +4,8 @@
 //   const stop = mountTwitchChat(container, "channelname");
 
 const SinnersLinks = (() => {
-  let links = null; // { twitch: "DisplayName" }, or null before loading
+  let links = null; // chat links: { twitch: "DisplayName" }, or null before loading
+  let identities = {}; // connected logins: { discord: "name", twitch: "name", kick: "name" }
   let available = {};
   const listeners = [];
   async function load() {
@@ -18,6 +19,7 @@ const SinnersLinks = (() => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       links = Object.fromEntries(data.links.map((l) => [l.platform, l.name]));
+      identities = Object.fromEntries((data.identities || []).map((i) => [i.provider, i.name]));
       available = data.available || {};
     } catch (e) {
       links = {};
@@ -36,11 +38,13 @@ const SinnersLinks = (() => {
     location.href = data.url;
   }
   async function unlink(platform) {
-    await fetch(`${WORKER_URL.replace(/\/$/, "")}/link/remove`, {
+    const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/link/remove`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
       body: JSON.stringify({ platform }),
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Couldn't disconnect that.");
     await load();
   }
   SinnersAuth.onChange(load);
@@ -51,6 +55,9 @@ const SinnersLinks = (() => {
     },
     get available() {
       return available;
+    },
+    get identities() {
+      return identities;
     },
     load,
     link,
@@ -221,12 +228,12 @@ function mountTwitchChat(container, channel) {
       const b = el("button", "button discord-btn", "Log in to chat");
       b.type = "button";
       b.addEventListener("click", SinnersAuth.login);
-      return foot.replaceChildren(el("span", "hint", "Log in with Discord, then link Twitch to chat here."), b);
+      return foot.replaceChildren(el("span", "hint", "Log in with Twitch (or connect it on your Profile) to chat here."), b);
     }
     if (!links) return foot.replaceChildren(el("span", "hint", "…"));
     if (!links.twitch) {
       if (SinnersLinks.available.twitch === false) return foot.replaceChildren(el("span", "hint", "Chatting from Sinners isn't set up yet. Reading works!"));
-      const b = el("button", "button twitch-btn", "🔗 Link Twitch to chat");
+      const b = el("button", "button twitch-btn", "🔗 Connect Twitch to chat");
       b.type = "button";
       b.addEventListener("click", async () => {
         b.disabled = true;

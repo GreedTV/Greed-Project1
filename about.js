@@ -20,7 +20,7 @@ async function loadNumbers() {
 // Already logged in: the button opens your profile instead
 function loginButton() {
   const b = $("about-login");
-  b.textContent = SinnersAuth.user ? "👤 Your profile" : "Log in with Discord";
+  b.textContent = SinnersAuth.user ? "👤 Your profile" : "Log in";
 }
 $("about-login").addEventListener("click", () => (SinnersAuth.user ? SinnersNav.go(`${location.origin}/profile`) : SinnersAuth.login()));
 

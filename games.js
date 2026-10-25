@@ -342,7 +342,7 @@ async function finish(score, extra = "") {
   result.append(line, status, again);
 
   if (!SinnersAuth.user) {
-    status.textContent = "Log in with Discord to put this score on the leaderboard.";
+    status.textContent = "Log in to put this score on the leaderboard.";
     const login = el("button", "button discord-btn", "Log in to save this score");
     login.type = "button";
     login.addEventListener("click", () => {
@@ -467,7 +467,7 @@ let myPoints = null;
 async function refreshPoints() {
   if (!SinnersAuth.user) {
     myPoints = null;
-    pointsBar.replaceChildren(el("span", null, "🪙 Log in with Discord to get 100 free points and save your scores."));
+    pointsBar.replaceChildren(el("span", null, "🪙 Log in to get 100 free points and save your scores."));
     const login = el("button", "button discord-btn", "Log in");
     login.type = "button";
     login.addEventListener("click", SinnersAuth.login);
