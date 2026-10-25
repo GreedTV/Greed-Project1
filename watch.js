@@ -814,30 +814,17 @@ function buildChat(playing) {
       stopChat = mountTwitchChat(body, s.channel);
       return;
     }
+    // Kick: drawn by Sinners too, and you type as your Kick account with an emote picker (kick-chat.js)
+    if (s.platform === "kick") {
+      stopChat = mountKickChat(body, s.channel);
+      return;
+    }
     const url = chatUrl(s);
     if (url) {
       const frame = document.createElement("iframe");
       frame.src = url;
       frame.title = `${displayName(s)} chat`;
       body.append(frame);
-      // Kick chat works inside the page, but typing needs a kick.com login inside it. Our "Log in with
-      // Kick" can't do that, and Google / Apple sign-in are blocked inside other sites, so say so plainly.
-      if (s.platform === "kick") {
-        const bar = el("div", "kick-chat-bar");
-        const note = el("p", "kick-chat-note");
-        note.append(
-          "To chat, log in above with your ",
-          el("strong", null, "Kick username (or email) and password"),
-          ". Google and Apple sign-in don't work inside Sinners, and logging in to Sinners doesn't log you in to Kick chat."
-        );
-        const reload = el("button", "link-btn", "⟳");
-        reload.type = "button";
-        reload.title = "Reload Kick chat";
-        reload.setAttribute("aria-label", "Reload Kick chat");
-        reload.addEventListener("click", () => (frame.src = url));
-        bar.append(note, reload);
-        body.append(bar);
-      }
       return;
     }
     const none = el("div", "chat-none");

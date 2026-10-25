@@ -3,6 +3,10 @@
 // Kick HD
 //   GET  /kick/<channel>.m3u8   -> the stream's master playlist (all qualities), or 404 if offline.
 //
+// Kick chat drawn by Sinners (Kick's own chat server only accepts kick.com, so the page reads it here)
+//   GET  /kick/chat/<channel>          -> { channelId, broadcasterId, name, subBadges, emotes }  (cached 10 min)
+//   GET  /kick/messages/<channelId>    -> { messages: [...] } the latest ~25, oldest first        (cached 2 s)
+//
 // Community gallery (people share image and clip links; they show after approval)
 //   GET  /gallery               -> { images: [...], clips: [...] } approved items, newest first
 //   POST /gallery/submit        -> { kind: "image" | "clip", link, title?, name? }  queued for approval
@@ -73,7 +77,7 @@
 //   POST /link/start                   -> { platform, back }  a link to open to connect that account   (logged in)
 //   POST /link/remove                  -> { platform }   (logged in)
 //   GET  /auth/<discord|twitch|kick>[/callback]   log in, or connect another login (opened by the browser)
-//   POST /chat/send                    -> { platform: "twitch", channel, text }  sent as you   (logged in)
+//   POST /chat/send                    -> { platform: "twitch" | "kick", channel, text }  sent as you   (logged in)
 //
 // Login (Discord, Twitch or Kick; one account can have all three connected)
 //   GET  /auth/<provider>?return=<page url>  -> sends the visitor to that site, then back to the page with #session=<token>
@@ -143,6 +147,10 @@ export default {
     try {
       const kick = path.match(/^\/kick\/([a-zA-Z0-9_-]{2,30})\.m3u8$/);
       if (kick && request.method === "GET") return await kickPlaylist(kick[1].toLowerCase(), cors);
+      const kickChat = path.match(/^\/kick\/chat\/([a-zA-Z0-9_-]{2,30})$/);
+      if (kickChat && request.method === "GET") return await kickChatInfo(kickChat[1].toLowerCase(), cors);
+      const kickMsgs = path.match(/^\/kick\/messages\/(\d{1,12})$/);
+      if (kickMsgs && request.method === "GET") return await kickMessages(kickMsgs[1], cors);
 
       // Discord calls this directly (no browser, no Origin)
       if (path === "/discord/interactions" && request.method === "POST") return await discordInteraction(request, env, ctx);
@@ -412,6 +420,83 @@ async function youtubeSearch(url, cors) {
     }
   })(data);
   return json({ videos }, 200, { ...cors, "Cache-Control": "public, max-age=600" });
+}
+
+// ---------- Kick chat (read for the page) ----------
+// Kick's live chat server refuses browsers from other sites, so the page asks here instead: channel
+// details (ids, subscriber badges, emotes) and the latest messages from Kick's public chat history.
+// Short in-memory caches let everyone watching the same channel share one request to Kick.
+
+const kickCache = new Map(); // key -> { at, data }
+async function cached(key, ms, load) {
+  const hit = kickCache.get(key);
+  if (hit && Date.now() - hit.at < ms) return hit.data;
+  const data = await load();
+  kickCache.set(key, { at: Date.now(), data });
+  if (kickCache.size > 300) kickCache.delete(kickCache.keys().next().value);
+  return data;
+}
+
+async function kickChannel(slug) {
+  return cached(`ch:${slug}`, 600000, async () => {
+    const res = await fetch(`https://kick.com/api/v2/channels/${slug}`, { headers: BROWSER_HEADERS });
+    if (res.status === 404) fail("Couldn't find that Kick channel.", 404);
+    if (!res.ok) fail(`Kick didn't answer (${res.status}).`, 502);
+    return res.json();
+  });
+}
+
+async function kickChatInfo(slug, cors) {
+  const ch = await kickChannel(slug);
+  const emotes = await cached(`em:${slug}`, 600000, async () => {
+    const res = await fetch(`https://kick.com/emotes/${slug}`, { headers: BROWSER_HEADERS });
+    const groups = res.ok ? await res.json() : [];
+    return (Array.isArray(groups) ? groups : []).map((g) => ({
+      name: g.id === "Global" || g.id === "Emoji" ? g.name : (ch.user && ch.user.username) || slug,
+      kind: g.id === "Global" ? "global" : g.id === "Emoji" ? "emoji" : "channel",
+      emotes: (g.emotes || []).map((e) => ({ id: e.id, name: e.name, subs: !!e.subscribers_only })),
+    }));
+  });
+  return json(
+    {
+      channelId: ch.id,
+      broadcasterId: ch.user_id,
+      name: (ch.user && ch.user.username) || slug,
+      subBadges: (ch.subscriber_badges || []).map((b) => ({ months: b.months, src: b.badge_image && b.badge_image.src })).filter((b) => b.src),
+      emotes,
+    },
+    200,
+    { ...cors, "Cache-Control": "public, max-age=300" }
+  );
+}
+
+async function kickMessages(channelId, cors) {
+  const messages = await cached(`msg:${channelId}`, 2000, async () => {
+    const res = await fetch(`https://kick.com/api/v2/channels/${channelId}/messages`, { headers: BROWSER_HEADERS });
+    if (!res.ok) fail(`Kick chat didn't answer (${res.status}).`, 502);
+    const data = ((await res.json()).data || {}).messages || [];
+    return data
+      .map((m) => {
+        let meta = {};
+        try {
+          meta = typeof m.metadata === "string" ? JSON.parse(m.metadata) : m.metadata || {};
+        } catch (e) {}
+        const id = (m.sender && m.sender.identity) || {};
+        return {
+          id: m.id,
+          at: m.created_at,
+          type: m.type,
+          content: m.content,
+          user: m.sender && m.sender.username,
+          color: id.color || "",
+          badges: (id.badges || []).map((b) => ({ type: b.type, count: b.count || 0 })),
+          images: (id.badges_v2 || []).filter((b) => b.image_url && b.selected !== false).map((b) => ({ name: b.name, src: b.image_url })),
+          reply: meta.original_sender ? { user: meta.original_sender.username, text: (meta.original_message && meta.original_message.content) || "" } : null,
+        };
+      })
+      .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  });
+  return json({ messages }, 200, cors);
 }
 
 // ---------- Kick HD ----------
@@ -2819,7 +2904,7 @@ async function profileExtrasAction(request, env, cors) {
 // and the message is sent as them through the official APIs (Twitch Helix "Send Chat Message", Kick
 // POST /public/v1/chat). Their tokens are kept encrypted (AES-GCM, key from SESSION_SECRET) and never
 // sent to the browser. Reading happens in the browser (Twitch's public chat connection, Kick's embed).
-// Kick sending is ready here but unused: the Watch page keeps Kick's own chat (emotes, collectibles).
+// Kick needs the scopes user:read chat:write; logins made before that connect Kick once more.
 // Setup: a Twitch app at dev.twitch.tv with the redirect URL <this Worker>/auth/twitch/callback, and the
 // Worker variables TWITCH_CLIENT_ID (Text) and TWITCH_CLIENT_SECRET (Secret).
 
@@ -2901,14 +2986,9 @@ async function twitchUserId(env, token, login) {
 
 const kickIds = new Map(); // channel slug -> Kick broadcaster user id (per Worker instance)
 
-async function kickBroadcasterId(token, slug) {
-  if (kickIds.has(slug)) return kickIds.get(slug);
-  const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(slug)}`, { headers: { Authorization: `Bearer ${token}` } });
-  if (res.status === 401 || res.status === 403) return null; // an older connection without this permission
-  const ch = res.ok ? ((await res.json()).data || [])[0] : null;
-  if (!ch) fail("Couldn't find that Kick channel.", 404);
-  kickIds.set(slug, ch.broadcaster_user_id);
-  return ch.broadcaster_user_id;
+async function kickBroadcasterId(slug) {
+  if (!kickIds.has(slug)) kickIds.set(slug, (await kickChannel(slug)).user_id);
+  return kickIds.get(slug);
 }
 
 // Sends one message as this player. Returns null when the token was refused (so it can be refreshed).
@@ -2927,8 +3007,7 @@ const CHAT_SENDERS = {
     return true;
   },
   async kick(env, token, link, channel, message) {
-    const broadcaster = await kickBroadcasterId(token, channel);
-    if (broadcaster == null) return null;
+    const broadcaster = await kickBroadcasterId(channel);
     const res = await fetch("https://api.kick.com/public/v1/chat", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -3051,7 +3130,7 @@ const PROVIDERS = {
         client_id: env.KICK_CLIENT_ID,
         response_type: "code",
         redirect_uri: redirect,
-        scope: "user:read",
+        scope: "user:read chat:write",
         state,
         code_challenge: challenge,
         code_challenge_method: "S256",
@@ -3074,7 +3153,7 @@ const PROVIDERS = {
       const me = await fetch("https://api.kick.com/public/v1/users", { headers: { Authorization: `Bearer ${tok.access_token}` } });
       const u = me.ok ? ((await me.json()).data || [])[0] : null;
       if (!u) return null;
-      return { extId: String(u.user_id), name: u.name, avatar: u.profile_picture || "" };
+      return { extId: String(u.user_id), name: u.name, avatar: u.profile_picture || "", tokens: tok };
     },
   },
 };

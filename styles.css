@@ -6297,32 +6297,118 @@ img {
   padding: 6px 14px;
 }
 
-/* Kick chat (embedded): how to log in, under it */
-.kick-chat-note {
-  margin: 0;
+/* Kick chat (kick-chat.js): badges, replies and the emote picker */
+.tchat-badge-img {
+  display: inline-block;
+  height: 1.15em;
+  vertical-align: -0.2em;
+  margin-right: 3px;
+}
+
+.tchat-badge {
+  margin-right: 3px;
+}
+
+.tchat-list > * {
+  min-width: 0;
+}
+
+.tchat-reply {
+  font-size: 0.78rem;
   color: var(--muted);
-  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.kick-chat-note strong {
-  color: var(--text);
+.tchat-reply .tchat-emote {
+  height: 1.2em;
 }
 
-.kick-chat-bar .link-btn {
+.emote-toggle {
   flex: none;
-  align-self: flex-start;
-  font-size: 1.1rem;
-  line-height: 1;
+  font-size: 1.15rem;
 }
 
-.kick-chat-bar {
-  flex: none;
-  display: flex;
-  justify-content: space-between;
+.emote-picker {
+  display: grid;
   gap: 8px;
+  max-height: 260px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.emote-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.emote-tab {
+  flex: none;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.emote-tab.active {
+  background: #53fc18;
+  border-color: #53fc18;
+  color: #0b0e0f;
+}
+
+.emote-search {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   padding: 6px 10px;
-  border-top: 1px solid var(--border);
-  font-size: 0.8rem;
+}
+
+.emote-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.emote-btn {
+  display: grid;
+  place-items: center;
+  height: 38px;
+  padding: 3px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+
+.emote-btn:hover,
+.emote-btn:focus-visible {
+  background: var(--surface);
+}
+
+.emote-btn img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.button.kick-btn {
+  background: #53fc18;
+  color: #0b0e0f;
+  justify-content: center;
 }
 
 /* ---------- Login chooser (auth.js) and connect buttons ---------- */

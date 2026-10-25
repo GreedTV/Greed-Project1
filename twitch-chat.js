@@ -237,8 +237,10 @@ function mountTwitchChat(container, channel) {
 
 // The "type as yourself" box under Twitch or Kick chat. Messages go through the Worker as your own
 // Twitch / Kick account (connected on your Profile, or the login you used).
-//   const stop = mountChatSend(footElement, "kick", "channelname");
-function mountChatSend(foot, platform, channel) {
+//   const stop = mountChatSend(footElement, "kick", "channelname", { picker, encode, onSent });
+// picker: () => [{ name, emotes: [{ name, src, note? }] }] adds a 😀 emote picker (inserts the name);
+// encode: (text) => text to send (e.g. emote names to codes); onSent: called after a message is sent.
+function mountChatSend(foot, platform, channel, opts = {}) {
   const NAME = platform === "kick" ? "Kick" : "Twitch";
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -280,11 +282,34 @@ function mountChatSend(foot, platform, channel) {
     const send = el("button", "button", "Send");
     send.type = "submit";
     const err = el("p", "tchat-error");
-    form.append(input, send);
+    if (opts.picker) {
+      const smile = el("button", "icon-btn emote-toggle", "😀");
+      smile.type = "button";
+      smile.title = "Emotes";
+      smile.setAttribute("aria-label", "Emotes");
+      smile.setAttribute("aria-expanded", "false");
+      const panel = el("div", "emote-picker");
+      panel.hidden = true;
+      smile.addEventListener("click", () => {
+        panel.hidden = !panel.hidden;
+        smile.setAttribute("aria-expanded", String(!panel.hidden));
+        if (!panel.hidden) fillPicker(panel, opts.picker(), (name) => {
+          const at = input.selectionStart ?? input.value.length;
+          const before = input.value.slice(0, at);
+          const insert = `${before && !/\s$/.test(before) ? " " : ""}${name} `;
+          input.value = before + insert + input.value.slice(at);
+          input.focus();
+          input.setSelectionRange(at + insert.length, at + insert.length);
+        });
+      });
+      form.append(input, smile, send);
+      foot.replaceChildren(panel, form, err);
+    } else form.append(input, send);
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const text = input.value.trim();
-      if (!text) return;
+      const typed = input.value.trim();
+      if (!typed) return;
+      const text = opts.encode ? opts.encode(typed) : typed;
       send.disabled = true;
       err.textContent = "";
       try {
@@ -297,6 +322,8 @@ function mountChatSend(foot, platform, channel) {
         if (res.status === 401 && new RegExp(NAME).test(data.error || "")) SinnersLinks.load();
         if (!res.ok) throw new Error(data.error || "Couldn't send that.");
         input.value = ""; // it shows up in the chat from the platform in a moment
+        foot.querySelector(".emote-picker")?.setAttribute("hidden", "");
+        if (opts.onSent) opts.onSent();
       } catch (e2) {
         err.textContent = e2.message;
       } finally {
@@ -304,7 +331,52 @@ function mountChatSend(foot, platform, channel) {
         input.focus();
       }
     });
-    foot.replaceChildren(form, err);
+    if (!opts.picker) foot.replaceChildren(form, err);
+  }
+
+  // The emote picker: one tab per group, a search box and a grid of emotes
+  function fillPicker(panel, groups, pick) {
+    if (!groups.length) return panel.replaceChildren(el("p", "hint", "Emotes are still loading…"));
+    let current = Math.min(Number(panel.dataset.tab) || 0, groups.length - 1);
+    const tabs = el("div", "emote-tabs");
+    const search = el("input", "emote-search");
+    search.placeholder = "Search emotes";
+    search.setAttribute("aria-label", "Search emotes");
+    const grid = el("div", "emote-grid");
+    function draw() {
+      tabs.querySelectorAll("button").forEach((b, i) => b.classList.toggle("active", i === current && !search.value));
+      const q = search.value.trim().toLowerCase();
+      const items = q ? groups.flatMap((g) => g.emotes).filter((e) => e.name.toLowerCase().includes(q)).slice(0, 120) : groups[current].emotes;
+      grid.replaceChildren(
+        ...items.map((e) => {
+          const b = el("button", "emote-btn");
+          b.type = "button";
+          b.title = e.note ? `${e.name} (${e.note})` : e.name;
+          const img = el("img");
+          img.src = e.src;
+          img.alt = e.name;
+          img.loading = "lazy";
+          b.append(img);
+          b.addEventListener("click", () => pick(e.name));
+          return b;
+        })
+      );
+      if (!items.length) grid.append(el("p", "hint", "No emotes found."));
+    }
+    groups.forEach((g, i) => {
+      const t = el("button", "emote-tab", g.name);
+      t.type = "button";
+      t.addEventListener("click", () => {
+        current = i;
+        panel.dataset.tab = i;
+        search.value = "";
+        draw();
+      });
+      tabs.append(t);
+    });
+    search.addEventListener("input", draw);
+    panel.replaceChildren(tabs, search, grid);
+    draw();
   }
   render();
   return SinnersLinks.onChange(render);
