@@ -2819,7 +2819,7 @@ async function profileExtrasAction(request, env, cors) {
 // and the message is sent as them through the official APIs (Twitch Helix "Send Chat Message", Kick
 // POST /public/v1/chat). Their tokens are kept encrypted (AES-GCM, key from SESSION_SECRET) and never
 // sent to the browser. Reading happens in the browser (Twitch's public chat connection, Kick's embed).
-// Kick needs the scopes user:read channel:read chat:write; logins made before that connect Kick again.
+// Kick sending is ready here but unused: the Watch page keeps Kick's own chat (emotes, collectibles).
 // Setup: a Twitch app at dev.twitch.tv with the redirect URL <this Worker>/auth/twitch/callback, and the
 // Worker variables TWITCH_CLIENT_ID (Text) and TWITCH_CLIENT_SECRET (Secret).
 
@@ -3051,7 +3051,7 @@ const PROVIDERS = {
         client_id: env.KICK_CLIENT_ID,
         response_type: "code",
         redirect_uri: redirect,
-        scope: "user:read channel:read chat:write",
+        scope: "user:read",
         state,
         code_challenge: challenge,
         code_challenge_method: "S256",
@@ -3074,7 +3074,7 @@ const PROVIDERS = {
       const me = await fetch("https://api.kick.com/public/v1/users", { headers: { Authorization: `Bearer ${tok.access_token}` } });
       const u = me.ok ? ((await me.json()).data || [])[0] : null;
       if (!u) return null;
-      return { extId: String(u.user_id), name: u.name, avatar: u.profile_picture || "", tokens: tok };
+      return { extId: String(u.user_id), name: u.name, avatar: u.profile_picture || "" };
     },
   },
 };

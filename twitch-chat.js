@@ -75,10 +75,10 @@ const SinnersLinks = (() => {
   if (!m) return;
   history.replaceState(null, "", location.pathname + location.search);
   const done = () =>
-    m[1] === "twitch" || m[1] === "kick"
-      ? SinnersToast.show(`${m[1] === "kick" ? "Kick" : "Twitch"} connected! You can chat from the Watch page now.`, m[1] === "kick" ? "💚" : "💜")
-      : m[1] === "discord"
-      ? SinnersToast.show("Discord connected!", "💙")
+    m[1] === "twitch"
+      ? SinnersToast.show("Twitch connected! You can chat from the Watch page now.", "💜")
+      : m[1] === "kick" || m[1] === "discord"
+      ? SinnersToast.show(`${m[1] === "kick" ? "Kick" : "Discord"} connected!`, m[1] === "kick" ? "💚" : "💙")
       : SinnersToast.show(m[1] === "cancelled" ? "Linking was cancelled." : "Linking didn't work. Please try again.", "⚠️");
   document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", done) : setTimeout(done, 300);
 })();
