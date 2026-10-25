@@ -452,6 +452,17 @@ function youtubeOffline(s, box, controls, muted, status) {
   again.addEventListener("click", recheck);
 }
 
+// The last volume you picked, kept in this browser so it stays the same across pages and streams
+const VOLUME_KEY = "sinners-volume";
+function savedVolume() {
+  try {
+    const v = Number(localStorage.getItem(VOLUME_KEY));
+    return localStorage.getItem(VOLUME_KEY) != null && Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 80;
+  } catch (e) {
+    return 80;
+  }
+}
+
 function volumeControl(startMuted) {
   const wrap = el("div", "volume");
   const btn = el("button", "icon-btn", "🔇");
@@ -466,7 +477,7 @@ function volumeControl(startMuted) {
   slider.min = 0;
   slider.max = 100;
   slider.step = 5;
-  slider.value = 80;
+  slider.value = savedVolume();
   slider.disabled = true;
   slider.setAttribute("aria-label", "Volume");
   const up = el("button", "icon-btn small", "+");
@@ -489,6 +500,9 @@ function volumeControl(startMuted) {
   const setLevel = (v) => {
     slider.value = Math.max(0, Math.min(100, v));
     api.setVolume(Number(slider.value));
+    try {
+      localStorage.setItem(VOLUME_KEY, slider.value);
+    } catch (e) {}
     if (muted && slider.value > 0) {
       muted = false;
       api.setMuted(false);
@@ -806,19 +820,18 @@ function buildChat(playing) {
       frame.src = url;
       frame.title = `${displayName(s)} chat`;
       body.append(frame);
-      // Kick chat works inside the page; typing needs a Kick login in this browser, which some
-      // browsers only keep when you log in on kick.com itself. Log in there once, then reload the chat.
+      // Kick chat is read in Kick's embed; typing goes through Sinners as your own Kick account
+      // (Kick's own login box inside the embed often can't keep you logged in, and Google blocks it there).
       if (s.platform === "kick") {
         const bar = el("div", "kick-chat-bar");
-        const login = el("button", "link-btn", "Can't type? Log in to Kick ↗");
-        login.type = "button";
-        login.addEventListener("click", () => window.open("https://kick.com/login", "kick-login", "width=480,height=720"));
         const reload = el("button", "link-btn", "⟳ Reload chat");
         reload.type = "button";
-        reload.title = "Reload Kick chat (after logging in)";
+        reload.title = "Reload Kick chat";
         reload.addEventListener("click", () => (frame.src = url));
-        bar.append(login, reload);
-        body.append(bar);
+        bar.append(reload);
+        const foot = el("div", "tchat-foot kick-send");
+        body.append(bar, foot);
+        stopChat = mountChatSend(foot, "kick", s.channel);
       }
       return;
     }

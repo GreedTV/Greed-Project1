@@ -2814,11 +2814,12 @@ async function profileExtrasAction(request, env, cors) {
   );
 }
 
-// ---------- Linked accounts (chat as yourself on Twitch) ----------
-// Discord stays the Sinners login. A logged-in player can link Twitch, then type in the Watch page's
-// Twitch chat and the message is sent as them through Twitch's official API (Helix "Send Chat
-// Message"). Their Twitch tokens are kept encrypted (AES-GCM, key from SESSION_SECRET) and never sent
-// to the browser. Reading Twitch chat happens in the browser (Twitch's public chat connection).
+// ---------- Linked accounts (chat as yourself on Twitch and Kick) ----------
+// A player whose account has Twitch or Kick connected can type in the Watch page's Twitch or Kick chat,
+// and the message is sent as them through the official APIs (Twitch Helix "Send Chat Message", Kick
+// POST /public/v1/chat). Their tokens are kept encrypted (AES-GCM, key from SESSION_SECRET) and never
+// sent to the browser. Reading happens in the browser (Twitch's public chat connection, Kick's embed).
+// Kick needs the scopes user:read channel:read chat:write; logins made before that connect Kick again.
 // Setup: a Twitch app at dev.twitch.tv with the redirect URL <this Worker>/auth/twitch/callback, and the
 // Worker variables TWITCH_CLIENT_ID (Text) and TWITCH_CLIENT_SECRET (Secret).
 
@@ -2854,26 +2855,35 @@ async function linkStart(request, env, cors) {
   return json({ url: `${new URL(request.url).origin}/auth/${platform}?state=${encodeURIComponent(state)}` }, 200, cors);
 }
 
-// A working Twitch access token for this player (refreshed when it's about to expire)
-async function twitchToken(env, link, force = false) {
+const CHAT_TOKEN_URLS = { twitch: "https://id.twitch.tv/oauth2/token", kick: "https://id.kick.com/oauth/token" };
+const PLATFORM_NAMES = { twitch: "Twitch", kick: "Kick" };
+
+// The chat link is gone or no longer works: forget it, so the page offers to connect again
+async function dropChatLink(env, link) {
+  await env.DB.prepare("DELETE FROM linked_accounts WHERE user_id = ? AND platform = ?").bind(link.user_id, link.platform).run();
+  fail(`Your ${PLATFORM_NAMES[link.platform]} connection expired. Connect ${PLATFORM_NAMES[link.platform]} again to chat.`, 401);
+}
+
+// A working Twitch or Kick access token for this player (refreshed when it's about to expire)
+async function chatToken(env, link, force = false) {
   if (!force && link.expires_at > Date.now() + 60000) return openToken(env, link.access_token);
-  const res = await fetch("https://id.twitch.tv/oauth2/token", {
+  const id = link.platform === "kick" ? env.KICK_CLIENT_ID : env.TWITCH_CLIENT_ID;
+  const secret = link.platform === "kick" ? env.KICK_CLIENT_SECRET : env.TWITCH_CLIENT_SECRET;
+  const res = await fetch(CHAT_TOKEN_URLS[link.platform], {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: env.TWITCH_CLIENT_ID,
-      client_secret: env.TWITCH_CLIENT_SECRET,
-      grant_type: "refresh_token",
-      refresh_token: await openToken(env, link.refresh_token),
-    }),
+    body: new URLSearchParams({ client_id: id, client_secret: secret, grant_type: "refresh_token", refresh_token: await openToken(env, link.refresh_token) }),
   });
-  if (!res.ok) {
-    await env.DB.prepare("DELETE FROM linked_accounts WHERE user_id = ? AND platform = 'twitch'").bind(link.user_id).run();
-    fail("Your Twitch link expired. Link Twitch again to chat.", 401);
-  }
+  if (!res.ok) await dropChatLink(env, link);
   const tok = await res.json();
-  await env.DB.prepare("UPDATE linked_accounts SET access_token = ?, refresh_token = ?, expires_at = ? WHERE user_id = ? AND platform = 'twitch'")
-    .bind(await sealToken(env, tok.access_token), await sealToken(env, tok.refresh_token || ""), Date.now() + (tok.expires_in || 3600) * 1000, link.user_id)
+  await env.DB.prepare("UPDATE linked_accounts SET access_token = ?, refresh_token = ?, expires_at = ? WHERE user_id = ? AND platform = ?")
+    .bind(
+      await sealToken(env, tok.access_token),
+      await sealToken(env, tok.refresh_token || (await openToken(env, link.refresh_token))),
+      Date.now() + (tok.expires_in || 3600) * 1000,
+      link.user_id,
+      link.platform
+    )
     .run();
   return tok.access_token;
 }
@@ -2889,34 +2899,71 @@ async function twitchUserId(env, token, login) {
   return who.id;
 }
 
+const kickIds = new Map(); // channel slug -> Kick broadcaster user id (per Worker instance)
+
+async function kickBroadcasterId(token, slug) {
+  if (kickIds.has(slug)) return kickIds.get(slug);
+  const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(slug)}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401 || res.status === 403) return null; // an older connection without this permission
+  const ch = res.ok ? ((await res.json()).data || [])[0] : null;
+  if (!ch) fail("Couldn't find that Kick channel.", 404);
+  kickIds.set(slug, ch.broadcaster_user_id);
+  return ch.broadcaster_user_id;
+}
+
+// Sends one message as this player. Returns null when the token was refused (so it can be refreshed).
+const CHAT_SENDERS = {
+  async twitch(env, token, link, channel, message) {
+    const res = await fetch("https://api.twitch.tv/helix/chat/messages", {
+      method: "POST",
+      headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ broadcaster_id: await twitchUserId(env, token, channel), sender_id: link.ext_id, message }),
+    });
+    if (res.status === 401) return null;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) fail(data.message || "Twitch didn't accept that message.", 400);
+    const result = (data.data || [])[0] || {};
+    if (!result.is_sent) fail((result.drop_reason && result.drop_reason.message) || "Twitch didn't send that message (slow mode, followers-only or a ban?).", 409);
+    return true;
+  },
+  async kick(env, token, link, channel, message) {
+    const broadcaster = await kickBroadcasterId(token, channel);
+    if (broadcaster == null) return null;
+    const res = await fetch("https://api.kick.com/public/v1/chat", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "user", broadcaster_user_id: broadcaster, content: message }),
+    });
+    if (res.status === 401) return null;
+    if (res.status === 403) await dropChatLink(env, link); // connected before chatting was allowed
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 429) fail("Kick says you're sending messages too fast.", 429);
+    if (!res.ok) fail(data.message || "Kick didn't accept that message (followers-only, slow mode or a ban?).", 400);
+    if (data.data && data.data.is_sent === false) fail("Kick didn't send that message (followers-only, slow mode or a ban?).", 409);
+    return true;
+  },
+};
+
 async function chatSend(request, env, cors) {
   const user = await requireUser(request, env);
   const { platform, channel, text: raw } = await readJson(request);
-  if (platform !== "twitch") fail("Sending isn't available for that platform.", 400);
+  if (!CHAT_SENDERS[platform]) fail("Sending isn't available for that platform.", 400);
   const login = String(channel || "").toLowerCase();
-  if (!/^[a-z0-9_]{3,25}$/.test(login)) fail("Unknown channel.", 400);
+  if (!(platform === "kick" ? /^[a-z0-9_-]{2,30}$/ : /^[a-z0-9_]{3,25}$/).test(login)) fail("Unknown channel.", 400);
   const message = String(raw || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 500);
   if (!message) fail("Type a message first.");
-  const link = await env.DB.prepare("SELECT * FROM linked_accounts WHERE user_id = ? AND platform = 'twitch'").bind(user.id).first();
-  if (!link) fail("Connect your Twitch account to chat.", 409);
-  // A small gap between messages (Twitch has its own limits too)
-  const gap = await env.DB.prepare("UPDATE linked_accounts SET last_sent = ? WHERE user_id = ? AND platform = 'twitch' AND COALESCE(last_sent, 0) < ?")
-    .bind(Date.now(), user.id, Date.now() - SEND_GAP_MS)
+  const link = await env.DB.prepare("SELECT * FROM linked_accounts WHERE user_id = ? AND platform = ?").bind(user.id, platform).first();
+  if (!link) fail(`Connect your ${PLATFORM_NAMES[platform]} account to chat.`, 409);
+  // A small gap between messages (Twitch and Kick have their own limits too)
+  const gap = await env.DB.prepare("UPDATE linked_accounts SET last_sent = ? WHERE user_id = ? AND platform = ? AND COALESCE(last_sent, 0) < ?")
+    .bind(Date.now(), user.id, platform, Date.now() - SEND_GAP_MS)
     .run();
   if (!gap.meta || gap.meta.changes !== 1) fail("You're sending messages too fast.", 429);
 
-  const send = async (token) =>
-    fetch("https://api.twitch.tv/helix/chat/messages", {
-      method: "POST",
-      headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ broadcaster_id: await twitchUserId(env, token, login), sender_id: link.ext_id, message }),
-    });
-  let res = await send(await twitchToken(env, link));
-  if (res.status === 401) res = await send(await twitchToken(env, link, true));
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) fail(data.message || "Twitch didn't accept that message.", res.status === 401 ? 401 : 400);
-  const result = (data.data || [])[0] || {};
-  if (!result.is_sent) fail((result.drop_reason && result.drop_reason.message) || "Twitch didn't send that message (slow mode, followers-only or a ban?).", 409);
+  const send = CHAT_SENDERS[platform];
+  let sent = await send(env, await chatToken(env, link), link, login, message);
+  if (!sent) sent = await send(env, await chatToken(env, link, true), link, login, message);
+  if (!sent) await dropChatLink(env, link);
   await bumpDaily(env, user.id, { chats: 1 }); // counts for the daily chat quest
   return json({ ok: true, as: link.ext_name }, 200, cors);
 }
@@ -3004,7 +3051,7 @@ const PROVIDERS = {
         client_id: env.KICK_CLIENT_ID,
         response_type: "code",
         redirect_uri: redirect,
-        scope: "user:read",
+        scope: "user:read channel:read chat:write",
         state,
         code_challenge: challenge,
         code_challenge_method: "S256",
@@ -3027,7 +3074,7 @@ const PROVIDERS = {
       const me = await fetch("https://api.kick.com/public/v1/users", { headers: { Authorization: `Bearer ${tok.access_token}` } });
       const u = me.ok ? ((await me.json()).data || [])[0] : null;
       if (!u) return null;
-      return { extId: String(u.user_id), name: u.name, avatar: u.profile_picture || "" };
+      return { extId: String(u.user_id), name: u.name, avatar: u.profile_picture || "", tokens: tok };
     },
   },
 };
@@ -3089,7 +3136,7 @@ async function authCallback(provider, url, env) {
     ).bind(provider, who.extId, userId, name, who.avatar, Date.now()),
     env.DB.prepare("INSERT INTO users (id, name, avatar, banned, created) VALUES (?, ?, ?, 0, ?) ON CONFLICT(id) DO NOTHING").bind(userId, name, who.avatar, Date.now()),
   ]);
-  if (who.tokens) await saveTwitchTokens(env, userId, who.extId, name, who.tokens);
+  if (who.tokens) await saveChatTokens(env, provider, userId, who.extId, name, who.tokens);
   if (linking) return back(`linked=${provider}`);
 
   // Logging in: the name and picture of the login they used
@@ -3098,13 +3145,14 @@ async function authCallback(provider, url, env) {
   return back(`session=${session}`);
 }
 
-async function saveTwitchTokens(env, userId, extId, name, tok) {
+// Twitch and Kick logins keep a chat token (encrypted) so the Watch page can send messages as them
+async function saveChatTokens(env, platform, userId, extId, name, tok) {
   await env.DB.prepare(
-    "INSERT INTO linked_accounts (user_id, platform, ext_id, ext_name, access_token, refresh_token, expires_at, created) VALUES (?, 'twitch', ?, ?, ?, ?, ?, ?) " +
+    "INSERT INTO linked_accounts (user_id, platform, ext_id, ext_name, access_token, refresh_token, expires_at, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
       "ON CONFLICT(user_id, platform) DO UPDATE SET ext_id = excluded.ext_id, ext_name = excluded.ext_name, access_token = excluded.access_token, " +
       "refresh_token = excluded.refresh_token, expires_at = excluded.expires_at"
   )
-    .bind(userId, extId, name, await sealToken(env, tok.access_token), await sealToken(env, tok.refresh_token || ""), Date.now() + (tok.expires_in || 3600) * 1000, Date.now())
+    .bind(userId, platform, extId, name, await sealToken(env, tok.access_token), await sealToken(env, tok.refresh_token || ""), Date.now() + (tok.expires_in || 3600) * 1000, Date.now())
     .run();
 }
 

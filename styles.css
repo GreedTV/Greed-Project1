@@ -6255,6 +6255,16 @@ img {
   display: none;
 }
 
+.kick-send .tchat-form input:focus {
+  border-color: #53fc18;
+}
+
+.button.kick-btn {
+  background: #53fc18;
+  color: #0b0e0f;
+  justify-content: center;
+}
+
 .button.twitch-btn {
   background: linear-gradient(90deg, #9146ff, #6d28d9);
   justify-content: center;
@@ -6297,11 +6307,11 @@ img {
   padding: 6px 14px;
 }
 
-/* Kick chat (embedded): login helper under it */
+/* Kick chat (embedded): reload link and the Sinners send box under it */
 .kick-chat-bar {
   flex: none;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   padding: 6px 10px;
   border-top: 1px solid var(--border);

@@ -69,14 +69,16 @@ const SinnersLinks = (() => {
   };
 })();
 
-// Back from linking an account (#linked=twitch / cancelled / failed)
+// Back from linking an account (#linked=twitch / kick / cancelled / failed)
 (() => {
   const m = location.hash.match(/^#linked=(\w+)/);
   if (!m) return;
   history.replaceState(null, "", location.pathname + location.search);
   const done = () =>
-    m[1] === "twitch"
-      ? SinnersToast.show("Twitch linked! You can chat from the Watch page now.", "💜")
+    m[1] === "twitch" || m[1] === "kick"
+      ? SinnersToast.show(`${m[1] === "kick" ? "Kick" : "Twitch"} connected! You can chat from the Watch page now.`, m[1] === "kick" ? "💚" : "💜")
+      : m[1] === "discord"
+      ? SinnersToast.show("Discord connected!", "💙")
       : SinnersToast.show(m[1] === "cancelled" ? "Linking was cancelled." : "Linking didn't work. Please try again.", "⚠️");
   document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", done) : setTimeout(done, 300);
 })();
@@ -222,34 +224,58 @@ function mountTwitchChat(container, channel) {
   connect();
 
   // ---------- Typing ----------
-  function renderFoot() {
+  const stopSend = mountChatSend(foot, "twitch", channel);
+
+  return () => {
+    stopped = true;
+    stopSend();
+    try {
+      ws.close();
+    } catch (e) {}
+  };
+}
+
+// The "type as yourself" box under Twitch or Kick chat. Messages go through the Worker as your own
+// Twitch / Kick account (connected on your Profile, or the login you used).
+//   const stop = mountChatSend(footElement, "kick", "channelname");
+function mountChatSend(foot, platform, channel) {
+  const NAME = platform === "kick" ? "Kick" : "Twitch";
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  };
+  function render() {
     const links = SinnersLinks.links;
     if (!SinnersAuth.user) {
       const b = el("button", "button discord-btn", "Log in to chat");
       b.type = "button";
       b.addEventListener("click", SinnersAuth.login);
-      return foot.replaceChildren(el("span", "hint", "Log in with Twitch (or connect it on your Profile) to chat here."), b);
+      return foot.replaceChildren(el("span", "hint", `Log in with ${NAME} (or connect it on your Profile) to chat here.`), b);
     }
     if (!links) return foot.replaceChildren(el("span", "hint", "…"));
-    if (!links.twitch) {
-      if (SinnersLinks.available.twitch === false) return foot.replaceChildren(el("span", "hint", "Chatting from Sinners isn't set up yet. Reading works!"));
-      const b = el("button", "button twitch-btn", "🔗 Connect Twitch to chat");
+    if (!links[platform]) {
+      if (SinnersLinks.available[platform] === false) return foot.replaceChildren(el("span", "hint", "Chatting from Sinners isn't set up yet. Reading works!"));
+      const b = el("button", `button ${platform}-btn`, `🔗 Connect ${NAME} to chat`);
       b.type = "button";
       b.addEventListener("click", async () => {
         b.disabled = true;
         try {
-          await SinnersLinks.link("twitch");
+          await SinnersLinks.link(platform);
         } catch (err) {
           b.disabled = false;
-          SinnersDialog.alert(err.message, { title: "Couldn't link Twitch", icon: "⚠️" });
+          SinnersDialog.alert(err.message, { title: `Couldn't connect ${NAME}`, icon: "⚠️" });
         }
       });
-      return foot.replaceChildren(b);
+      // Logged in with Kick before Sinners could chat: one more approval adds the chat permission
+      const note = SinnersLinks.identities[platform] ? el("span", "hint", `One quick approval lets Sinners send messages as ${SinnersLinks.identities[platform]}.`) : null;
+      return foot.replaceChildren(...[note, b].filter(Boolean));
     }
     const form = el("form", "tchat-form");
     const input = el("input");
     input.maxLength = 500;
-    input.placeholder = `Chat as ${links.twitch} on Twitch…`;
+    input.placeholder = `Chat as ${links[platform]} on ${NAME}…`;
     input.setAttribute("aria-label", "Message");
     const send = el("button", "button", "Send");
     send.type = "submit";
@@ -265,12 +291,12 @@ function mountTwitchChat(container, channel) {
         const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/chat/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${SinnersAuth.token}` },
-          body: JSON.stringify({ platform: "twitch", channel, text }),
+          body: JSON.stringify({ platform, channel, text }),
         });
         const data = await res.json().catch(() => ({}));
-        if (res.status === 401 && /Twitch/.test(data.error || "")) SinnersLinks.load();
+        if (res.status === 401 && new RegExp(NAME).test(data.error || "")) SinnersLinks.load();
         if (!res.ok) throw new Error(data.error || "Couldn't send that.");
-        input.value = ""; // it shows up in the list from Twitch in a moment
+        input.value = ""; // it shows up in the chat from the platform in a moment
       } catch (e2) {
         err.textContent = e2.message;
       } finally {
@@ -280,14 +306,6 @@ function mountTwitchChat(container, channel) {
     });
     foot.replaceChildren(form, err);
   }
-  renderFoot();
-  const stopLinks = SinnersLinks.onChange(renderFoot);
-
-  return () => {
-    stopped = true;
-    stopLinks();
-    try {
-      ws.close();
-    } catch (e) {}
-  };
+  render();
+  return SinnersLinks.onChange(render);
 }
