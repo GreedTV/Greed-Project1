@@ -10,7 +10,7 @@ Live at https://sinnerstv.com/
 GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site links that way.
 
 
-- `index.html` (`/`): home page with a quick start (pick Kick / Twitch / YouTube, type a streamer, go to Watch), community numbers, this week's boss and Clip of the Week, and a "How to use Sinners" guide
+- `index.html` (`/`): home page: a stage of featured streamers plus up to 10 of the viewer's own (saved in the browser), shown as medallions with their channel picture and a LIVE ring (Worker `/live`); click one to watch on the Watch page. This week's world boss sits top right
 - `watch.html` (`/watch`): watch streams one at a time with chat, or up to 4 at once
 - `content.html` (`/content`): browse and search YouTube (categories, live now) and watch videos and playlists in a queue while waiting for a stream
 - `games.html` (`/games`): mini games (Quick Draw, Target Rush, Chat Typer) with leaderboards, plus betting games (Color Clash, Lucky Number) played with points, and a shop where points buy items the admin adds
