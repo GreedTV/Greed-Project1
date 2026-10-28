@@ -1,7 +1,7 @@
 // Home page: the streamer stage and this week's world boss.
-// Featured streamers and the viewer's own squad (up to 10, saved in this browser) stand on the stage as
-// glowing medallions with their channel picture; clicking one opens their stream on the Watch page.
-// Live status and pictures come from the Worker (/live); pictures are remembered so they show at once next time.
+// Featured streamers and the viewer's own squad (up to 10, saved in this browser) float over the stage as
+// their channel picture, with effects that fit them; clicking one opens their stream on the Watch page.
+// Live status and channel pictures come from the Worker (/live); pictures are remembered for next time.
 
 const API = WORKER_URL.replace(/\/$/, "");
 const strip = document.getElementById("boss-strip");
@@ -14,12 +14,41 @@ function el(tag, className, text) {
 }
 
 // ---------- Streamers ----------
-// color: the medallion's ring and glow (defaults to the platform's color)
+// color: their glow; fx: the effect around their picture (frost, speed, bolt, glitch; spark for anyone else)
+// picture: their channel picture, so it shows before the Worker answers (the Worker's newer one replaces it)
 const FEATURED = [
-  { platform: "kick", name: "lexor2k", label: "Lexor2k", color: "#22d3ee" },
-  { platform: "youtube", name: "@IShowSpeed", label: "IShowSpeed", color: "#ff2a3d" },
-  { platform: "twitch", name: "kaicenat", label: "Kai Cenat", color: "#9146ff" },
-  { platform: "kick", name: "xqc", label: "xQc", color: "#53fc18" },
+  {
+    platform: "kick",
+    name: "lexor2k",
+    label: "Lexor2k",
+    color: "#22d3ee",
+    fx: "frost",
+    picture: "https://files.kick.com/images/user/32870913/profile_image/conversion/9c1f9140-d07a-493c-8c51-baaedf9982d6-fullsize.webp",
+  },
+  {
+    platform: "youtube",
+    name: "@IShowSpeed",
+    label: "IShowSpeed",
+    color: "#ff2a3d",
+    fx: "speed",
+    picture: "https://yt3.googleusercontent.com/ieK0j0sDqI_AHDwYxZ2Wly07-R7PG4S3YMtxOWCEe1QH-I0FgimJ92tlydQa6M78YD0VaywCaw=s900-c-k-c0x00ffffff-no-rj",
+  },
+  {
+    platform: "twitch",
+    name: "kaicenat",
+    label: "Kai Cenat",
+    color: "#a855f7",
+    fx: "bolt",
+    picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/bf6a04cf-3f44-4986-8eed-5c36bfad542b-profile_image-300x300.png",
+  },
+  {
+    platform: "kick",
+    name: "xqc",
+    label: "xQc",
+    color: "#53fc18",
+    fx: "glitch",
+    picture: "https://files.kick.com/images/user/676/profile_image/conversion/931b4e8f-5445-427c-bd82-b473530390cc-fullsize.webp",
+  },
 ];
 
 const SQUAD_KEY = "sinners-squad";
@@ -79,16 +108,17 @@ function figure(s, index) {
 
   const sign = el("span", "streamer-live");
   sign.append(el("b", null, "LIVE"), el("span", "streamer-viewers"));
-  const ring = el("span", "logo-ring");
-  const face = el("span", "logo-face");
-  // Until the picture arrives (or if there is none): their initials
-  face.append(el("span", "logo-initials", label.replace(/[^a-z0-9 ]/gi, "").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?"));
-  ring.append(face, el("span", "logo-badge"));
-  ring.lastChild.append(platformIcon(s.platform));
+  a.classList.add(`fx-${s.fx || "spark"}`);
+  const mark = el("span", "mark");
+  mark.append(effects(s.fx || "spark"));
+  const art = el("span", "mark-art");
+  // Until a picture arrives: their initials
+  art.append(el("span", "mark-initials", label.replace(/[^a-z0-9 ]/gi, "").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?"));
+  mark.append(art, el("span", "mark-shadow"));
   const plate = el("span", "streamer-plate");
-  plate.append(el("span", null, label));
+  plate.append(platformIcon(s.platform), el("span", null, label));
   const status = el("span", "logo-status");
-  a.append(sign, ring, plate, status);
+  a.append(sign, mark, plate, status);
   figures.set(keyOf(s), a);
   paintLive(a);
   return a;
@@ -98,21 +128,43 @@ function compact(n) {
   return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 1e4 ? 0 : 1)}K` : String(n);
 }
 
+// Floating bits around the picture; each effect animates them differently in design.css
+function effects(fx) {
+  const box = el("span", "mark-fx");
+  box.setAttribute("aria-hidden", "true");
+  const count = fx === "bolt" ? 6 : 12;
+  for (let i = 0; i < count; i++) {
+    const bit = el("i");
+    bit.style.setProperty("--x", `${Math.round(Math.random() * 100)}%`);
+    bit.style.setProperty("--y", `${Math.round(Math.random() * 100)}%`);
+    bit.style.setProperty("--d", `${(Math.random() * -4).toFixed(2)}s`);
+    bit.style.setProperty("--t", `${(1.6 + Math.random() * 2.4).toFixed(2)}s`);
+    box.append(bit);
+  }
+  if (fx === "bolt") {
+    for (let i = 0; i < 2; i++) {
+      const bolt = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      bolt.setAttribute("viewBox", "0 0 24 48");
+      bolt.setAttribute("class", `bolt bolt-${i}`);
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", "M14 0 4 26h7L6 48 20 18h-7L18 0Z");
+      bolt.append(p);
+      box.append(bolt);
+    }
+  }
+  return box;
+}
+
 function setPicture(a, url) {
-  const face = a.querySelector(".logo-face");
-  const old = face.querySelector("img");
+  const art = a.querySelector(".mark-art");
+  const old = art.querySelector("img");
   if (!url || (old && old.src === url)) return;
-  const img = el("img");
+  const img = el("img", "mark-logo picture");
   img.alt = "";
   img.referrerPolicy = "no-referrer";
   img.decoding = "async";
-  img.onload = () => {
-    face.querySelectorAll("img").forEach((x) => x !== img && x.remove());
-    face.classList.add("has-picture");
-  };
-  img.onerror = () => img.remove();
+  img.onload = () => art.replaceChildren(img);
   img.src = url;
-  face.append(img);
 }
 
 function paintLive(a) {
@@ -123,7 +175,8 @@ function paintLive(a) {
   a.querySelector(".streamer-viewers").textContent = on && info.viewers ? compact(info.viewers) : "";
   a.querySelector(".logo-status").textContent = on ? info.title || "Live now" : info ? "Offline" : "";
   a.title = on && info.title ? info.title : "";
-  setPicture(a, (info && info.avatar) || avatars[key]);
+  const featured = FEATURED.find((s) => keyOf(s) === key);
+  setPicture(a, (info && info.avatar) || avatars[key] || (featured && featured.picture));
 }
 
 // ---------- Featured ----------
@@ -158,9 +211,7 @@ function renderSquad() {
 function emptySlot() {
   const slot = el("button", "squad-slot empty");
   slot.type = "button";
-  const ring = el("span", "logo-ring");
-  ring.append(el("span", "logo-face", "+"));
-  slot.append(ring, el("span", "streamer-plate", "Add streamer"));
+  slot.append(el("span", "mark-empty", "+"), el("span", "streamer-plate", "Add streamer"));
   slot.addEventListener("click", () => openForm(slot));
   return slot;
 }
