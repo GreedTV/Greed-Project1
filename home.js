@@ -24,7 +24,7 @@ const FEATURED = [
     label: "Lexor2k",
     color: "#22d3ee",
     fx: "cs2",
-    deco: [["c4", "br"]],
+    deco: [],
     picture: "https://files.kick.com/images/user/32870913/profile_image/conversion/9c1f9140-d07a-493c-8c51-baaedf9982d6-fullsize.webp",
   },
   {
@@ -195,25 +195,6 @@ function compact(n) {
 // Small drawings that sit on a picture's edge: [viewBox, svg inside]. Placed by `deco: [[name, spot]]`
 // in FEATURED; spots are tl / tr / bl / br (corners), top and bottom (across the edge).
 const DECO = {
-  // A C4 charge: taped blocks, keypad, a little display and a blinking red light
-  c4: [
-    "0 0 64 44",
-    `<defs>
-      <linearGradient id="c4-block" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9c99a"/><stop offset="1" stop-color="#8c7b4f"/></linearGradient>
-      <linearGradient id="c4-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3d44"/><stop offset="1" stop-color="#121317"/></linearGradient>
-    </defs>
-    <rect x="3" y="12" width="58" height="29" rx="3" fill="url(#c4-block)" stroke="#2a2416" stroke-width="1.6"/>
-    <path d="M22 12v29M42 12v29" stroke="#6b5d38" stroke-width="1.4"/>
-    <path d="M3 22h58M3 32h58" stroke="#3a3a3a" stroke-width="3" opacity="0.75"/>
-    <rect x="14" y="3" width="36" height="22" rx="2.5" fill="url(#c4-body)" stroke="#050506" stroke-width="1.6"/>
-    <rect x="18" y="6" width="20" height="6" rx="1" fill="#0b2a12" stroke="#050506"/>
-    <path d="M20 9h2M23 9h2M26 9h2M29 9h2M32 9h2M35 9h1" stroke="#4ade80" stroke-width="1.6"/>
-    <g fill="#9ca3af"><rect x="18" y="14" width="4" height="3" rx="0.6"/><rect x="24" y="14" width="4" height="3" rx="0.6"/><rect x="30" y="14" width="4" height="3" rx="0.6"/>
-    <rect x="18" y="19" width="4" height="3" rx="0.6"/><rect x="24" y="19" width="4" height="3" rx="0.6"/><rect x="30" y="19" width="4" height="3" rx="0.6"/></g>
-    <circle class="led" cx="44" cy="9" r="2.6" fill="#ef4444"/>
-    <path d="M50 8c6 0 9 3 10 8M50 14c4 0 7 2 8 6" fill="none" stroke="#dc2626" stroke-width="1.4"/>
-    <path d="M50 11c5 0 8 2 9 6" fill="none" stroke="#2563eb" stroke-width="1.4"/>`,
-  ],
   // An airdrop: a red and white parachute, its cords, and a supply crate
   airdrop: [
     "0 0 48 64",
@@ -412,10 +393,8 @@ function effects(fx) {
       feed.append(row);
     });
     box.append(feed, el("b", "cash-pop", "+$300"), el("b", "cash-pop late", "+$300"));
-    // A crosshair flicking between targets, and an airdrop crate drifting down on its parachute
-    const cross = el("span", "cs-cross");
-    cross.append(el("span", "cs-hit"));
-    box.append(cross, decoration("airdrop", "drop"));
+    // An airdrop crate drifting down on its parachute
+    box.append(decoration("airdrop", "drop"));
   }
   if (fx === "bolt") {
     for (let i = 0; i < 2; i++) {
