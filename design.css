@@ -1742,3 +1742,58 @@ body:has(.legal) .page-hero .container {
     animation: none;
   }
 }
+
+/* ---------- Shop gear: bigger art on a lit display tile ---------- */
+.gear-card .gear-icon {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 6px;
+  border-width: 1px;
+  background:
+    radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--tier) 34%, transparent), transparent 70%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.025) 0 4px, transparent 4px 8px),
+    var(--bg);
+  overflow: hidden;
+}
+
+.gear-card .gear-icon .gear-art {
+  width: 60px;
+  height: 60px;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55));
+  transition: transform 0.2s;
+}
+
+.gear-card:hover .gear-icon .gear-art {
+  transform: translateY(-3px) scale(1.06);
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px color-mix(in srgb, var(--tier) 70%, transparent));
+}
+
+/* Frost and Abyssal gear shimmer */
+.gear-card.tier-4 .gear-icon::after,
+.gear-card.tier-5 .gear-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.22) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: gear-shine 3.6s ease-in-out infinite;
+}
+
+.gear-card.tier-5 .gear-icon .gear-art {
+  animation: gear-ember 2.2s ease-in-out infinite;
+}
+
+.item-icon .gear-art {
+  width: 85%;
+  height: 85%;
+}
+
+@keyframes gear-shine {
+  0%, 60% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+@keyframes gear-ember {
+  50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 7px rgba(239, 68, 68, 0.75)); }
+}
