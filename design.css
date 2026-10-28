@@ -624,6 +624,97 @@ h1, h2, h3, .logo {
   outline-offset: 3px;
 }
 
+/* ---------- Details on the featured pictures ---------- */
+/* HUD corner brackets with tick marks around the picture */
+.mark-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 136px;
+  height: 136px;
+  --c: color-mix(in srgb, var(--glow) 85%, #fff);
+  background:
+    linear-gradient(var(--c), var(--c)) top left / 18px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) top left / 2px 18px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 18px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 2px 18px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 18px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 2px 18px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 18px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 2px 18px no-repeat,
+    linear-gradient(var(--c), var(--c)) 50% 0 / 8px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) 50% 100% / 8px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) 0 50% / 2px 8px no-repeat,
+    linear-gradient(var(--c), var(--c)) 100% 50% / 2px 8px no-repeat;
+  filter: drop-shadow(0 0 4px var(--glow));
+  opacity: 0.8;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition: width 0.2s, height 0.2s, opacity 0.2s;
+}
+
+.stage-fig:hover .mark-frame,
+.stage-fig:focus-visible .mark-frame {
+  width: 128px;
+  height: 128px;
+  opacity: 1;
+}
+
+.deco {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  overflow: visible;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 6px color-mix(in srgb, var(--glow) 50%, transparent));
+  pointer-events: none;
+}
+
+/* corners: the drawing sits on the picture's corner, a little tilted */
+.deco.at-tr { width: 50px; transform: translate(18px, -76px) rotate(14deg); }
+.deco.at-br { width: 42px; transform: translate(26px, 22px) rotate(-8deg); }
+.deco.at-tl { width: 42px; transform: translate(-68px, -80px) rotate(-12deg); }
+.deco.at-bl { width: 42px; transform: translate(-68px, 22px) rotate(8deg); }
+/* across the edge */
+.deco.at-bottom { width: 158px; transform: translate(-50%, 30px) rotate(-9deg); }
+.deco.at-top { width: 138px; transform: translate(-50%, -88px); }
+
+/* wide or tall drawings */
+.deco-pad.at-br,
+.deco-crown.at-tr { width: 54px; }
+.deco-mouse.at-br { width: 30px; transform: translate(32px, 14px) rotate(14deg); }
+.deco-grenade.at-br,
+.deco-trophy.at-br { width: 38px; }
+
+/* the decorations bob a touch on their own */
+.deco.at-tr,
+.deco.at-br,
+.deco.at-tl,
+.deco.at-bl {
+  animation: deco-bob 2.8s ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes deco-bob {
+  50% { translate: 0 -3px; }
+}
+
+.stage-fig:hover .deco.at-tr { rotate: -8deg; }
+.stage-fig:hover .deco.at-br { rotate: 10deg; }
+
+@media (max-width: 520px) {
+  .mark-frame,
+  .stage-fig:hover .mark-frame {
+    width: 116px;
+    height: 116px;
+  }
+
+  .deco.at-tr { transform: translate(16px, -74px) rotate(14deg) scale(0.85); }
+  .deco.at-br { transform: translate(18px, 14px) rotate(-8deg) scale(0.85); }
+  .deco.at-bottom { width: 130px; transform: translate(-50%, 24px) rotate(-9deg); }
+  .deco.at-top { width: 116px; transform: translate(-50%, -76px); }
+}
+
 /* ---------- Effects around the picture ---------- */
 .mark-fx {
   position: absolute;
@@ -1193,6 +1284,7 @@ h1, h2, h3, .logo {
 
 @media (prefers-reduced-motion: reduce) {
   .mark-art,
+  .deco,
   .mark-shadow,
   .mark-fx,
   .streamer-live b::before {

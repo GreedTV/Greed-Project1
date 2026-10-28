@@ -15,7 +15,7 @@ function el(tag, className, text) {
 
 // ---------- Streamers ----------
 // color: their glow; fx: the effect around their picture (frost, speed, bolt, glitch, gold, aim, cash, fire,
-// smoke, confetti; spark for anyone else)
+// smoke, confetti; spark for anyone else); deco: drawings on the picture's edge (see DECO)
 // picture: their channel picture, so it shows before the Worker answers (the Worker's newer one replaces it)
 const FEATURED = [
   {
@@ -24,6 +24,7 @@ const FEATURED = [
     label: "Lexor2k",
     color: "#22d3ee",
     fx: "frost",
+    deco: [["ak", "bottom"], ["helmet", "tr"]],
     picture: "https://files.kick.com/images/user/32870913/profile_image/conversion/9c1f9140-d07a-493c-8c51-baaedf9982d6-fullsize.webp",
   },
   {
@@ -32,6 +33,7 @@ const FEATURED = [
     label: "IShowSpeed",
     color: "#ff2a3d",
     fx: "speed",
+    deco: [["ball", "br"]],
     picture: "https://yt3.googleusercontent.com/ieK0j0sDqI_AHDwYxZ2Wly07-R7PG4S3YMtxOWCEe1QH-I0FgimJ92tlydQa6M78YD0VaywCaw=s900-c-k-c0x00ffffff-no-rj",
   },
   {
@@ -40,6 +42,7 @@ const FEATURED = [
     label: "CaseOh",
     color: "#a855f7",
     fx: "bolt",
+    deco: [["pad", "br"]],
     picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/ef28ba12-c8ed-46d4-838b-a4c95ef5b469-profile_image-300x300.png",
   },
   {
@@ -48,6 +51,7 @@ const FEATURED = [
     label: "xQc",
     color: "#53fc18",
     fx: "glitch",
+    deco: [["headset", "top"]],
     picture: "https://files.kick.com/images/user/676/profile_image/conversion/931b4e8f-5445-427c-bd82-b473530390cc-fullsize.webp",
   },
   {
@@ -56,6 +60,7 @@ const FEATURED = [
     label: "ohnePixel",
     color: "#f5b70a",
     fx: "gold",
+    deco: [["knife", "br"]],
     picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/5742b015-e6ed-4f7c-a1dd-87cd88fe1eb9-profile_image-300x300.png",
   },
   {
@@ -64,6 +69,7 @@ const FEATURED = [
     label: "TenZ",
     color: "#ff4655",
     fx: "aim",
+    deco: [["mouse", "br"]],
     picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/dfb5c790-5ea6-4543-bc2b-0f5f79b1f959-profile_image-300x300.png",
   },
   {
@@ -72,6 +78,7 @@ const FEATURED = [
     label: "Adin Ross",
     color: "#4ade80",
     fx: "cash",
+    deco: [["crown", "tr"]],
     picture: "https://files.kick.com/images/user/904404/profile_image/conversion/e344be03-aff2-4791-ae5a-22a9ac4cf89a-fullsize.webp",
   },
   {
@@ -80,6 +87,7 @@ const FEATURED = [
     label: "Jynxzi",
     color: "#fb923c",
     fx: "fire",
+    deco: [["grenade", "br"]],
     picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/645d98a0-a2eb-48a3-b687-cfbc55243e4a-profile_image-300x300.png",
   },
   {
@@ -88,6 +96,7 @@ const FEATURED = [
     label: "shroud",
     color: "#cbd5e1",
     fx: "smoke",
+    deco: [["scope", "br"]],
     picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/c754eebf-745b-4e0a-814a-10bcaecaabbc-profile_image-300x300.png",
   },
   {
@@ -96,6 +105,7 @@ const FEATURED = [
     label: "Ludwig",
     color: "#facc15",
     fx: "confetti",
+    deco: [["trophy", "br"]],
     picture: "https://yt3.googleusercontent.com/ytc/AIdro_nBvD2_i9JPqMIZoH-3Pct438PAEd1d4rLEd1LCCLEEmKc=s900-c-k-c0x00ffffff-no-rj",
   },
 ];
@@ -163,6 +173,10 @@ function figure(s, index) {
   const art = el("span", "mark-art");
   // Until a picture arrives: their initials
   art.append(el("span", "mark-initials", label.replace(/[^a-z0-9 ]/gi, "").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?"));
+  if (s.deco) {
+    art.append(el("span", "mark-frame"));
+    s.deco.forEach(([name, spot]) => art.append(decoration(name, spot)));
+  }
   mark.append(art, el("span", "mark-shadow"));
   const plate = el("span", "streamer-plate");
   plate.append(platformIcon(s.platform), el("span", null, label));
@@ -175,6 +189,141 @@ function figure(s, index) {
 
 function compact(n) {
   return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 1e4 ? 0 : 1)}K` : String(n);
+}
+
+// ---------- Decorations on the featured pictures ----------
+// Small drawings that sit on a picture's edge: [viewBox, svg inside]. Placed by `deco: [[name, spot]]`
+// in FEATURED; spots are tl / tr / bl / br (corners), top and bottom (across the edge).
+const DECO = {
+  // A level 3 style combat helmet: olive dome, ear guards, front mount and chin strap
+  helmet: [
+    "0 0 64 52",
+    `<path d="M6 36C6 15 19 4 33 4s27 10 27 30v6h-9l-2-8H17l-3 10H6Z" fill="#3f4a1f" stroke="#141708" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M14 30C15 17 23 9 33 9" fill="none" stroke="#7a8a3a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M17 32h32l2 8H15Z" fill="#2c3415" stroke="#141708" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="27" y="11" width="13" height="8" rx="2" fill="#1b1f0c" stroke="#141708" stroke-width="1.5"/>
+    <rect x="30" y="13" width="7" height="4" rx="1" fill="#5c6b2a"/>
+    <path d="M6 38h8l1 7H8Z" fill="#2c3415" stroke="#141708" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M51 40h9v5l-7 2Z" fill="#2c3415" stroke="#141708" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M12 45c6 6 34 6 42 0" fill="none" stroke="#1b1f0c" stroke-width="2.5"/>
+    <circle cx="47" cy="22" r="2" fill="#1b1f0c"/><circle cx="20" cy="22" r="2" fill="#1b1f0c"/>`,
+  ],
+  // An AK rifle: wooden stock, grip and handguard, steel receiver, curved magazine, barrel and sights
+  ak: [
+    "0 0 170 52",
+    `<path d="M3 15l38 5v11L11 37l-8-4Z" fill="#8b4a22" stroke="#1a0f08" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M9 20l26 3M9 30l24-3" stroke="#b86b38" stroke-width="1.5"/>
+    <path d="M39 17h56v14H39Z" fill="#2b2b30" stroke="#0d0d10" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M42 20h46" stroke="#55555e" stroke-width="2"/>
+    <path d="M52 31h8l-4 15h-8Z" fill="#7a3f1c" stroke="#1a0f08" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M60 31q2 7 9 7" fill="none" stroke="#0d0d10" stroke-width="2"/>
+    <path d="M68 31h12c2 8 6 14 12 17l-11 3c-8-4-12-11-13-20Z" fill="#1d1d21" stroke="#0d0d10" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M72 35c2 5 4 9 8 12" fill="none" stroke="#3d3d45" stroke-width="1.5"/>
+    <path d="M95 19h30v11H95Z" fill="#9a5426" stroke="#1a0f08" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M99 22v5M104 22v5M109 22v5M114 22v5M119 22v5" stroke="#6b3616" stroke-width="1.5"/>
+    <path d="M95 13h38v5H95Z" fill="#2b2b30" stroke="#0d0d10" stroke-width="1.5"/>
+    <path d="M125 22h42v5h-42Z" fill="#1d1d21" stroke="#0d0d10" stroke-width="1.5"/>
+    <path d="M148 14h4v8h-4ZM88 11h5v6h-5Z" fill="#1d1d21" stroke="#0d0d10" stroke-width="1.2"/>
+    <path d="M163 20h5v9h-5Z" fill="#111" />`,
+  ],
+  // A football: white with black patches
+  ball: [
+    "0 0 40 40",
+    `<circle cx="20" cy="20" r="17" fill="#fafafa" stroke="#111" stroke-width="2.5"/>
+    <path d="M20 12l7 5-3 8h-8l-3-8Z" fill="#111"/>
+    <path d="M20 12V4M27 17l8-3M24 25l5 7M16 25l-5 7M13 17l-8-3" stroke="#111" stroke-width="1.8"/>
+    <path d="M14 4l6 3 6-3M35 12l-1 7 4 5M31 34l-5-3-6 3M9 34l5-3 0 0M5 12l1 7-4 5" fill="none" stroke="#111" stroke-width="1.6"/>
+    <path d="M10 9a14 14 0 0 1 9-5" fill="none" stroke="#fff" stroke-width="2" opacity="0.8"/>`,
+  ],
+  // A game controller with a d-pad and colored buttons
+  pad: [
+    "0 0 56 36",
+    `<path d="M14 5h28c8 0 12 8 13 18 1 8-3 12-8 12-4 0-6-4-9-8H18c-3 4-5 8-9 8-5 0-9-4-8-12C2 13 6 5 14 5Z" fill="#2a2333" stroke="#0e0b12" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M14 8h28" stroke="#4a3f59" stroke-width="2"/>
+    <path d="M12 15h4v-4h4v4h4v4h-4v4h-4v-4h-4Z" fill="#0e0b12"/>
+    <circle cx="40" cy="12" r="2.4" fill="#facc15"/><circle cx="45" cy="17" r="2.4" fill="#ef4444"/>
+    <circle cx="35" cy="17" r="2.4" fill="#3b82f6"/><circle cx="40" cy="22" r="2.4" fill="#22c55e"/>
+    <circle cx="22" cy="25" r="3.2" fill="#0e0b12"/><circle cx="34" cy="25" r="3.2" fill="#0e0b12"/>`,
+  ],
+  // Gaming headphones arching over the top
+  headset: [
+    "0 0 150 70",
+    `<path d="M14 58C14 26 42 8 75 8s61 18 61 50" fill="none" stroke="#111114" stroke-width="10" stroke-linecap="round"/>
+    <path d="M22 52C24 28 46 14 75 14" fill="none" stroke="#53fc18" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+    <rect x="2" y="40" width="22" height="30" rx="7" fill="#1b1b1f" stroke="#0a0a0c" stroke-width="2.5"/>
+    <rect x="126" y="40" width="22" height="30" rx="7" fill="#1b1b1f" stroke="#0a0a0c" stroke-width="2.5"/>
+    <rect x="7" y="46" width="12" height="18" rx="4" fill="#53fc18"/>
+    <rect x="131" y="46" width="12" height="18" rx="4" fill="#53fc18"/>`,
+  ],
+  // A curved gold knife with a ring handle
+  knife: [
+    "0 0 48 48",
+    `<path d="M10 6c18 2 30 14 32 30-6-10-16-16-26-17Z" fill="#f5b70a" stroke="#4a3200" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M14 9c12 2 21 10 25 20" fill="none" stroke="#fff4c2" stroke-width="2" stroke-linecap="round"/>
+    <path d="M16 19l-6 13" stroke="#1d1d21" stroke-width="7" stroke-linecap="round"/>
+    <path d="M14 23l-3 6" stroke="#55555e" stroke-width="2"/>
+    <circle cx="8" cy="38" r="6" fill="none" stroke="#f5b70a" stroke-width="3"/>
+    <circle cx="8" cy="38" r="6" fill="none" stroke="#4a3200" stroke-width="1" />`,
+  ],
+  // A gaming mouse with a red stripe
+  mouse: [
+    "0 0 32 46",
+    `<path d="M16 3c8 0 13 7 13 18v8c0 9-6 14-13 14S3 38 3 29v-8C3 10 8 3 16 3Z" fill="#1d1d21" stroke="#0a0a0c" stroke-width="2.5"/>
+    <path d="M16 3v14M3 18h26" stroke="#0a0a0c" stroke-width="2"/>
+    <rect x="14" y="8" width="4" height="7" rx="2" fill="#ff4655"/>
+    <path d="M6 30c2 6 6 9 10 9s8-3 10-9" fill="none" stroke="#ff4655" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M7 8c2-2 4-3 6-3" fill="none" stroke="#55555e" stroke-width="1.5"/>`,
+  ],
+  // A gold crown with gems
+  crown: [
+    "0 0 56 40",
+    `<path d="M5 14l11 9 12-17 12 17 11-9-4 22H9Z" fill="#facc15" stroke="#5a3d00" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M9 30h38" stroke="#b7791f" stroke-width="3"/>
+    <circle cx="28" cy="25" r="3.5" fill="#22c55e" stroke="#5a3d00" stroke-width="1.2"/>
+    <circle cx="17" cy="27" r="2.5" fill="#ef4444"/><circle cx="39" cy="27" r="2.5" fill="#3b82f6"/>
+    <circle cx="5" cy="13" r="3" fill="#fde68a" stroke="#5a3d00" stroke-width="1.2"/><circle cx="28" cy="5" r="3" fill="#fde68a" stroke="#5a3d00" stroke-width="1.2"/><circle cx="51" cy="13" r="3" fill="#fde68a" stroke="#5a3d00" stroke-width="1.2"/>
+    <path d="M14 20l3 3" stroke="#fff4c2" stroke-width="2" stroke-linecap="round"/>`,
+  ],
+  // A grenade with its pin and ring
+  grenade: [
+    "0 0 40 48",
+    `<ellipse cx="18" cy="30" rx="13" ry="15" fill="#3f4a1f" stroke="#141708" stroke-width="2.5"/>
+    <path d="M8 24h20M6 32h24M8 40h20M14 16v28M22 16v28" stroke="#2c3415" stroke-width="2"/>
+    <rect x="12" y="10" width="12" height="7" rx="1.5" fill="#55555e" stroke="#141708" stroke-width="2"/>
+    <path d="M24 12h8l4 10" fill="none" stroke="#9ca3af" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="30" cy="6" r="5" fill="none" stroke="#fb923c" stroke-width="2.5"/>
+    <path d="M11 22c1-3 3-5 6-6" fill="none" stroke="#7a8a3a" stroke-width="2" stroke-linecap="round"/>`,
+  ],
+  // A sniper scope's view: ring, cross lines and range dots
+  scope: [
+    "0 0 44 44",
+    `<circle cx="22" cy="22" r="19" fill="rgba(10,12,16,0.75)" stroke="#cbd5e1" stroke-width="3"/>
+    <circle cx="22" cy="22" r="19" fill="none" stroke="#0a0a0c" stroke-width="1"/>
+    <path d="M22 5v12M22 27v12M5 22h12M27 22h12" stroke="#e5e7eb" stroke-width="1.6"/>
+    <circle cx="22" cy="22" r="1.8" fill="#ef4444"/>
+    <path d="M22 30v1M22 33v1M30 22h1M33 22h1M13 22h1M10 22h1" stroke="#e5e7eb" stroke-width="2"/>`,
+  ],
+  // A gold trophy cup
+  trophy: [
+    "0 0 44 48",
+    `<path d="M11 5h22v10c0 8-5 13-11 13S11 23 11 15Z" fill="#facc15" stroke="#5a3d00" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M11 9H4c0 7 3 11 8 12M33 9h7c0 7-3 11-8 12" fill="none" stroke="#5a3d00" stroke-width="2.5"/>
+    <path d="M11 9H5c0 6 3 9 7 10M33 9h6c0 6-3 9-7 10" fill="none" stroke="#facc15" stroke-width="1.2"/>
+    <path d="M19 28h6v7h-6Z" fill="#b7791f" stroke="#5a3d00" stroke-width="2"/>
+    <path d="M12 35h20v8H12Z" fill="#7c4a12" stroke="#2f1b05" stroke-width="2.5"/>
+    <path d="M17 39h10" stroke="#facc15" stroke-width="2"/>
+    <path d="M15 8v7c0 3 1 6 3 8" fill="none" stroke="#fff4c2" stroke-width="2" stroke-linecap="round"/>`,
+  ],
+};
+
+function decoration(name, spot) {
+  const [viewBox, inner] = DECO[name];
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", viewBox);
+  svg.setAttribute("class", `deco deco-${name} at-${spot}`);
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = inner;
+  return svg;
 }
 
 // Floating bits around the picture; each effect animates them differently in design.css
@@ -214,7 +363,10 @@ function setPicture(a, url) {
   img.alt = "";
   img.referrerPolicy = "no-referrer";
   img.decoding = "async";
-  img.onload = () => art.replaceChildren(img);
+  img.onload = () => {
+    art.querySelectorAll(".mark-initials, .mark-logo").forEach((x) => x.remove());
+    art.prepend(img);
+  };
   img.src = url;
 }
 
