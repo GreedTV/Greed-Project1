@@ -36,11 +36,11 @@ const FEATURED = [
   },
   {
     platform: "twitch",
-    name: "kaicenat",
-    label: "Kai Cenat",
+    name: "caseoh_",
+    label: "CaseOh",
     color: "#a855f7",
     fx: "bolt",
-    picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/bf6a04cf-3f44-4986-8eed-5c36bfad542b-profile_image-300x300.png",
+    picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/ef28ba12-c8ed-46d4-838b-a4c95ef5b469-profile_image-300x300.png",
   },
   {
     platform: "kick",
