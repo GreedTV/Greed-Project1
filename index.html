@@ -22,9 +22,9 @@
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
-  <link rel="stylesheet" href="styles.css?v=202610290135">
-  <link rel="stylesheet" href="design.css?v=202610290135">
-  <script src="theme.js?v=202610290135"></script>
+  <link rel="stylesheet" href="styles.css?v=202610290150">
+  <link rel="stylesheet" href="design.css?v=202610290150">
+  <script src="theme.js?v=202610290150"></script>
 </head>
 <body>
   <header class="site-header">
@@ -51,19 +51,23 @@
       <div class="container wide home-grid">
         <div class="stage-col">
           <div class="stage-head">
-            <form class="quick-watch" id="quick-watch" autocomplete="off">
-              <label for="qw-name">Start watching</label>
-              <div class="qw-platforms" role="group" aria-label="Platform">
-                <button class="qw-platform kick" type="button" data-platform="kick" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1.333 0h8v5.333H12V2.667h2.667V0h8v8H20v2.667h-2.667v2.666H20V16h2.667v8h-8v-2.667H12v-2.666H9.333V24h-8Z"/></svg><span>Kick</span></button>
-                <button class="qw-platform twitch" type="button" data-platform="twitch" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg><span>Twitch</span></button>
-                <button class="qw-platform youtube" type="button" data-platform="youtube" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg><span>YouTube</span></button>
-              </div>
-              <div class="qw-row">
-                <input id="qw-name" type="text" placeholder="Streamer name or link" required>
-                <button class="button" type="submit">Watch</button>
-              </div>
-              <p class="hint">No account needed to watch. <a href="/watch">Open the Watch page</a> for multi-view and saved streamers.</p>
-            </form>
+            <div class="platforms">
+              <a class="platform-tile kick" href="https://kick.com" target="_blank" rel="noopener" aria-label="Kick, kick.com (opens in a new tab)">
+                <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M1.333 0h8v5.333H12V2.667h2.667V0h8v8H20v2.667h-2.667v2.666H20V16h2.667v8h-8v-2.667H12v-2.666H9.333V24h-8Z"/></svg>
+                <span class="platform-name">Kick</span>
+                <span class="platform-site">kick.com <span aria-hidden="true">↗</span></span>
+              </a>
+              <a class="platform-tile twitch" href="https://www.twitch.tv" target="_blank" rel="noopener" aria-label="Twitch, twitch.tv (opens in a new tab)">
+                <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
+                <span class="platform-name">Twitch</span>
+                <span class="platform-site">twitch.tv <span aria-hidden="true">↗</span></span>
+              </a>
+              <a class="platform-tile youtube" href="https://www.youtube.com" target="_blank" rel="noopener" aria-label="YouTube, youtube.com (opens in a new tab)">
+                <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" fill="#fff"/><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                <span class="platform-name">YouTube</span>
+                <span class="platform-site">youtube.com <span aria-hidden="true">↗</span></span>
+              </a>
+            </div>
             <h1>Who are we watching tonight?</h1>
             <p>Click a streamer to open their stream on the Watch page. A red <strong>LIVE</strong> sign means they're on right now.</p>
           </div>
@@ -111,18 +115,18 @@
     </div>
   </footer>
 
-  <script src="script.js?v=202610290135"></script>
-  <script src="gear-art.js?v=202610290135"></script>
-  <script src="icons.js?v=202610290135"></script>
-  <script src="config.js?v=202610290135"></script>
-  <script src="presence.js?v=202610290135"></script>
-  <script src="auth.js?v=202610290135"></script>
-  <script src="streak.js?v=202610290135"></script>
-  <script src="alerts.js?v=202610290135"></script>
-  <script src="chat.js?v=202610290135"></script>
-  <script src="twitch-chat.js?v=202610290135"></script>
-  <script src="kick-chat.js?v=202610290135"></script>
-  <script src="mini.js?v=202610290135"></script>
-  <script src="nav.js?v=202610290135"></script>
+  <script src="script.js?v=202610290150"></script>
+  <script src="gear-art.js?v=202610290150"></script>
+  <script src="icons.js?v=202610290150"></script>
+  <script src="config.js?v=202610290150"></script>
+  <script src="presence.js?v=202610290150"></script>
+  <script src="auth.js?v=202610290150"></script>
+  <script src="streak.js?v=202610290150"></script>
+  <script src="alerts.js?v=202610290150"></script>
+  <script src="chat.js?v=202610290150"></script>
+  <script src="twitch-chat.js?v=202610290150"></script>
+  <script src="kick-chat.js?v=202610290150"></script>
+  <script src="mini.js?v=202610290150"></script>
+  <script src="nav.js?v=202610290150"></script>
 </body>
 </html>
