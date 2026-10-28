@@ -24,7 +24,25 @@ function loginButton() {
 }
 $("about-login").addEventListener("click", () => (SinnersAuth.user ? SinnersNav.go(`${location.origin}/profile`) : SinnersAuth.login()));
 
+// Our Discord: live member and online counts, the server's name, icon and animated banner
+async function loadDiscord() {
+  try {
+    const code = DISCORD_INVITE.split("/").pop();
+    const res = await fetch(`https://discord.com/api/v10/invites/${code}?with_counts=true`);
+    if (!res.ok) return;
+    const d = await res.json();
+    const g = d.guild || {};
+    $("dc-online").textContent = Number(d.approximate_presence_count || 0).toLocaleString();
+    $("dc-members").textContent = Number(d.approximate_member_count || 0).toLocaleString();
+    if (g.name) $("dc-name").textContent = g.name;
+    if (g.icon) $("dc-icon").src = `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.${g.icon.startsWith("a_") ? "gif" : "png"}?size=128`;
+    const art = g.banner ? `banners/${g.id}/${g.banner}.${g.banner.startsWith("a_") ? "gif" : "png"}` : g.splash ? `splashes/${g.id}/${g.splash}.jpg` : null;
+    if (art) $("dc-banner").style.backgroundImage = `url("https://cdn.discordapp.com/${art}?size=1024")`;
+  } catch (e) {}
+}
+
 loadNumbers();
+loadDiscord();
 loginButton();
 const stopAuth = SinnersAuth.onChange(loginButton);
 SinnersNav.onLeave(() => stopAuth());

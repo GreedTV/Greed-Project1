@@ -1530,3 +1530,215 @@ body:has(.legal) .page-hero .container {
 @media (prefers-reduced-motion: reduce) {
   .map-svg * { animation: none !important; }
 }
+
+/* ---------- Discord: join card (About) and buttons ---------- */
+.button.discord-join {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #5865f2;
+  color: #fff;
+  text-decoration: none;
+}
+
+.button.discord-join:hover {
+  background: #4752c4;
+}
+
+.button.discord-join svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.guide-card .discord-join {
+  margin-top: 4px;
+}
+
+.discord-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid #3c4199;
+  box-shadow: 0 0 0 1px rgba(88, 101, 242, 0.15), 0 18px 50px -20px rgba(88, 101, 242, 0.55);
+}
+
+/* A slow light sweeping along the top edge */
+.discord-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  z-index: 2;
+  background: linear-gradient(90deg, transparent, #8b95ff, #e0123c, transparent);
+  background-size: 200% 100%;
+  animation: dc-sweep 4s linear infinite;
+}
+
+.discord-banner {
+  height: 170px;
+  background: #1e1f4a url("https://cdn.discordapp.com/banners/1410954698411737110/a_15b98a40d22c95a5c42d1103968412b4.gif?size=1024") center / cover;
+  position: relative;
+}
+
+.discord-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(14, 14, 16, 0) 35%, var(--surface));
+}
+
+.discord-body {
+  position: relative;
+  padding: 0 22px 22px;
+  margin-top: -46px;
+  display: grid;
+  gap: 14px;
+}
+
+.discord-id {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.discord-icon {
+  width: 84px;
+  height: 84px;
+  border-radius: 22px;
+  border: 4px solid var(--surface);
+  background: var(--surface);
+  box-shadow: 0 0 0 2px #5865f2, 0 0 24px rgba(88, 101, 242, 0.6);
+  animation: dc-glow 3s ease-in-out infinite;
+}
+
+.discord-id h3 {
+  margin: 0;
+  font-size: 1.7rem;
+  line-height: 1.1;
+}
+
+.discord-counts {
+  display: flex;
+  gap: 16px;
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.discord-counts b {
+  color: var(--text);
+}
+
+.discord-counts span::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: 0;
+}
+
+.dc-online::before {
+  background: #23a55a;
+  box-shadow: 0 0 0 0 rgba(35, 165, 90, 0.6);
+  animation: dc-live 2s ease-out infinite;
+}
+
+.dc-members::before {
+  background: #80848e;
+}
+
+.discord-id .discord-join {
+  margin-left: auto;
+  padding: 11px 20px;
+  font-size: 1rem;
+}
+
+.discord-desc {
+  margin: 0;
+  max-width: 760px;
+  color: var(--muted);
+}
+
+.discord-bot h4 {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.discord-cmds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.discord-cmds li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid #5865f2;
+  border-radius: 4px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.discord-cmds li:hover {
+  background: var(--surface-2);
+  border-color: #5865f2;
+}
+
+.discord-cmds code {
+  font: 600 0.9rem ui-monospace, "Cascadia Code", Consolas, monospace;
+  color: #a5adff;
+}
+
+.discord-cmds span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+@keyframes dc-sweep {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@keyframes dc-glow {
+  50% { box-shadow: 0 0 0 2px #8b95ff, 0 0 34px rgba(88, 101, 242, 0.85); }
+}
+
+@keyframes dc-live {
+  70% { box-shadow: 0 0 0 7px rgba(35, 165, 90, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(35, 165, 90, 0); }
+}
+
+@media (max-width: 640px) {
+  .discord-banner {
+    height: 120px;
+  }
+
+  .discord-id .discord-join {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .discord-card::before,
+  .discord-icon,
+  .dc-online::before {
+    animation: none;
+  }
+}
