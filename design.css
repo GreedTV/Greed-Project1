@@ -447,6 +447,95 @@ h1, h2, h3, .logo {
   color: var(--muted);
 }
 
+/* Quick start: platform logos, a name and Watch, in one row */
+.quick-watch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 680px;
+  margin: 0 0 18px;
+}
+
+.qw-platforms {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.qw-platform {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 0;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.qw-platform:last-child {
+  border-right: 0;
+}
+
+.qw-platform svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--brand);
+}
+
+.qw-platform[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: inset 0 -2px 0 var(--brand);
+}
+
+.qw-platform.kick { --brand: #53fc18; }
+.qw-platform.twitch { --brand: #9146ff; }
+.qw-platform.youtube { --brand: #ff0033; }
+
+.qw-row {
+  display: flex;
+  flex: 1;
+  min-width: 240px;
+  gap: 8px;
+}
+
+.qw-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.qw-row input:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+@media (max-width: 520px) {
+  .qw-platforms {
+    width: 100%;
+  }
+
+  .qw-platform {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .qw-row {
+    min-width: 100%;
+  }
+}
+
 .squad-head {
   margin-top: 26px;
 }

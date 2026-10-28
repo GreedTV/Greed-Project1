@@ -444,6 +444,24 @@ function paintLive(a) {
   setPicture(a, (info && info.avatar) || avatars[key] || (featured && featured.picture));
 }
 
+// ---------- Quick start: pick a platform, type a streamer, go to Watch ----------
+const quick = document.getElementById("quick-watch");
+let quickPlatform = "kick";
+quick.querySelectorAll("[data-platform]").forEach((b) =>
+  b.addEventListener("click", () => {
+    quickPlatform = b.dataset.platform;
+    quick.querySelectorAll("[data-platform]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    document.getElementById("qw-name").placeholder = quickPlatform === "youtube" ? "Channel name, @handle or link" : "Streamer name or link";
+    document.getElementById("qw-name").focus();
+  })
+);
+quick.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = document.getElementById("qw-name").value.trim();
+  if (!name) return;
+  SinnersNav.go(`${location.origin}/watch?platform=${quickPlatform}&add=${encodeURIComponent(name)}`);
+});
+
 // ---------- Featured ----------
 const featuredStage = document.getElementById("stage-featured");
 const featuredRow = el("div", "stage-row");
