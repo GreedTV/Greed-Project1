@@ -1,0 +1,876 @@
+/* Sinners design layer, loaded after styles.css on every page.
+   A calmer, denser look in the spirit of long-running streaming and esports sites: neutral dark
+   surfaces, one brand red used sparingly, square-ish corners, no glows, gradients or hover lifts,
+   left-aligned page titles and clear section rules. */
+
+:root {
+  --bg: #0e0e10;
+  --bg-alt: #131316;
+  --surface: #18181b;
+  --surface-2: #202024;
+  --text: #efeff1;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --border: #2a2a2f;
+  --border-strong: #3a3a40;
+  --header-bg: #0e0e10;
+  --accent: #e0123c;
+  --accent-2: #ff5470;
+  --accent-dark: #b80e31;
+  --link: #ff5470;
+  --radius: 6px;
+  --glow: none;
+}
+
+:root[data-theme="light"] {
+  --bg: #f4f4f5;
+  --bg-alt: #ececee;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --text: #18181b;
+  --muted: #52525b;
+  --faint: #8a8a93;
+  --border: #e2e2e6;
+  --border-strong: #cfcfd5;
+  --header-bg: #ffffff;
+  --link: #c8102e;
+}
+
+body {
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .logo {
+  font-family: "Barlow Semi Condensed", "Inter", system-ui, sans-serif;
+  letter-spacing: 0;
+  font-weight: 700;
+}
+
+/* No page-wide glow and no gradient lettering */
+.ambient {
+  display: none;
+}
+
+.gradient-text {
+  background: none;
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+}
+
+/* Content appears right away instead of sliding in */
+.reveal,
+.reveal.visible {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ---------- Header: a solid bar, nav next to the logo, underline for the current page ---------- */
+.site-header {
+  background: var(--header-bg);
+  backdrop-filter: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header::after {
+  display: none;
+}
+
+.nav {
+  height: 56px;
+  gap: 20px;
+}
+
+.site-header .container {
+  padding: 0 20px;
+}
+
+.logo {
+  font-size: 1.35rem;
+  letter-spacing: 0.06em;
+  gap: 8px;
+}
+
+.logo-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  background: var(--accent);
+  box-shadow: none;
+  font-size: 1.1rem;
+}
+
+.logo:hover .logo-mark {
+  transform: none;
+}
+
+.nav nav {
+  margin-left: 4px;
+}
+
+.nav-actions {
+  margin-left: auto;
+}
+
+.nav ul {
+  gap: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.nav ul a {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 12px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.nav ul a:hover {
+  background: none;
+  color: var(--text);
+}
+
+.nav ul a[aria-current="page"] {
+  background: none;
+  box-shadow: none;
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.icon-action,
+.menu-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 1rem;
+}
+
+.icon-action:hover {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.online-pill {
+  padding: 4px 9px;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.online-pill::before {
+  width: 7px;
+  height: 7px;
+  box-shadow: none;
+}
+
+.online-pill:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+@media (max-width: 860px) {
+  .nav ul {
+    top: 56px;
+    left: 0;
+    right: 0;
+    padding: 6px 0;
+    border-radius: 0;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .nav ul a {
+    height: auto;
+    padding: 12px 20px;
+    border-bottom: 0;
+    border-left: 3px solid transparent;
+  }
+
+  .nav ul a[aria-current="page"] {
+    border-left-color: var(--accent);
+    background: var(--surface);
+  }
+}
+
+/* ---------- Buttons: flat, small radius ---------- */
+.button {
+  background: var(--accent);
+  border-radius: 4px;
+  padding: 9px 16px;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  box-shadow: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.button:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--accent-dark);
+}
+
+.button.ghost {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.button.ghost:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.button:focus-visible,
+.icon-action:focus-visible,
+.nav ul a:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+/* ---------- Page titles: left aligned on a band, like a section header ---------- */
+.page-hero {
+  padding: 28px 0 22px;
+  text-align: left;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+.page-hero h1 {
+  font-size: clamp(1.7rem, 3.4vw, 2.2rem);
+  margin: 0 0 4px;
+  line-height: 1.15;
+}
+
+.page-hero p {
+  max-width: 760px;
+  font-size: 0.95rem;
+}
+
+/* ---------- Sections ---------- */
+.section {
+  padding: 40px 0;
+}
+
+.section.alt {
+  background: var(--bg-alt);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.section-head {
+  align-items: baseline;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-head h2 {
+  font-size: 1.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.section-head a {
+  font-size: 0.88rem;
+}
+
+/* Cards and boxes share one quiet surface */
+.side-box,
+.guide-card,
+.feature,
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+/* ---------- Tabs: underlined, not pills ---------- */
+.game-picker {
+  gap: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+
+.game-tab {
+  flex: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  margin-bottom: -1px;
+  padding: 10px 14px;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.game-tab:hover {
+  background: none;
+  color: var(--text);
+  transform: none;
+}
+
+.game-tab.active {
+  background: none;
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  box-shadow: none;
+}
+
+/* ---------- Footer: columns ---------- */
+.site-footer {
+  margin-top: 48px;
+  padding: 36px 0 24px;
+  background: var(--bg-alt);
+  font-size: 0.88rem;
+}
+
+.site-footer .container {
+  display: block;
+}
+
+.site-footer a {
+  margin: 0;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(3, 1fr);
+  gap: 32px;
+}
+
+.footer-brand p {
+  margin: 10px 0 0;
+  max-width: 300px;
+  color: var(--muted);
+}
+
+.footer-col h4 {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.footer-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--faint);
+  font-size: 0.8rem;
+}
+
+.footer-bottom p {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .footer-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .footer-brand {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- Home ---------- */
+.home-top {
+  padding: 32px 0 40px;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+}
+
+.home-intro .eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+
+.home-intro h1 {
+  margin: 0 0 10px;
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  line-height: 1.05;
+  max-width: 640px;
+}
+
+.home-intro > p {
+  margin: 0 0 22px;
+  max-width: 600px;
+  color: var(--muted);
+  font-size: 1.02rem;
+}
+
+.quick-watch {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.quick-watch label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.qw-platforms {
+  display: flex;
+  gap: 0;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  width: max-content;
+  max-width: 100%;
+}
+
+.qw-platform {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 0;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.qw-platform:last-child {
+  border-right: 0;
+}
+
+.qw-platform svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.qw-platform[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: inset 0 -2px 0 var(--brand);
+}
+
+.qw-platform[aria-pressed="true"] svg {
+  color: var(--brand);
+}
+
+.qw-platform.kick { --brand: #53fc18; }
+.qw-platform.twitch { --brand: #9146ff; }
+.qw-platform.youtube { --brand: #ff0033; }
+
+.qw-row {
+  display: flex;
+  gap: 8px;
+}
+
+.qw-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 9px 12px;
+}
+
+.qw-row input:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.quick-watch .hint {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+}
+
+.home-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.home-facts li {
+  padding: 14px 16px;
+  border-right: 1px solid var(--border);
+}
+
+.home-facts li:last-child {
+  border-right: 0;
+}
+
+.home-facts strong {
+  display: block;
+  font-family: "Barlow Semi Condensed", "Inter", sans-serif;
+  font-size: 1.05rem;
+}
+
+.home-facts span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.home-side {
+  display: grid;
+  gap: 12px;
+}
+
+.side-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.side-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.side-panel-head a {
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  text-transform: none;
+  text-decoration: none;
+}
+
+.side-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.side-stats div {
+  padding: 12px 14px;
+  border-right: 1px solid var(--border);
+}
+
+.side-stats div:last-child {
+  border-right: 0;
+}
+
+.side-stats strong {
+  display: block;
+  font-family: "Barlow Semi Condensed", "Inter", sans-serif;
+  font-size: 1.4rem;
+  line-height: 1.1;
+}
+
+.side-stats span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.side-stats .live strong::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 6px 3px 0;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+/* The boss and Clip of the Week cards sit in the side column */
+.home-side .boss-strip,
+.home-side .cotw-home {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 12px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.home-side .boss-strip:hover,
+.home-side .cotw-home:hover {
+  background: var(--surface-2);
+  transform: none;
+}
+
+.home-side .boss-strip .button,
+.home-side .cotw-home .button {
+  grid-column: 1 / -1;
+  justify-content: center;
+}
+
+.home-side .boss-strip-emoji {
+  font-size: 1.8rem;
+}
+
+.home-side .boss-strip-text strong {
+  font-size: 0.95rem;
+}
+
+.home-side .cotw-thumb {
+  width: 96px;
+}
+
+/* Guide on the home page: plain cards without emoji badges */
+.guide-icon {
+  display: none;
+}
+
+.guide-card {
+  padding: 18px 20px;
+}
+
+.guide-head h3 {
+  font-size: 1.15rem;
+}
+
+.guide-intro {
+  max-width: 760px;
+  color: var(--muted);
+}
+
+@media (max-width: 960px) {
+  .home-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-facts li:nth-child(2) {
+    border-right: 0;
+  }
+
+  .home-facts li:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 520px) {
+  .qw-platform span {
+    display: none;
+  }
+
+  .qw-row {
+    flex-direction: column;
+  }
+}
+
+/* Log in opens the chooser (Discord, Twitch or Kick), so it uses the site color */
+.login-btn {
+  height: 34px;
+  border-radius: 4px;
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.login-btn:hover {
+  background: var(--accent-dark);
+  box-shadow: none;
+}
+
+.profile {
+  height: 34px;
+  border-radius: 4px;
+}
+
+/* Page titles line up with wide page content */
+body:has(main .container.wide) .page-hero .container {
+  max-width: 1400px;
+}
+
+.game-picker {
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+body:has(main .container.wide) .site-footer .container {
+  max-width: 1400px;
+}
+
+/* ---------- Watch: add-streamer cards ---------- */
+.add-card {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--brand);
+}
+
+.add-card:focus-within,
+.add-card.editing {
+  border-color: var(--border-strong);
+  border-top-color: var(--brand);
+  box-shadow: none;
+}
+
+.add-card-logo {
+  width: 30px;
+  height: 30px;
+  filter: none;
+}
+
+.add-card-head h3 {
+  font-size: 1.2rem;
+}
+
+.add-card .button {
+  padding: 9px 14px;
+}
+
+.add-card .button:hover {
+  box-shadow: none;
+  filter: brightness(0.9);
+}
+
+.add-card-features li {
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.about-hero {
+  padding-bottom: 22px;
+}
+
+/* Number tiles: quiet surfaces, numbers do the talking */
+.stat,
+.stat-tile,
+.about-number {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+/* About: features as a tight index of links, not icon cards */
+.about-features {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+
+.about-feature {
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.about-feature:hover {
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.about-feature-icon {
+  display: none;
+}
+
+.about-feature strong::after {
+  content: " →";
+  color: var(--faint);
+}
+
+.login-btn {
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .nav {
+    gap: 8px;
+  }
+
+  .site-header .container {
+    padding: 0 12px;
+  }
+
+  .logo {
+    font-size: 1.15rem;
+    gap: 6px;
+  }
+
+  .logo-mark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .nav-actions {
+    gap: 6px;
+  }
+
+  .login-btn {
+    padding: 0 10px;
+  }
+}

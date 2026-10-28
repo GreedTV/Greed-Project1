@@ -1,4 +1,5 @@
-// Home page: this week's world boss (live HP), last week's Clip of the Week, and the guide's tabs.
+// Home page: quick start (pick a platform, type a streamer, go to Watch), community numbers,
+// this week's world boss (live HP), last week's Clip of the Week, and the guide's tabs.
 
 const API = WORKER_URL.replace(/\/$/, "");
 const strip = document.getElementById("boss-strip");
@@ -58,6 +59,37 @@ async function loadClip() {
   } catch (e) {}
 }
 
+// ---------- Quick start ----------
+const quick = document.getElementById("quick-watch");
+let quickPlatform = "kick";
+quick.querySelectorAll("[data-platform]").forEach((b) =>
+  b.addEventListener("click", () => {
+    quickPlatform = b.dataset.platform;
+    quick.querySelectorAll("[data-platform]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    document.getElementById("qw-name").placeholder = quickPlatform === "youtube" ? "Channel name, @handle or link" : "Streamer name or link";
+    document.getElementById("qw-name").focus();
+  })
+);
+quick.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = document.getElementById("qw-name").value.trim();
+  if (!name) return;
+  SinnersNav.go(`${location.origin}/watch?platform=${quickPlatform}&add=${encodeURIComponent(name)}`);
+});
+
+// ---------- Community numbers ----------
+async function loadNumbers() {
+  try {
+    const res = await fetch(`${API}/stats`);
+    if (!res.ok) return;
+    const s = await res.json();
+    const set = (id, n) => (document.getElementById(id).textContent = Number(n || 0).toLocaleString());
+    set("home-online", s.online);
+    set("home-today", s.today && s.today.visitors);
+    set("home-players", s.community && s.community.players);
+  } catch (e) {}
+}
+
 // ---------- Guide tabs ----------
 document.querySelectorAll("#guide-tabs [data-guide]").forEach((tab) =>
   tab.addEventListener("click", () => {
@@ -71,5 +103,6 @@ document.querySelectorAll("#guide-tabs [data-guide]").forEach((tab) =>
 
 loadBoss();
 loadClip();
+loadNumbers();
 const timer = setInterval(() => !document.hidden && loadBoss(), 60000);
 SinnersNav.onLeave(() => clearInterval(timer));

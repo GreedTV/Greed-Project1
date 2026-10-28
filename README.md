@@ -10,7 +10,7 @@ Live at https://sinnerstv.com/
 GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site links that way.
 
 
-- `index.html` (`/`): home page with platform logo tiles and a "How to use Sinners" guide
+- `index.html` (`/`): home page with a quick start (pick Kick / Twitch / YouTube, type a streamer, go to Watch), community numbers, this week's boss and Clip of the Week, and a "How to use Sinners" guide
 - `watch.html` (`/watch`): watch streams one at a time with chat, or up to 4 at once
 - `content.html` (`/content`): browse and search YouTube (categories, live now) and watch videos and playlists in a queue while waiting for a stream
 - `games.html` (`/games`): mini games (Quick Draw, Target Rush, Chat Typer) with leaderboards, plus betting games (Color Clash, Lucky Number) played with points, and a shop where points buy items the admin adds
@@ -25,6 +25,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 
 - `config.js`: the Worker address (`WORKER_URL`)
 - `theme.js`: light / dark theme toggle, loaded in <head> on all pages
+- `design.css`: the site's look, loaded after `styles.css` on every page (colors, type, header, footer, buttons, tabs, Home layout)
 - `script.js`: menu and scroll animations (all pages)
 - `auth.js`: Discord login and the menu's Log in / profile button (all pages)
 - `alerts.js`: live alerts (🔔 on the Watch page) for Kick and YouTube streamers; checks every minute and shows a banner on any page

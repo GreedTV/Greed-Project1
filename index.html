@@ -7,7 +7,7 @@
   <meta name="description" content="Watch Kick, Twitch and YouTube streams side by side, in HD, with volume and quality controls.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -22,8 +22,9 @@
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
-  <link rel="stylesheet" href="styles.css?v=202610251334">
-  <script src="theme.js?v=202610251334"></script>
+  <link rel="stylesheet" href="styles.css?v=202610281631">
+  <link rel="stylesheet" href="design.css?v=202610281631">
+  <script src="theme.js?v=202610281631"></script>
 </head>
 <body>
   <header class="site-header">
@@ -46,99 +47,66 @@
   </header>
 
   <main>
-    <section class="hero">
-      <div class="container">
-        <h1>All your streams.<br><span class="gradient-text">One screen.</span></h1>
-        <p>Watch Kick, Twitch and YouTube side by side — in HD, with your own volume and quality controls.</p>
-        <div class="hero-actions">
-          <a href="/watch" class="button">▶ Start watching</a>
-          <a href="#guide" class="button ghost">How to use Sinners</a>
-        </div>
-      </div>
-    </section>
+    <section class="home-top">
+      <div class="container wide home-grid">
+        <div class="home-intro">
+          <p class="eyebrow">Kick · Twitch · YouTube</p>
+          <h1>Watch your streamers together, in one place.</h1>
+          <p>Up to four streams side by side in HD, chat as yourself on Twitch and Kick, and earn points while you watch.</p>
 
-    <section class="boss-strip-section" id="boss-strip-section" hidden>
-      <div class="container">
-        <a class="boss-strip" id="boss-strip" href="/profile#boss"></a>
-        <a class="cotw-home" id="cotw-home" href="/gallery#clips" hidden></a>
-      </div>
-    </section>
+          <form class="quick-watch" id="quick-watch" autocomplete="off">
+            <label for="qw-name">Start watching</label>
+            <div class="qw-platforms" role="group" aria-label="Platform">
+              <button class="qw-platform kick" type="button" data-platform="kick" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1.333 0h8v5.333H12V2.667h2.667V0h8v8H20v2.667h-2.667v2.666H20V16h2.667v8h-8v-2.667H12v-2.666H9.333V24h-8Z"/></svg><span>Kick</span></button>
+              <button class="qw-platform twitch" type="button" data-platform="twitch" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg><span>Twitch</span></button>
+              <button class="qw-platform youtube" type="button" data-platform="youtube" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg><span>YouTube</span></button>
+            </div>
+            <div class="qw-row">
+              <input id="qw-name" type="text" placeholder="Streamer name or link" required>
+              <button class="button" type="submit">Watch</button>
+            </div>
+            <p class="hint">No account needed to watch. <a href="/watch">Open the Watch page</a> for multi-view and saved streamers.</p>
+          </form>
 
-    <section class="section platforms-section">
-      <div class="container">
-        <div class="platforms">
-          <a class="platform-tile kick reveal" href="https://kick.com" target="_blank" rel="noopener" aria-label="Kick, kick.com (opens in a new tab)">
-            <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M1.333 0h8v5.333H12V2.667h2.667V0h8v8H20v2.667h-2.667v2.666H20V16h2.667v8h-8v-2.667H12v-2.666H9.333V24h-8Z"/></svg>
-            <span class="platform-name">Kick</span>
-            <span class="platform-site">kick.com <span aria-hidden="true">↗</span></span>
-          </a>
-          <a class="platform-tile twitch reveal" href="https://www.twitch.tv" target="_blank" rel="noopener" aria-label="Twitch, twitch.tv (opens in a new tab)">
-            <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
-            <span class="platform-name">Twitch</span>
-            <span class="platform-site">twitch.tv <span aria-hidden="true">↗</span></span>
-          </a>
-          <a class="platform-tile youtube reveal" href="https://www.youtube.com" target="_blank" rel="noopener" aria-label="YouTube, youtube.com (opens in a new tab)">
-            <svg class="platform-logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" fill="#fff"/><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-            <span class="platform-name">YouTube</span>
-            <span class="platform-site">youtube.com <span aria-hidden="true">↗</span></span>
-          </a>
+          <ul class="home-facts">
+            <li><strong>Multi-view</strong><span>Up to 4 streams at once, any mix of platforms</span></li>
+            <li><strong>Native chat</strong><span>Twitch and Kick chat with emotes, typed as you</span></li>
+            <li><strong>Mini player</strong><span>Keeps playing while you browse the site</span></li>
+            <li><strong>Live alerts</strong><span>Know when a Kick or YouTube streamer goes live</span></li>
+          </ul>
         </div>
-      </div>
-    </section>
 
-    <section class="section alt">
-      <div class="container">
-        <div class="section-head reveal">
-          <h2>What you can do</h2>
-        </div>
-        <div class="features">
-          <article class="feature reveal">
-            <div class="feature-icon">▦</div>
-            <h3>Multi-view</h3>
-            <p>Watch up to 4 streams at once in a grid, from any mix of platforms.</p>
-          </article>
-          <article class="feature reveal">
-            <div class="feature-icon">⧉</div>
-            <h3>Mini player</h3>
-            <p>Shrink the stream into a small window, drag it anywhere, and keep watching while you browse the site.</p>
-          </article>
-          <article class="feature reveal">
-            <div class="feature-icon">🔔</div>
-            <h3>Live alerts</h3>
-            <p>Turn on the bell for a Kick or YouTube streamer and get a pop-up the moment they go live.</p>
-          </article>
-          <article class="feature reveal">
-            <div class="feature-icon">💬</div>
-            <h3>Chat alongside</h3>
-            <p>Sinners chat with other viewers, plus the streamer's own Twitch or YouTube chat.</p>
-          </article>
-          <article class="feature reveal">
-            <div class="feature-icon">▶</div>
-            <h3>Content while you wait</h3>
-            <p>Queue up YouTube videos and playlists for when the stream hasn't started yet.</p>
-          </article>
-          <article class="feature reveal">
-            <div class="feature-icon">🖼</div>
-            <h3>Community gallery</h3>
-            <p>Share your favorite clips and images, and see what others found.</p>
-          </article>
-        </div>
+        <aside class="home-side">
+          <div class="side-panel">
+            <div class="side-panel-head">Community <a href="/stats">Stats</a></div>
+            <div class="side-stats">
+              <div class="live"><strong id="home-online">–</strong><span>online now</span></div>
+              <div><strong id="home-today">–</strong><span>visitors today</span></div>
+              <div><strong id="home-players">–</strong><span>adventurers</span></div>
+            </div>
+          </div>
+          <div class="side-panel" id="boss-strip-section" hidden>
+            <div class="side-panel-head">This week <a href="/profile#boss">Profile</a></div>
+            <a class="boss-strip" id="boss-strip" href="/profile#boss"></a>
+            <a class="cotw-home" id="cotw-home" href="/gallery#clips" hidden></a>
+          </div>
+        </aside>
       </div>
     </section>
 
     <section class="section" id="guide">
-      <div class="container">
+      <div class="container wide">
         <div class="section-head reveal">
           <h2>How to use Sinners</h2>
         </div>
         <p class="guide-intro reveal">Watching works without an account. <strong>Log in with Discord, Twitch or Kick</strong> (top right) to chat, earn points, level up an adventurer and join everything below. Connect the others to the same account on your Profile; with Discord connected, our Discord bot uses the same account too.</p>
 
         <div class="game-picker guide-tabs" role="tablist" id="guide-tabs">
-          <button class="game-tab active" type="button" role="tab" data-guide="watch" aria-selected="true">📺 Watch</button>
-          <button class="game-tab" type="button" role="tab" data-guide="play" aria-selected="false">🎮 Play &amp; earn</button>
-          <button class="game-tab" type="button" role="tab" data-guide="adventure" aria-selected="false">⚔️ Adventure</button>
-          <button class="game-tab" type="button" role="tab" data-guide="shop" aria-selected="false">🛒 Shop &amp; style</button>
-          <button class="game-tab" type="button" role="tab" data-guide="community" aria-selected="false">👥 Community</button>
+          <button class="game-tab active" type="button" role="tab" data-guide="watch" aria-selected="true">Watch</button>
+          <button class="game-tab" type="button" role="tab" data-guide="play" aria-selected="false">Play &amp; earn</button>
+          <button class="game-tab" type="button" role="tab" data-guide="adventure" aria-selected="false">Adventure</button>
+          <button class="game-tab" type="button" role="tab" data-guide="shop" aria-selected="false">Shop &amp; style</button>
+          <button class="game-tab" type="button" role="tab" data-guide="community" aria-selected="false">Community</button>
         </div>
 
         <div class="guide" data-guide-panel="watch">
@@ -150,7 +118,7 @@
             <ol>
               <li><strong>Add a streamer</strong> with the <em>Kick</em>, <em>Twitch</em> or <em>YouTube</em> card (name or @handle). Wrong person? <em>✎ Fix</em> and paste their link.</li>
               <li><strong>Multi-view</strong> shows up to 4 streams at once. Under the player: volume, quality, <em>⛶</em> fullscreen and <em>⧉</em> mini player (keeps playing on other pages).</li>
-              <li><strong>Chat</strong> beside the player: the stream's own chat or Sinners chat. <strong>Twitch chat</strong> is built in: link Twitch on your Profile once and type right here as yourself. <strong>Kick chat</strong> shows right in the panel too (log in to Kick once to type). <em>🔕 → 🔔</em> on a Kick or YouTube streamer alerts you when they go live.</li>
+              <li><strong>Chat</strong> beside the player: the stream's own chat or Sinners chat. <strong>Twitch chat</strong> is built in: link Twitch on your Profile once and type right here as yourself. <strong>Kick chat</strong> works the same way: log in with Kick and type with emotes from the 😀 picker. <em>🔕 → 🔔</em> on a Kick or YouTube streamer alerts you when they go live.</li>
               <li><strong>Watch party:</strong> see who else is watching on Sinners and tap <em>🔥 😂 👏 …</em> to send reactions that float over the video for everyone.</li>
               <li><strong>Earn while you watch:</strong> logged in, your adventurer gets a little XP every minute (up to 2 hours a day).</li>
             </ol>
@@ -291,7 +259,7 @@
               <div><h3>Account &amp; more</h3><a href="/stats">Site stats →</a></div>
             </div>
             <ol>
-              <li><strong>Log in</strong> with Discord; it only shares your name and picture.</li>
+              <li><strong>Log in</strong> with Discord, Twitch or Kick; it only shares your name and picture.</li>
               <li><strong>Light or dark:</strong> <em>☀️ / 🌙</em> at the top. <strong>🟢 online</strong> (top left) shows how many people are here.</li>
               <li><strong>Streamers, queue and alerts</strong> are saved in this browser.</li>
             </ol>
@@ -300,36 +268,46 @@
       </div>
     </section>
 
-    <section class="section">
-      <div class="container">
-        <div class="cta reveal">
-          <h2>Got a clip worth sharing?</h2>
-          <p>Post a clip or image link to the community gallery.</p>
-          <a href="/gallery" class="button">Go to the gallery</a>
-        </div>
-        <p class="trademark-note">Kick, Twitch and YouTube names and logos belong to their owners. Sinners isn't affiliated with or endorsed by them.</p>
-      </div>
-    </section>
   </main>
 
   <footer class="site-footer">
     <div class="container">
-      <p>&copy; <span id="year"></span> Sinners</p>
-      <p><a href="/watch">Watch</a><a href="/content">Content</a><a href="/games">Games</a><a href="/shop">Shop</a><a href="/gallery">Gallery</a><a href="/about">About</a><a href="/stats">Stats</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></p>
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="/" class="logo"><span class="logo-mark" aria-hidden="true">S</span><span>SINNERS<span class="logo-dot">.</span></span></a>
+          <p>Kick, Twitch and YouTube in one place, with chat, games and an adventurer to level up.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Watch</h4>
+          <ul><li><a href="/watch">Watch</a></li><li><a href="/content">Content</a></li><li><a href="/gallery">Gallery</a></li></ul>
+        </div>
+        <div class="footer-col">
+          <h4>Play</h4>
+          <ul><li><a href="/games">Games</a></li><li><a href="/shop">Shop</a></li><li><a href="/profile">Profile</a></li></ul>
+        </div>
+        <div class="footer-col">
+          <h4>Sinners</h4>
+          <ul><li><a href="/about">About</a></li><li><a href="/stats">Stats</a></li><li><a href="/terms">Terms</a></li><li><a href="/privacy">Privacy</a></li></ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; <span id="year"></span> Sinners</p>
+        <p>Not affiliated with Kick, Twitch or YouTube.</p>
+      </div>
     </div>
   </footer>
 
-  <script src="script.js?v=202610251334"></script>
-  <script src="gear-art.js?v=202610251334"></script>
-  <script src="config.js?v=202610251334"></script>
-  <script src="presence.js?v=202610251334"></script>
-  <script src="auth.js?v=202610251334"></script>
-  <script src="streak.js?v=202610251334"></script>
-  <script src="alerts.js?v=202610251334"></script>
-  <script src="chat.js?v=202610251334"></script>
-  <script src="twitch-chat.js?v=202610251334"></script>
-  <script src="kick-chat.js?v=202610251334"></script>
-  <script src="mini.js?v=202610251334"></script>
-  <script src="nav.js?v=202610251334"></script>
+  <script src="script.js?v=202610281631"></script>
+  <script src="gear-art.js?v=202610281631"></script>
+  <script src="config.js?v=202610281631"></script>
+  <script src="presence.js?v=202610281631"></script>
+  <script src="auth.js?v=202610281631"></script>
+  <script src="streak.js?v=202610281631"></script>
+  <script src="alerts.js?v=202610281631"></script>
+  <script src="chat.js?v=202610281631"></script>
+  <script src="twitch-chat.js?v=202610281631"></script>
+  <script src="kick-chat.js?v=202610281631"></script>
+  <script src="mini.js?v=202610281631"></script>
+  <script src="nav.js?v=202610281631"></script>
 </body>
 </html>

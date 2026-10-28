@@ -54,7 +54,7 @@ body {
 }
 
 h1, h2, h3, .logo {
-  font-family: "Rajdhani", "Inter", system-ui, sans-serif;
+  font-family: "Barlow Semi Condensed", "Inter", system-ui, sans-serif;
   letter-spacing: 0.02em;
 }
 
@@ -148,7 +148,7 @@ img {
   padding: 4px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 .nav ul a {
@@ -185,7 +185,7 @@ img {
   height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 5px;
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
@@ -220,7 +220,7 @@ img {
   background: linear-gradient(90deg, var(--accent), var(--accent-dark));
   color: #fff;
   padding: 12px 24px;
-  border-radius: 10px;
+  border-radius: 5px;
   text-decoration: none;
   font-weight: 600;
   border: none;
@@ -228,7 +228,7 @@ img {
 }
 
 .button:hover {
-  transform: translateY(-2px);
+  transform: none;
   box-shadow: var(--glow);
 }
 
@@ -252,7 +252,7 @@ img {
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
-  border-radius: 999px;
+  border-radius: 4px;
   background: var(--surface);
   border: 1px solid var(--border);
   font-size: 0.85rem;
@@ -410,7 +410,7 @@ img {
 
 .stat strong {
   display: block;
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 2.4rem;
   line-height: 1;
   margin-bottom: 6px;
@@ -437,7 +437,7 @@ img {
 }
 
 .card:hover {
-  transform: translateY(-6px);
+  transform: none;
   border-color: var(--accent);
   box-shadow: var(--glow);
 }
@@ -497,13 +497,13 @@ img {
   color: var(--text);
   background: linear-gradient(160deg, color-mix(in srgb, var(--brand) 16%, var(--surface)), var(--surface) 70%);
   border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--border));
-  border-radius: 20px;
+  border-radius: 6px;
   overflow: hidden;
   transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
 }
 
 .platform-tile:hover {
-  transform: translateY(-6px);
+  transform: none;
   border-color: var(--brand);
   box-shadow: 0 14px 40px color-mix(in srgb, var(--brand) 30%, transparent);
 }
@@ -525,7 +525,7 @@ img {
 }
 
 .platform-name {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 2.2rem;
   font-weight: 700;
   line-height: 1;
@@ -581,7 +581,7 @@ img {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  border-radius: 12px;
+  border-radius: 6px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff;
   font-size: 1.1rem;
@@ -670,7 +670,7 @@ img {
 }
 
 .feature:hover {
-  transform: translateY(-4px);
+  transform: none;
   border-color: var(--accent);
   box-shadow: var(--glow);
 }
@@ -680,7 +680,7 @@ img {
   height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 6px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff;
   font-weight: 700;
@@ -723,7 +723,7 @@ img {
   border-radius: 50%;
   border: 2px solid var(--accent);
   color: var(--accent);
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-weight: 700;
   font-size: 1.2rem;
   margin-bottom: 12px;
@@ -759,7 +759,7 @@ img {
   border: 1px solid var(--border);
   color: var(--muted);
   padding: 10px 22px;
-  border-radius: 999px;
+  border-radius: 4px;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -907,7 +907,7 @@ img {
 }
 
 .clip-card:hover {
-  transform: translateY(-4px);
+  transform: none;
   border-color: var(--accent);
   box-shadow: var(--glow);
 }
@@ -933,7 +933,7 @@ img {
 }
 
 .clip-thumb-label {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-weight: 700;
   font-size: 1.6rem;
   color: rgba(255, 255, 255, 0.85);
@@ -1192,7 +1192,7 @@ img {
   text-align: center;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--accent-2) 10%, transparent));
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 6px;
   padding: 56px 24px;
 }
 
@@ -1846,7 +1846,7 @@ img {
   color: #fff;
   background: #5865f2;
   border: none;
-  border-radius: 10px;
+  border-radius: 5px;
   padding: 0 16px;
   cursor: pointer;
   transition: box-shadow 0.2s;
@@ -1864,7 +1864,7 @@ img {
   padding: 0 6px 0 4px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 5px;
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -1914,7 +1914,7 @@ img {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 4px;
   color: #fff;
   flex-shrink: 0;
 }
@@ -2005,7 +2005,7 @@ img {
   gap: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 5px;
   padding: 10px 12px;
   cursor: pointer;
   transition: border-color 0.2s, transform 0.2s;
@@ -2189,7 +2189,7 @@ img {
   gap: 10px;
   align-items: center;
   padding: 6px;
-  border-radius: 10px;
+  border-radius: 5px;
   border: 1px solid transparent;
   cursor: pointer;
 }
@@ -2244,7 +2244,7 @@ img {
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--live);
-  border-radius: 14px;
+  border-radius: 6px;
   box-shadow: 0 0 28px color-mix(in srgb, var(--live) 35%, transparent), 0 18px 40px rgba(0, 0, 0, 0.3);
 }
 
@@ -2309,7 +2309,7 @@ img {
   height: auto;
   aspect-ratio: auto;
   padding-top: 34px;
-  border-radius: 12px;
+  border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--border);
   background: #000;
@@ -2431,14 +2431,14 @@ img {
   color: var(--muted);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s, color 0.2s, transform 0.2s;
 }
 
 .game-tab:hover {
   color: var(--text);
-  transform: translateY(-2px);
+  transform: none;
 }
 
 .game-tab.active {
@@ -2452,7 +2452,7 @@ img {
 }
 
 .game-tab-title {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.25rem;
 }
 
@@ -2508,7 +2508,7 @@ img {
   display: flex;
   justify-content: space-between;
   padding: 10px 16px;
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.4rem;
   font-weight: 700;
   border-bottom: 1px solid var(--border);
@@ -2543,7 +2543,7 @@ img {
 .reaction-panel.early { background: #9a3412; }
 
 .reaction-big {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: clamp(2rem, 6vw, 3.5rem);
   font-weight: 700;
 }
@@ -2588,7 +2588,7 @@ img {
 }
 
 .typer-word {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: clamp(2.4rem, 7vw, 4rem);
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -2610,7 +2610,7 @@ img {
   color: var(--text);
   background: var(--surface);
   border: 2px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   padding: 12px;
 }
 
@@ -2666,7 +2666,7 @@ img {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 10px;
+  border-radius: 5px;
 }
 
 .lb-row:nth-child(-n + 3) {
@@ -2697,7 +2697,7 @@ img {
 }
 
 .lb-score {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-weight: 700;
   font-size: 1.1rem;
   color: var(--accent);
@@ -2762,7 +2762,7 @@ img {
 }
 
 .points-bar .points-total {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.4rem;
   color: var(--text);
 }
@@ -2789,7 +2789,7 @@ img {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.5rem;
   font-weight: 700;
 }
@@ -2825,7 +2825,7 @@ img {
   color: #fff;
   background: color-mix(in srgb, var(--c) 70%, #000);
   border: 3px solid transparent;
-  border-radius: 14px;
+  border-radius: 6px;
   cursor: pointer;
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
@@ -2838,7 +2838,7 @@ img {
 }
 
 .bet-choice:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: none;
 }
 
 .bet-choice:disabled {
@@ -2863,7 +2863,7 @@ img {
 .c-blue { --c: #2563eb; }
 
 .bet-choice-label {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.6rem;
   font-weight: 700;
 }
@@ -2890,7 +2890,7 @@ img {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 5px;
   padding: 10px;
 }
 
@@ -2910,7 +2910,7 @@ img {
   text-align: left;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   padding: 10px 16px;
   font-size: 0.92rem;
 }
@@ -2974,7 +2974,7 @@ img {
   min-width: 28px;
   text-align: center;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-weight: 700;
   color: #fff;
   background: color-mix(in srgb, var(--c) 75%, #000);
@@ -2994,7 +2994,7 @@ img {
 
 .bet-live li {
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: 4px;
   background: var(--surface);
   border: 1px solid var(--border);
 }
@@ -3089,7 +3089,7 @@ img {
     right: 12px;
     flex-direction: column;
     padding: 8px;
-    border-radius: 14px;
+    border-radius: 6px;
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
     display: none;
   }
@@ -3206,7 +3206,7 @@ img {
 }
 
 .shop-tier-head strong {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.35rem;
 }
 
@@ -3230,7 +3230,7 @@ img {
   left: 10px;
   bottom: 10px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 0.78rem;
   font-weight: 700;
   color: #fff;
@@ -3282,7 +3282,7 @@ img {
 }
 
 .shop-item:hover {
-  transform: translateY(-4px);
+  transform: none;
   border-color: var(--accent);
   box-shadow: var(--glow);
 }
@@ -3306,7 +3306,7 @@ img {
   top: 10px;
   right: 10px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 0.78rem;
   font-weight: 600;
   color: #fff;
@@ -3347,7 +3347,7 @@ img {
 }
 
 .shop-price {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.35rem;
   font-weight: 700;
 }
@@ -3511,7 +3511,7 @@ img {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 4px;
   padding: 10px 18px;
 }
 
@@ -3521,7 +3521,7 @@ img {
 }
 
 .yt-search .button {
-  border-radius: 999px;
+  border-radius: 4px;
   padding: 10px 20px;
 }
 
@@ -3540,7 +3540,7 @@ img {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 4px;
   padding: 7px 14px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s, color 0.2s;
@@ -3572,7 +3572,7 @@ img {
 
 .video-card.skeleton {
   aspect-ratio: 16 / 13;
-  border-radius: 12px;
+  border-radius: 6px;
   background: linear-gradient(100deg, var(--surface) 30%, color-mix(in srgb, var(--surface) 60%, var(--border)) 50%, var(--surface) 70%);
   background-size: 200% 100%;
   animation: skeleton 1.4s linear infinite;
@@ -3588,7 +3588,7 @@ img {
   aspect-ratio: 16 / 9;
   padding: 0;
   border: none;
-  border-radius: 12px;
+  border-radius: 6px;
   overflow: hidden;
   background: var(--surface);
   cursor: pointer;
@@ -3691,7 +3691,7 @@ img {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -3846,7 +3846,7 @@ img {
 }
 
 .stat-value {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 2.6rem;
   line-height: 1.1;
   color: var(--text);
@@ -4030,14 +4030,14 @@ img {
   display: grid;
   gap: 0;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
   color: var(--muted);
   font-size: 0.88rem;
 }
 
 .community-item strong {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.7rem;
   line-height: 1.15;
   color: var(--text);
@@ -4119,7 +4119,7 @@ img {
 }
 
 .profile-points strong {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 2rem;
 }
 
@@ -4199,7 +4199,7 @@ img {
   height: 58px;
   padding: 0;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
   color: var(--muted);
   cursor: pointer;
@@ -4278,7 +4278,7 @@ img {
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: 5px;
   border: 2px solid var(--rarity);
   background: color-mix(in srgb, var(--rarity) 14%, var(--bg));
   box-shadow: 0 0 10px color-mix(in srgb, var(--rarity) 35%, transparent);
@@ -4308,7 +4308,7 @@ img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 14px;
+  border-radius: 6px;
 }
 
 .map-spot {
@@ -4360,7 +4360,7 @@ img {
   gap: 8px;
   margin-top: 12px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
 }
 
@@ -4423,7 +4423,7 @@ img {
   aspect-ratio: 1;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 5px;
   background: var(--bg);
   cursor: pointer;
 }
@@ -4545,7 +4545,7 @@ img {
 }
 
 .gear-card:hover {
-  transform: translateY(-3px);
+  transform: none;
   box-shadow: 0 8px 24px color-mix(in srgb, var(--rarity) 20%, transparent);
 }
 
@@ -4572,7 +4572,7 @@ img {
   height: 44px;
   flex: none;
   font-size: 1.5rem;
-  border-radius: 10px;
+  border-radius: 5px;
   border: 2px solid var(--rarity);
   background: color-mix(in srgb, var(--rarity) 14%, var(--bg));
 }
@@ -4598,7 +4598,7 @@ img {
 
 .stat-chip {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 0.82rem;
   font-weight: 600;
   background: var(--bg);
@@ -4664,7 +4664,7 @@ img {
   z-index: 50;
   max-width: calc(100% - 32px);
   padding: 12px 18px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--surface);
   border: 1px solid var(--accent);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
@@ -4688,12 +4688,12 @@ img {
   display: grid;
   justify-items: center;
   padding: 8px 4px;
-  border-radius: 10px;
+  border-radius: 5px;
   background: var(--bg);
 }
 
 .hero-stat strong {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.5rem;
   line-height: 1.1;
 }
@@ -4718,7 +4718,7 @@ img {
 
 .buff-chip {
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 0.85rem;
   background: color-mix(in srgb, #22c55e 15%, var(--bg));
   border: 1px solid color-mix(in srgb, #22c55e 45%, var(--border));
@@ -4762,7 +4762,7 @@ img {
   display: grid;
   gap: 4px;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
 }
 
@@ -4772,7 +4772,7 @@ img {
 }
 
 .arena-rating {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 2rem;
   line-height: 1.1;
 }
@@ -4842,7 +4842,7 @@ img {
 }
 
 .fight-vs {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.6rem;
   font-weight: 700;
   color: var(--accent);
@@ -4885,7 +4885,7 @@ img {
 .dmg-pop {
   position: absolute;
   top: 10px;
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.6rem;
   font-weight: 700;
   color: #fff;
@@ -4936,7 +4936,7 @@ img {
 
 .fight-result strong {
   display: block;
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.8rem;
 }
 
@@ -4989,7 +4989,7 @@ img {
   background: var(--surface);
   border: 1px solid var(--border);
   border-top: 3px solid var(--accent);
-  border-radius: 16px;
+  border-radius: 6px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   transform: scale(0.94);
   transition: transform 0.15s;
@@ -5079,7 +5079,7 @@ img {
   content: "";
   position: absolute;
   inset: 4px;
-  border-radius: 10px;
+  border-radius: 5px;
   pointer-events: none;
   background:
     linear-gradient(var(--tier-2), var(--tier-2)) top left / 12px 2px no-repeat,
@@ -5181,7 +5181,7 @@ img {
 /* Watch-time XP badge (Watch page) */
 .watch-xp {
   padding: 5px 12px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--text);
@@ -5213,7 +5213,7 @@ img {
   display: grid;
   gap: 10px;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
 }
 
@@ -5228,7 +5228,7 @@ img {
 }
 
 .streak-big {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 2.2rem;
   font-weight: 700;
   line-height: 1;
@@ -5290,7 +5290,7 @@ img {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
   border: 1px solid var(--border);
 }
@@ -5344,7 +5344,7 @@ img {
   gap: 12px;
   max-width: min(400px, calc(100% - 32px));
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: 6px;
   background: var(--surface);
   border: 1px solid color-mix(in srgb, #f97316 55%, var(--border));
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
@@ -5407,7 +5407,7 @@ img {
   display: grid;
   gap: 8px;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: radial-gradient(ellipse at 15% 20%, rgba(239, 68, 68, 0.18), transparent 60%), var(--bg);
 }
 
@@ -5437,7 +5437,7 @@ img {
 }
 
 .boss-name strong {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.7rem;
   line-height: 1.1;
 }
@@ -5492,7 +5492,7 @@ img {
   align-items: center;
   gap: 16px;
   padding: 14px 18px;
-  border-radius: 16px;
+  border-radius: 6px;
   text-decoration: none;
   color: var(--text);
   background: linear-gradient(110deg, rgba(127, 29, 29, 0.55), var(--surface) 70%);
@@ -5501,7 +5501,7 @@ img {
 }
 
 .boss-strip:hover {
-  transform: translateY(-2px);
+  transform: none;
   box-shadow: 0 10px 30px rgba(239, 68, 68, 0.2);
 }
 
@@ -5551,7 +5551,7 @@ img {
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  border-radius: 14px;
+  border-radius: 6px;
   background: var(--surface);
   border: 1px solid color-mix(in srgb, #f59e0b 55%, var(--border));
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
@@ -5619,7 +5619,7 @@ img {
   color: var(--muted);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   cursor: default;
 }
 
@@ -5699,7 +5699,7 @@ img {
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -5723,7 +5723,7 @@ img {
   gap: 4px 14px;
   margin-bottom: 12px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
 }
 
@@ -5745,7 +5745,7 @@ img {
   display: grid;
   place-items: center;
   height: 120px;
-  border-radius: 10px;
+  border-radius: 5px;
   background: radial-gradient(circle at 50% 70%, color-mix(in srgb, var(--accent) 16%, var(--bg)), var(--bg) 70%);
 }
 
@@ -5842,7 +5842,7 @@ img {
   width: 36px;
   height: 36px;
   font-size: 1.2rem;
-  border-radius: 10px;
+  border-radius: 5px;
   background: var(--surface);
   border: 1px solid var(--border);
   cursor: pointer;
@@ -5879,7 +5879,7 @@ img {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -5908,7 +5908,7 @@ img {
 }
 
 .cotw-title {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.3rem;
 }
 
@@ -5918,7 +5918,7 @@ img {
   gap: 16px;
   margin-top: 10px;
   padding: 12px 18px;
-  border-radius: 16px;
+  border-radius: 6px;
   text-decoration: none;
   color: var(--text);
   background: linear-gradient(110deg, rgba(120, 53, 15, 0.45), var(--surface) 70%);
@@ -6034,7 +6034,7 @@ img {
 }
 
 .about-number strong {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 2.3rem;
   line-height: 1.1;
 }
@@ -6064,7 +6064,7 @@ img {
 }
 
 .about-feature:hover {
-  transform: translateY(-4px);
+  transform: none;
   border-color: var(--accent);
   box-shadow: var(--glow);
 }
@@ -6075,12 +6075,12 @@ img {
   width: 48px;
   height: 48px;
   font-size: 1.5rem;
-  border-radius: 12px;
+  border-radius: 6px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, var(--bg)), var(--bg));
 }
 
 .about-feature strong {
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.35rem;
 }
 
@@ -6110,7 +6110,7 @@ img {
 .about-value strong {
   display: block;
   margin: 6px 0;
-  font-family: "Rajdhani", sans-serif;
+  font-family: "Barlow Semi Condensed", sans-serif;
   font-size: 1.4rem;
 }
 
@@ -6125,7 +6125,7 @@ img {
 
 .faq {
   margin-bottom: 10px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--surface);
   border: 1px solid var(--border);
 }
@@ -6232,7 +6232,7 @@ img {
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 5px;
   padding: 9px 12px;
 }
 
@@ -6346,7 +6346,7 @@ img {
   grid-template-rows: auto auto minmax(0, 1fr);
   padding: 8px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
 }
 
@@ -6362,7 +6362,7 @@ img {
   font-size: 0.78rem;
   font-weight: 600;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--muted);
@@ -6438,7 +6438,7 @@ img {
   color: #fff;
   background: var(--brand);
   border: none;
-  border-radius: 12px;
+  border-radius: 6px;
   cursor: pointer;
   transition: transform 0.15s, filter 0.15s;
 }
@@ -6448,7 +6448,7 @@ img {
 }
 
 .login-option:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: none;
   filter: brightness(1.08);
 }
 
@@ -6481,7 +6481,7 @@ img {
 .links-list .link-row {
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
 }
 
