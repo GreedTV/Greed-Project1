@@ -1380,6 +1380,11 @@ body:has(.legal) .page-hero .container {
   animation: px-bubble 1.4s ease-in-out infinite;
 }
 
+/* Price and button share a row when they fit; the button drops below when they don't */
+.shop-foot {
+  flex-wrap: wrap;
+}
+
 .shop-foot .button,
 .shop-price {
   white-space: nowrap;
@@ -1387,4 +1392,141 @@ body:has(.legal) .page-hero .container {
 
 .shop-foot .button {
   padding: 8px 12px;
+  max-width: 100%;
+}
+
+/* ---------- World map ---------- */
+.map-svg {
+  border: 1px solid #2a3a48;
+  background: #081420;
+}
+
+.map-road-edge {
+  fill: none;
+  stroke: #2a1f12;
+  stroke-width: 7;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.map-road {
+  fill: none;
+  stroke: #d9c48f;
+  stroke-width: 2.4;
+  stroke-dasharray: 7 6;
+  stroke-linecap: round;
+  animation: map-march 2.4s linear infinite;
+}
+
+.map-waves { animation: map-waves 9s linear infinite; }
+.map-surf { animation: map-surf 4s ease-in-out infinite; }
+.map-river { animation: map-flow 1.6s linear infinite; }
+.map-mist { animation: map-mist 7s ease-in-out infinite; }
+.map-lava { animation: map-lava 1.8s ease-in-out infinite; }
+.map-eyes { animation: map-blink 5s steps(1) infinite; }
+
+.map-abyss {
+  transform-origin: 520px 255px;
+  animation: map-pulse 3s ease-in-out infinite;
+}
+
+.map-cloud { animation: map-cloud 40s linear infinite; }
+.map-cloud.c1 { animation-duration: 55s; animation-delay: -20s; }
+.map-cloud.c2 { animation-duration: 48s; animation-delay: -35s; }
+.map-cloud.c3 { animation-duration: 62s; animation-delay: -10s; }
+
+.map-title {
+  fill: #e9d9a6;
+  font: 700 12px "Barlow Semi Condensed", Inter, sans-serif;
+  letter-spacing: 0.18em;
+}
+
+/* Pins: a medallion with the place's art and a name plate */
+.spot-shadow { fill: rgba(0, 0, 0, 0.45); }
+
+.spot-halo {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 2;
+}
+
+.spot-ring {
+  fill: #0d1117;
+  stroke: #c9b27a;
+  stroke-width: 2.5;
+}
+
+.spot-disc {
+  fill: #1a222c;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.spot-plate {
+  fill: rgba(8, 12, 18, 0.88);
+  stroke: #6b5c3a;
+  stroke-width: 1;
+}
+
+.spot-label {
+  fill: #f3ead2;
+  font: 600 11px Inter, sans-serif;
+  stroke: none;
+}
+
+.px-map-pin {
+  overflow: visible;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
+}
+
+.map-spot:hover .spot-ring,
+.map-spot:focus-visible .spot-ring {
+  stroke: #fff4cf;
+  fill: #0d1117;
+}
+
+.map-spot:not(.locked):hover .px-map-pin,
+.map-spot.selected .px-map-pin {
+  filter: drop-shadow(0 0 4px var(--px-glow)) drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
+}
+
+.map-spot.selected .spot-halo,
+.map-spot.active .spot-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.map-spot.selected .spot-halo {
+  stroke: var(--accent-2);
+  stroke-dasharray: 6 5;
+  animation: map-spin 10s linear infinite;
+}
+
+.map-spot.selected .spot-ring { stroke: var(--accent-2); }
+.map-spot.active .spot-ring { stroke: #22c55e; }
+
+.map-spot.active .spot-halo {
+  stroke: #22c55e;
+  animation: map-ping 1.8s ease-out infinite;
+}
+
+.map-spot.locked { opacity: 1; }
+.map-spot.locked .spot-ring { stroke: #4b5563; }
+.map-spot.locked .spot-plate { stroke: #374151; }
+.map-spot.locked .spot-label { fill: #9ca3af; }
+
+@keyframes map-march { to { stroke-dashoffset: -26; } }
+@keyframes map-flow { to { stroke-dashoffset: -28; } }
+@keyframes map-waves { to { transform: translateX(-40px); } }
+@keyframes map-surf { 50% { opacity: 0.15; stroke-width: 20; } }
+@keyframes map-mist { 50% { transform: translateX(12px); opacity: 0.22; } }
+@keyframes map-pulse { 50% { transform: scale(1.08); opacity: 0.8; } }
+@keyframes map-lava { 50% { stroke: #ffd166; opacity: 0.7; } }
+@keyframes map-blink { 0%, 92%, 100% { opacity: 1; } 94%, 97% { opacity: 0; } }
+@keyframes map-cloud { from { transform: translateX(-160px); } to { transform: translateX(760px); } }
+@keyframes map-spin { to { transform: rotate(360deg); } }
+@keyframes map-ping { from { transform: scale(0.85); opacity: 1; } to { transform: scale(1.35); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .map-svg * { animation: none !important; }
 }

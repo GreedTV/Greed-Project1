@@ -191,10 +191,20 @@ const SinnersArt = (() => {
     const tier = (slot) => Math.min(5, Math.max(1, (worn[slot] && worn[slot].tier) || 1));
 
     // Cape (cosmetic), behind everything
+    // It flares out wider than the body toward the bottom, so it shows around the arms and legs
     const cape = CAPES[style.cape];
     if (cape) {
-      put(2, 9, 12, 11, cape[1]);
-      put(3, 9, 10, 10, cape[0]);
+      const [c, d] = cape;
+      put(2, 9, 12, 3, c);
+      put(1, 12, 14, 3, c);
+      put(0, 15, 16, 5, c);
+      put(1, 12, 1, 3, d); // shaded edges and folds
+      put(14, 12, 1, 3, d);
+      put(0, 15, 1, 5, d);
+      put(15, 15, 1, 5, d);
+      put(3, 13, 1, 7, d);
+      put(12, 13, 1, 7, d);
+      [0, 4, 9, 13].forEach((x) => put(x, 20, 3, 1, d)); // ragged hem
     }
 
     // Body
@@ -215,6 +225,12 @@ const SinnersArt = (() => {
     put(8, 15, 3, 4, look.pants);
     put(4, 19, 4, 1, "#2b1d14");
     put(8, 19, 4, 1, "#2b1d14");
+
+    // The cape's collar and clasp sit over the shoulders
+    if (cape) {
+      put(4, 8, 8, 1, cape[0]);
+      put(7, 8, 2, 1, style.cape === "cape-gold" ? "#e0123c" : "#facc15");
+    }
 
     // Hair (hidden under a helmet)
     if (!worn.helmet) {

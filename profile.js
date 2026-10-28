@@ -231,37 +231,38 @@ function selectItem(item) {
 function renderMap() {
   const map = $("world-map");
   const root = svg("svg", { viewBox: "0 0 600 340", class: "map-svg" });
-  const defs = svg("defs");
-  defs.innerHTML =
-    '<radialGradient id="abyss-glow"><stop offset="0" stop-color="#ff0033" stop-opacity="0.9"/><stop offset="1" stop-color="#ff0033" stop-opacity="0"/></radialGradient>' +
-    '<linearGradient id="land" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d3a26"/><stop offset="1" stop-color="#1f2a1b"/></linearGradient>';
-  root.append(defs);
-  // Land and sea
-  root.append(svg("rect", { width: 600, height: 340, rx: 14, fill: "#10202e" }));
-  root.append(svg("path", { d: "M30 60 Q90 15 220 30 T430 25 Q560 30 575 120 Q590 220 560 300 Q470 335 300 320 Q120 330 45 290 Q10 200 30 60 Z", fill: "url(#land)", stroke: "#3b4a33", "stroke-width": 3 }));
-  // Terrain hints
-  [[70, 215], [95, 270], [140, 225], [60, 255], [150, 275]].forEach(([x, y]) => root.append(svg("path", { d: `M${x} ${y - 22} l12 22 h-24 Z`, fill: "#1f5130" })));
-  [[420, 120], [455, 70], [500, 115]].forEach(([x, y]) => {
-    root.append(svg("path", { d: `M${x - 34} ${y + 25} L${x} ${y - 30} L${x + 34} ${y + 25} Z`, fill: "#4b5563" }));
-    root.append(svg("path", { d: `M${x - 11} ${y - 12} L${x} ${y - 30} L${x + 11} ${y - 12} Z`, fill: "#e5e7eb" }));
-  });
-  root.append(svg("ellipse", { cx: 330, cy: 262, rx: 70, ry: 34, fill: "#24402f", opacity: 0.9 }));
-  root.append(svg("ellipse", { cx: 225, cy: 112, rx: 48, ry: 34, fill: "#3f3a35" }));
-  root.append(svg("circle", { cx: 520, cy: 255, r: 55, fill: "url(#abyss-glow)", class: "abyss-glow" }));
-  // The trail between places
+  root.append(mapScenery());
+
+  // The road between places
   const order = ["forest", "caves", "swamp", "mountains", "abyss"];
-  const trail = order.map((id, i) => `${i ? "L" : "M"}${MAP_SPOTS[id].x} ${MAP_SPOTS[id].y}`).join(" ");
-  root.append(svg("path", { d: trail, fill: "none", stroke: "#d6c7a1", "stroke-width": 2.5, "stroke-dasharray": "6 7", opacity: 0.55 }));
+  const pts = order.map((id) => MAP_SPOTS[id]);
+  const road = pts
+    .map((p, i) => {
+      if (!i) return `M${p.x} ${p.y}`;
+      const q = pts[i - 1];
+      return `Q${(p.x + q.x) / 2 + (i % 2 ? -30 : 30)} ${(p.y + q.y) / 2 + (i % 2 ? 30 : -20)} ${p.x} ${p.y}`;
+    })
+    .join(" ");
+  root.append(svg("path", { d: road, class: "map-road-edge" }));
+  root.append(svg("path", { d: road, class: "map-road" }));
 
   const trip = state.expedition;
   state.dungeons.forEach((d) => {
     const { x, y } = MAP_SPOTS[d.id];
     const g = svg("g", { class: `map-spot${d.open ? "" : " locked"}${selectedPlace === d.id ? " selected" : ""}${trip && trip.dungeon === d.id ? " active" : ""}`, tabindex: 0, role: "button" });
     g.setAttribute("aria-label", d.open ? `${d.name}, level ${d.level}` : `${d.name}, unlocks at level ${d.level}`);
-    g.append(svg("circle", { cx: x, cy: y, r: 30, class: "spot-ring" }));
-    g.append(mapIcon(d.open ? d.emoji : "🔒", x, y, 34));
-    const label = svg("text", { x, y: y + 50, "text-anchor": "middle", class: "spot-label" });
-    label.textContent = d.open ? d.name : `${d.name} · Lv ${d.level}`;
+    g.append(svg("ellipse", { cx: x, cy: y + 24, rx: 26, ry: 7, class: "spot-shadow" }));
+    g.append(svg("circle", { cx: x, cy: y, r: 31, class: "spot-halo" }));
+    g.append(svg("circle", { cx: x, cy: y, r: 26, class: "spot-ring" }));
+    g.append(svg("circle", { cx: x, cy: y, r: 22, class: "spot-disc" }));
+    g.append(mapIcon(d.open ? d.emoji : "🔒", x, y, d.open ? 30 : 24));
+    // Name plate under the pin
+    const text = d.open ? d.name : `${d.name} · Lv ${d.level}`;
+    const w = Math.max(70, text.length * 6.6 + 18);
+    const px = Math.min(600 - w / 2 - 8, Math.max(w / 2 + 8, x)); // kept inside the map
+    g.append(svg("rect", { x: px - w / 2, y: y + 33, width: w, height: 18, rx: 3, class: "spot-plate" }));
+    const label = svg("text", { x: px, y: y + 46, "text-anchor": "middle", class: "spot-label" });
+    label.textContent = text;
     g.append(label);
     const choose = () => {
       selectedPlace = d.id;
@@ -275,11 +276,108 @@ function renderMap() {
   // The adventurer's marker while away
   if (trip) {
     const { x, y } = MAP_SPOTS[trip.dungeon];
-    const flag = mapIcon(trip.done ? "🎁" : "🚩", x + 30, y - 30, 24);
+    const flag = mapIcon(trip.done ? "🎁" : "🚩", x + 28, y - 34, 22);
     flag.classList.add("trip-flag");
     root.append(flag);
   }
   map.replaceChildren(root);
+}
+
+const ISLAND = "M34 70 Q70 22 150 30 Q205 14 262 34 Q330 16 400 28 Q470 18 528 44 Q586 70 578 140 Q596 200 572 262 Q556 318 480 322 Q400 336 320 322 Q240 334 160 322 Q70 326 40 280 Q12 236 24 170 Q12 110 34 70 Z";
+
+// The painted land under the pins: sea, coast, the five regions, a river, clouds and a compass.
+// Built once and copied, since it never changes.
+let scenery = null;
+function mapScenery() {
+  if (scenery) return scenery.cloneNode(true);
+  const g = svg("g", { class: "map-scenery" });
+  const defs = svg("defs");
+  defs.innerHTML =
+    '<radialGradient id="m-sea" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#16324a"/><stop offset="1" stop-color="#081420"/></radialGradient>' +
+    '<linearGradient id="m-land" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3d5a2e"/><stop offset="1" stop-color="#26381d"/></linearGradient>' +
+    '<radialGradient id="m-abyss" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ff3b1f" stop-opacity="0.95"/><stop offset="0.45" stop-color="#9b1010" stop-opacity="0.7"/><stop offset="1" stop-color="#1a0505" stop-opacity="0"/></radialGradient>' +
+    '<radialGradient id="m-swamp" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#2f4a2c"/><stop offset="1" stop-color="#1c2e1c"/></radialGradient>' +
+    '<radialGradient id="m-vignette" cx="50%" cy="50%" r="75%"><stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></radialGradient>' +
+    '<pattern id="m-grass" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M3 10 l1 -3 l1 3 M9 5 l1 -3 l1 3" stroke="#4f7a38" stroke-width="1" fill="none" opacity="0.6"/></pattern>' +
+    '<pattern id="m-waves" width="40" height="16" patternUnits="userSpaceOnUse"><path d="M2 8 q5 -4 10 0 t10 0" stroke="#2c5677" stroke-width="1.2" fill="none" opacity="0.7"/></pattern>' +
+    `<clipPath id="m-island"><path d="${ISLAND}"/></clipPath>`;
+  g.append(defs);
+  const add = (tag, attrs) => (g.append(svg(tag, attrs)), g.lastChild);
+  const inland = "translate(300 170) scale(0.965) translate(-300 -170)";
+
+  // Sea with drifting waves
+  add("rect", { width: 600, height: 340, fill: "url(#m-sea)" });
+  add("rect", { width: 640, height: 340, fill: "url(#m-waves)", class: "map-waves" });
+
+  // Coast: surf, sand, then grass
+  add("path", { d: ISLAND, fill: "none", stroke: "#3c7ba3", "stroke-width": 14, opacity: 0.35, class: "map-surf" });
+  add("path", { d: ISLAND, fill: "#c9b27a", stroke: "#8a7547", "stroke-width": 2 });
+  add("path", { d: ISLAND, fill: "url(#m-land)", transform: inland });
+  add("path", { d: ISLAND, fill: "url(#m-grass)", transform: inland });
+
+  const land = svg("g", { "clip-path": "url(#m-island)" });
+  g.append(land);
+  const put = (tag, attrs) => (land.append(svg(tag, attrs)), land.lastChild);
+
+  // Forest (south-west): rows of pines
+  [[48, 200], [70, 186], [94, 198], [58, 228], [82, 220], [138, 206], [150, 232], [40, 260], [64, 276], [150, 270], [176, 252], [124, 286], [92, 300], [168, 296]].forEach(([x, y], i) => {
+    const s = 0.8 + (i % 3) * 0.15;
+    put("rect", { x: x - 1.5, y: y + 10 * s, width: 3, height: 6 * s, fill: "#4a2c17" });
+    put("path", { d: `M${x} ${y - 14 * s} l${10 * s} ${13 * s} h${-20 * s} Z`, fill: "#1f5c32" });
+    put("path", { d: `M${x} ${y - 6 * s} l${12 * s} ${16 * s} h${-24 * s} Z`, fill: i % 2 ? "#17482a" : "#1b5430" });
+    put("path", { d: `M${x} ${y - 14 * s} l${-10 * s} ${13 * s} h${6 * s} Z`, fill: "#2f7a45", opacity: 0.8 });
+  });
+
+  // Goblin caves (north): rocky hills with a dark mouth and eyes inside
+  put("path", { d: "M160 140 Q185 70 225 62 Q270 66 295 138 Z", fill: "#4a4038" });
+  put("path", { d: "M160 140 Q185 70 225 62 L215 140 Z", fill: "#5d5148" });
+  put("path", { d: "M128 150 Q148 108 178 112 Q196 128 200 150 Z", fill: "#3d342d" });
+  put("path", { d: "M262 150 Q282 112 306 118 Q322 132 326 152 Z", fill: "#3d342d" });
+  put("path", { d: "M208 140 q17 -36 34 0 Z", fill: "#0d0907" });
+  put("circle", { cx: 220, cy: 131, r: 1.6, fill: "#facc15", class: "map-eyes" });
+  put("circle", { cx: 229, cy: 131, r: 1.6, fill: "#facc15", class: "map-eyes" });
+
+  // River from the mountains down to the swamp
+  const river = "M470 120 Q430 150 420 185 Q408 222 372 238";
+  put("path", { d: river, fill: "none", stroke: "#2b6c94", "stroke-width": 7, "stroke-linecap": "round" });
+  put("path", { d: river, fill: "none", stroke: "#7cc4ec", "stroke-width": 2, "stroke-dasharray": "5 9", class: "map-river" });
+
+  // Rotting swamp (south): murky pools, lily pads, reeds and mist
+  put("ellipse", { cx: 330, cy: 262, rx: 82, ry: 40, fill: "url(#m-swamp)" });
+  [[305, 255, 26, 12], [350, 272, 30, 11], [338, 246, 16, 7]].forEach(([cx, cy, rx, ry]) => put("ellipse", { cx, cy, rx, ry, fill: "#33503a", stroke: "#4c6b3c", "stroke-width": 1.5 }));
+  [[300, 252], [356, 270], [342, 245], [318, 262]].forEach(([x, y]) => put("circle", { cx: x, cy: y, r: 3, fill: "#5f9e3f" }));
+  [[268, 250], [276, 262], [392, 258], [400, 270], [286, 280]].forEach(([x, y]) => put("path", { d: `M${x} ${y} l-2 -14 M${x + 3} ${y} l1 -11 M${x - 3} ${y} l-4 -9`, stroke: "#6b8f3a", "stroke-width": 1.6 }));
+  put("ellipse", { cx: 330, cy: 250, rx: 90, ry: 16, fill: "#c7d6c0", opacity: 0.12, class: "map-mist" });
+
+  // Frostpeak mountains (north-east): shaded peaks with snow
+  [[398, 132, 44], [440, 92, 58], [496, 118, 48], [536, 150, 34]].forEach(([x, y, h]) => {
+    put("path", { d: `M${x - h} ${y + h * 0.9} L${x} ${y - h * 0.6} L${x + h} ${y + h * 0.9} Z`, fill: "#566270" });
+    put("path", { d: `M${x} ${y - h * 0.6} L${x + h} ${y + h * 0.9} L${x + h * 0.15} ${y + h * 0.9} Z`, fill: "#3b4552" });
+    put("path", { d: `M${x - h * 0.32} ${y - h * 0.12} L${x} ${y - h * 0.6} L${x + h * 0.32} ${y - h * 0.12} l${-h * 0.12} ${h * 0.1} l${-h * 0.1} ${-h * 0.08} l${-h * 0.1} ${h * 0.1} Z`, fill: "#eef6fb" });
+  });
+
+  // Abyss of sinners (south-east): cracked, glowing ground with lava
+  put("circle", { cx: 520, cy: 255, r: 78, fill: "url(#m-abyss)", class: "map-abyss" });
+  put("path", { d: "M470 236 L494 248 L486 262 L512 270 M520 210 L516 236 L532 248 M548 280 L530 266 L540 252 M500 296 L510 280", fill: "none", stroke: "#ff8a3d", "stroke-width": 2, class: "map-lava" });
+  put("path", { d: "M488 300 q10 -14 22 -4 q12 -16 24 -2", fill: "none", stroke: "#3b0a0a", "stroke-width": 3 });
+
+  // Clouds drifting over everything, a compass and the map's name
+  [[110, 70, 1], [380, 40, 0.8], [250, 300, 0.7], [560, 205, 0.9]].forEach(([x, y, s], i) => {
+    const c = add("g", { class: `map-cloud c${i}`, opacity: 0.16 });
+    [[0, 0, 26], [22, -6, 20], [42, 2, 18], [18, 8, 22]].forEach(([dx, dy, r]) => c.append(svg("circle", { cx: x + dx * s, cy: y + dy * s, r: r * s, fill: "#ffffff" })));
+  });
+  const compass = add("g", { class: "map-compass", transform: "translate(560 48)" });
+  compass.innerHTML =
+    '<circle r="20" fill="#0b1520" stroke="#c9b27a" stroke-width="1.5" opacity="0.85"/>' +
+    '<path d="M0 -16 L4 0 L0 16 L-4 0 Z" fill="#c9b27a"/><path d="M0 -16 L4 0 L-4 0 Z" fill="#e0123c"/>' +
+    '<text y="-23" text-anchor="middle" fill="#c9b27a" font-size="9" font-weight="700">N</text>';
+  const title = add("g", { transform: "translate(22 22)" });
+  title.innerHTML =
+    '<rect width="132" height="26" rx="3" fill="#0b1520" stroke="#c9b27a" stroke-width="1" opacity="0.85"/>' +
+    '<text x="66" y="17.5" text-anchor="middle" class="map-title">THE SINLANDS</text>';
+  add("rect", { width: 600, height: 340, fill: "url(#m-vignette)", "pointer-events": "none" });
+  scenery = g;
+  return g.cloneNode(true);
 }
 
 // A map pin: the place's pixel art (icons.js), or the emoji as text if there's no drawing for it
@@ -290,10 +388,12 @@ function mapIcon(emoji, x, y, size) {
     t.textContent = emoji;
     return t;
   }
+  // Sized in map units, without the text-sized .px styles
+  art.setAttribute("class", ["px-map-pin", ...[...art.classList].filter((c) => c.startsWith("fx-"))].join(" "));
   art.setAttribute("x", x - size / 2);
   art.setAttribute("y", y - size / 2);
-  art.style.width = art.style.height = `${size}px`; // map units (the .px size is for text)
-  art.classList.add("px-map-pin");
+  art.setAttribute("width", size);
+  art.setAttribute("height", size);
   return art;
 }
 
