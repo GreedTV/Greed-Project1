@@ -14,8 +14,8 @@ function el(tag, className, text) {
 }
 
 // ---------- Streamers ----------
-// color: their glow; fx: the effect around their picture (frost, speed, bolt, glitch, gold, aim, cash, fire,
-// smoke, confetti; spark for anyone else); deco: drawings on the picture's edge (see DECO)
+// color: their glow; fx: the effect around their picture (frost, warp, snow, speed, bolt, glitch, gold, aim,
+// fire, smoke; spark for anyone else); deco: drawings on the picture's edge (see DECO)
 // picture: their channel picture, so it shows before the Worker answers (the Worker's newer one replaces it)
 const FEATURED = [
   {
@@ -26,6 +26,24 @@ const FEATURED = [
     fx: "frost",
     deco: [["ak", "bottom"], ["helmet", "tr"]],
     picture: "https://files.kick.com/images/user/32870913/profile_image/conversion/9c1f9140-d07a-493c-8c51-baaedf9982d6-fullsize.webp",
+  },
+  {
+    platform: "kick",
+    name: "st0pcs",
+    label: "st0pcs",
+    color: "#a78bfa",
+    fx: "warp",
+    deco: [["blackhole", "tr"], ["timeline", "bottom"]],
+    picture: "https://files.kick.com/images/user/33051287/profile_image/conversion/943402e8-ed5d-4580-9827-288cfa30a0d1-fullsize.webp",
+  },
+  {
+    platform: "kick",
+    name: "icy9x",
+    label: "Icy9x",
+    color: "#7dd3fc",
+    fx: "snow",
+    deco: [["icicles", "top"]],
+    picture: "https://files.kick.com/images/user/33057902/profile_image/conversion/10c55280-1d41-4cb2-93c2-c37abf825c87-fullsize.webp",
   },
   {
     platform: "youtube",
@@ -73,15 +91,6 @@ const FEATURED = [
     picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/dfb5c790-5ea6-4543-bc2b-0f5f79b1f959-profile_image-300x300.png",
   },
   {
-    platform: "kick",
-    name: "adinross",
-    label: "Adin Ross",
-    color: "#4ade80",
-    fx: "cash",
-    deco: [["crown", "tr"]],
-    picture: "https://files.kick.com/images/user/904404/profile_image/conversion/e344be03-aff2-4791-ae5a-22a9ac4cf89a-fullsize.webp",
-  },
-  {
     platform: "twitch",
     name: "jynxzi",
     label: "Jynxzi",
@@ -98,15 +107,6 @@ const FEATURED = [
     fx: "smoke",
     deco: [["scope", "br"]],
     picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/c754eebf-745b-4e0a-814a-10bcaecaabbc-profile_image-300x300.png",
-  },
-  {
-    platform: "youtube",
-    name: "@ludwig",
-    label: "Ludwig",
-    color: "#facc15",
-    fx: "confetti",
-    deco: [["trophy", "br"]],
-    picture: "https://yt3.googleusercontent.com/ytc/AIdro_nBvD2_i9JPqMIZoH-3Pct438PAEd1d4rLEd1LCCLEEmKc=s900-c-k-c0x00ffffff-no-rj",
   },
 ];
 
@@ -226,6 +226,39 @@ const DECO = {
     <path d="M148 14h4v8h-4ZM88 11h5v6h-5Z" fill="#1d1d21" stroke="#0d0d10" stroke-width="1.2"/>
     <path d="M163 20h5v9h-5Z" fill="#111" />`,
   ],
+  // A black hole with a Saturn ring: the back of the ring, the dark core with its glowing edge, then the front
+  blackhole: [
+    "0 0 72 48",
+    `<path d="M5 27C8 18 64 14 67 22" fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.55"/>
+    <circle cx="36" cy="24" r="17" fill="#c084fc" opacity="0.25"/>
+    <circle cx="36" cy="24" r="14" fill="#040207" stroke="#fbbf24" stroke-width="2"/>
+    <circle cx="36" cy="24" r="11" fill="none" stroke="#a78bfa" stroke-width="1.2" opacity="0.8"/>
+    <path d="M27 15a12 12 0 0 1 9-4" fill="none" stroke="#fde68a" stroke-width="2" stroke-linecap="round"/>
+    <path d="M5 27c3 8 59 6 62-5" fill="none" stroke="#fde68a" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M10 29c10 4 44 4 52-3" fill="none" stroke="#f97316" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="66" cy="8" r="1.4" fill="#fff"/><circle cx="6" cy="10" r="1" fill="#fff"/><circle cx="58" cy="42" r="1" fill="#fff"/>`,
+  ],
+  // A video editor's timeline: clips on two tracks, an audio wave, keyframes and a moving playhead
+  timeline: [
+    "0 0 160 40",
+    `<rect x="2" y="6" width="156" height="32" rx="4" fill="#0f0b18" stroke="#2e2442" stroke-width="2"/>
+    <path d="M10 6v3M30 6v3M50 6v3M70 6v3M90 6v3M110 6v3M130 6v3M150 6v3" stroke="#4b3d66" stroke-width="1.5"/>
+    <rect x="8" y="11" width="40" height="8" rx="2" fill="#7c3aed"/><rect x="50" y="11" width="56" height="8" rx="2" fill="#2563eb"/><rect x="108" y="11" width="44" height="8" rx="2" fill="#db2777"/>
+    <path d="M14 15h6M58 15h10M114 15h8" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+    <rect x="8" y="22" width="144" height="8" rx="2" fill="#14532d"/>
+    <path d="M10 26l3-2 3 4 3-5 3 6 3-4 3 2 3-3 3 5 3-6 3 4 3-2 3 3 3-4 3 5 3-3 3 2 3-4 3 3 3-2 3 4 3-5 3 4 3-2 3 3 3-3 3 4 3-2 3 2 3-4 3 3 3-2 3 4 3-3 3 2 3-3 3 4 3-2 3 1" fill="none" stroke="#4ade80" stroke-width="1.2"/>
+    <path d="M30 34l2-2 2 2-2 2ZM70 34l2-2 2 2-2 2ZM118 34l2-2 2 2-2 2Z" fill="#facc15"/>
+    <g class="playhead"><path d="M6 1h8l-4 5Z" fill="#ef4444"/><path d="M10 5v33" stroke="#ef4444" stroke-width="2"/></g>`,
+  ],
+  // Icicles hanging from a snowy ledge
+  icicles: [
+    "0 0 150 40",
+    `<path d="M4 8c6-6 136-6 142 0v6H4Z" fill="#f0f9ff" stroke="#0c4a6e" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M10 14l5 20 5-20M26 14l3 12 3-12M40 14l5 24 5-24M58 14l3 10 3-10M72 14l5 18 5-18M90 14l3 13 3-13M104 14l5 22 5-22M122 14l3 11 3-11M134 14l4 16 4-16" fill="#bae6fd" stroke="#0c4a6e" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M13 16l2 9M43 16l2 12M75 16l2 8M107 16l2 10M137 16l1 7" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M14 7c30-3 92-3 122 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="45" cy="38" r="1.6" fill="#e0f2fe"/><circle cx="109" cy="36" r="1.4" fill="#e0f2fe"/>`,
+  ],
   // A football: white with black patches
   ball: [
     "0 0 40 40",
@@ -274,16 +307,6 @@ const DECO = {
     <path d="M6 30c2 6 6 9 10 9s8-3 10-9" fill="none" stroke="#ff4655" stroke-width="2.5" stroke-linecap="round"/>
     <path d="M7 8c2-2 4-3 6-3" fill="none" stroke="#55555e" stroke-width="1.5"/>`,
   ],
-  // A gold crown with gems
-  crown: [
-    "0 0 56 40",
-    `<path d="M5 14l11 9 12-17 12 17 11-9-4 22H9Z" fill="#facc15" stroke="#5a3d00" stroke-width="2.5" stroke-linejoin="round"/>
-    <path d="M9 30h38" stroke="#b7791f" stroke-width="3"/>
-    <circle cx="28" cy="25" r="3.5" fill="#22c55e" stroke="#5a3d00" stroke-width="1.2"/>
-    <circle cx="17" cy="27" r="2.5" fill="#ef4444"/><circle cx="39" cy="27" r="2.5" fill="#3b82f6"/>
-    <circle cx="5" cy="13" r="3" fill="#fde68a" stroke="#5a3d00" stroke-width="1.2"/><circle cx="28" cy="5" r="3" fill="#fde68a" stroke="#5a3d00" stroke-width="1.2"/><circle cx="51" cy="13" r="3" fill="#fde68a" stroke="#5a3d00" stroke-width="1.2"/>
-    <path d="M14 20l3 3" stroke="#fff4c2" stroke-width="2" stroke-linecap="round"/>`,
-  ],
   // A grenade with its pin and ring
   grenade: [
     "0 0 40 48",
@@ -302,17 +325,6 @@ const DECO = {
     <path d="M22 5v12M22 27v12M5 22h12M27 22h12" stroke="#e5e7eb" stroke-width="1.6"/>
     <circle cx="22" cy="22" r="1.8" fill="#ef4444"/>
     <path d="M22 30v1M22 33v1M30 22h1M33 22h1M13 22h1M10 22h1" stroke="#e5e7eb" stroke-width="2"/>`,
-  ],
-  // A gold trophy cup
-  trophy: [
-    "0 0 44 48",
-    `<path d="M11 5h22v10c0 8-5 13-11 13S11 23 11 15Z" fill="#facc15" stroke="#5a3d00" stroke-width="2.5" stroke-linejoin="round"/>
-    <path d="M11 9H4c0 7 3 11 8 12M33 9h7c0 7-3 11-8 12" fill="none" stroke="#5a3d00" stroke-width="2.5"/>
-    <path d="M11 9H5c0 6 3 9 7 10M33 9h6c0 6-3 9-7 10" fill="none" stroke="#facc15" stroke-width="1.2"/>
-    <path d="M19 28h6v7h-6Z" fill="#b7791f" stroke="#5a3d00" stroke-width="2"/>
-    <path d="M12 35h20v8H12Z" fill="#7c4a12" stroke="#2f1b05" stroke-width="2.5"/>
-    <path d="M17 39h10" stroke="#facc15" stroke-width="2"/>
-    <path d="M15 8v7c0 3 1 6 3 8" fill="none" stroke="#fff4c2" stroke-width="2" stroke-linecap="round"/>`,
   ],
 };
 

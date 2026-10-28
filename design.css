@@ -680,11 +680,20 @@ h1, h2, h3, .logo {
 .deco.at-top { width: 138px; transform: translate(-50%, -88px); }
 
 /* wide or tall drawings */
-.deco-pad.at-br,
-.deco-crown.at-tr { width: 54px; }
+.deco-pad.at-br { width: 54px; }
+.deco-blackhole.at-tr { width: 64px; transform: translate(14px, -80px) rotate(-10deg); }
 .deco-mouse.at-br { width: 30px; transform: translate(32px, 14px) rotate(14deg); }
-.deco-grenade.at-br,
-.deco-trophy.at-br { width: 38px; }
+.deco-grenade.at-br { width: 38px; }
+
+/* the editing timeline's playhead runs along it */
+.deco .playhead {
+  animation: playhead 3.2s linear infinite;
+}
+
+@keyframes playhead {
+  from { transform: translateX(0); }
+  to { transform: translateX(140px); }
+}
 
 /* the decorations bob a touch on their own */
 .deco.at-tr,
@@ -963,6 +972,88 @@ h1, h2, h3, .logo {
 .fx-confetti .mark-fx i:nth-child(4n + 1) { background: #f472b6; }
 .fx-confetti .mark-fx i:nth-child(4n + 2) { background: #38bdf8; }
 .fx-confetti .mark-fx i:nth-child(4n + 3) { background: #4ade80; }
+
+/* Warp: a Saturn ring of matter spiralling into a black hole, and the picture glitching like an edit */
+.fx-warp .mark-fx {
+  inset: -24px -30px;
+  transform: rotate(-14deg) scaleY(0.32);
+}
+
+.fx-warp .mark-fx::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 3px solid rgba(251, 191, 36, 0.45);
+  border-radius: 50%;
+  box-shadow: 0 0 18px rgba(251, 146, 60, 0.6), inset 0 0 18px rgba(167, 139, 250, 0.5);
+}
+
+.fx-warp .mark-fx i {
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3px;
+  border-radius: 50%;
+  background: #fde68a;
+  box-shadow: 0 0 8px #f97316;
+  animation-name: fx-orbit;
+  animation-timing-function: cubic-bezier(0.5, 0, 0.9, 1);
+}
+
+.fx-warp .mark-fx i:nth-child(2n) {
+  background: #c4b5fd;
+  box-shadow: 0 0 8px #8b5cf6;
+}
+
+@keyframes fx-orbit {
+  0% { transform: rotate(0deg) translateX(118px) scale(1); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: rotate(540deg) translateX(30px) scale(0.2); opacity: 0; }
+}
+
+.fx-warp .mark-logo {
+  animation: fx-edit 3.4s steps(1, end) infinite;
+}
+
+@keyframes fx-edit {
+  0%, 78%, 100% { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--glow) 60%, transparent)); transform: none; }
+  80% { filter: drop-shadow(-4px 0 0 rgba(255, 0, 90, 0.9)) drop-shadow(4px 0 0 rgba(0, 220, 255, 0.9)); transform: translateX(2px) skewX(-4deg); }
+  84% { filter: drop-shadow(3px 0 0 rgba(255, 0, 90, 0.9)) drop-shadow(-3px 0 0 rgba(0, 220, 255, 0.9)); transform: translateX(-2px) scale(1.04); }
+  88% { filter: drop-shadow(0 0 22px #a78bfa); transform: scale(0.97); }
+}
+
+/* Snow: flakes drifting down and swaying */
+.fx-snow .mark-fx i {
+  top: -10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f0f9ff;
+  box-shadow: 0 0 6px #7dd3fc;
+  animation-name: fx-snow;
+  animation-timing-function: linear;
+  animation-duration: calc(var(--t) * 1.4);
+}
+
+.fx-snow .mark-fx i:nth-child(3n) {
+  width: 9px;
+  height: 9px;
+  border-radius: 0;
+  background: #e0f2fe;
+  clip-path: polygon(45% 0, 55% 0, 55% 38%, 88% 18%, 93% 27%, 61% 47%, 61% 53%, 93% 73%, 88% 82%, 55% 62%, 55% 100%, 45% 100%, 45% 62%, 12% 82%, 7% 73%, 39% 53%, 39% 47%, 7% 27%, 12% 18%, 45% 38%);
+}
+
+@keyframes fx-snow {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  15% { opacity: 1; }
+  50% { transform: translate(10px, 80px) rotate(120deg); }
+  100% { transform: translate(-6px, 160px) rotate(240deg); opacity: 0; }
+}
+
+.fx-snow .mark-logo {
+  filter: drop-shadow(0 0 10px #7dd3fc) drop-shadow(0 0 22px rgba(125, 211, 252, 0.5));
+}
 
 /* Spark: small motes in their color (the viewer's own streamers) */
 .fx-spark .mark-fx i {
@@ -1285,6 +1376,8 @@ h1, h2, h3, .logo {
 @media (prefers-reduced-motion: reduce) {
   .mark-art,
   .deco,
+  .deco .playhead,
+  .fx-warp .mark-logo,
   .mark-shadow,
   .mark-fx,
   .streamer-live b::before {
