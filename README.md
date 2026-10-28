@@ -10,7 +10,7 @@ Live at https://sinnerstv.com/
 GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site links that way.
 
 
-- `index.html` (`/`): home page: a stage of featured streamers plus up to 10 of the viewer's own (saved in the browser), shown as their channel picture floating with an effect of their own (frost, black hole and edit glitch, ice shards and freeze rings, speed streaks, lightning, glitch, gold, crosshairs, fire, smoke) and a LIVE sign (Worker `/live`); click one to watch on the Watch page. This week's world boss sits top right
+- `index.html` (`/`): home page: a stage of featured streamers plus up to 10 of the viewer's own (saved in the browser), shown as their channel picture floating with an effect of their own (CS2 kill feed, crosshair, airdrop and C4, black hole and edit glitch, ice shards and freeze rings, speed streaks, lightning, glitch, gold, crosshairs, fire, smoke) and a LIVE sign (Worker `/live`); click one to watch on the Watch page. This week's world boss sits top right
 - `watch.html` (`/watch`): watch streams one at a time with chat, or up to 4 at once
 - `content.html` (`/content`): browse and search YouTube (categories, live now) and watch videos and playlists in a queue while waiting for a stream
 - `games.html` (`/games`): mini games (Quick Draw, Target Rush, Chat Typer) with leaderboards, plus betting games (Color Clash, Lucky Number) played with points, and a shop where points buy items the admin adds

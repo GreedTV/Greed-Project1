@@ -14,7 +14,7 @@ function el(tag, className, text) {
 }
 
 // ---------- Streamers ----------
-// color: their glow; fx: the effect around their picture (frost, warp, ice, speed, bolt, glitch, gold, aim,
+// color: their glow; fx: the effect around their picture (cs2, warp, ice, speed, bolt, glitch, gold, aim,
 // fire, smoke; spark for anyone else); deco: drawings on the picture's edge (see DECO)
 // picture: their channel picture, so it shows before the Worker answers (the Worker's newer one replaces it)
 const FEATURED = [
@@ -23,8 +23,8 @@ const FEATURED = [
     name: "lexor2k",
     label: "Lexor2k",
     color: "#22d3ee",
-    fx: "frost",
-    deco: [["ak", "bottom"], ["helmet", "tr"]],
+    fx: "cs2",
+    deco: [["c4", "br"]],
     picture: "https://files.kick.com/images/user/32870913/profile_image/conversion/9c1f9140-d07a-493c-8c51-baaedf9982d6-fullsize.webp",
   },
   {
@@ -195,76 +195,36 @@ function compact(n) {
 // Small drawings that sit on a picture's edge: [viewBox, svg inside]. Placed by `deco: [[name, spot]]`
 // in FEATURED; spots are tl / tr / bl / br (corners), top and bottom (across the edge).
 const DECO = {
-  // A level 3 combat helmet, side-front view: shaded olive dome, rim, bolted ear plate, side rail and strap
-  helmet: [
-    "0 0 120 104",
+  // A C4 charge: taped blocks, keypad, a little display and a blinking red light
+  c4: [
+    "0 0 64 44",
     `<defs>
-      <radialGradient id="hm-dome" cx="0.36" cy="0.22" r="0.85"><stop offset="0" stop-color="#9aab63"/><stop offset="0.45" stop-color="#5d6d33"/><stop offset="1" stop-color="#262f12"/></radialGradient>
-      <linearGradient id="hm-plate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#55633a"/><stop offset="1" stop-color="#1f2610"/></linearGradient>
-      <linearGradient id="hm-rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a4620"/><stop offset="1" stop-color="#161b09"/></linearGradient>
+      <linearGradient id="c4-block" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9c99a"/><stop offset="1" stop-color="#8c7b4f"/></linearGradient>
+      <linearGradient id="c4-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3d44"/><stop offset="1" stop-color="#121317"/></linearGradient>
     </defs>
-    <path d="M12 62C12 27 37 7 64 7c29 0 50 21 50 52v8H12Z" fill="url(#hm-dome)" stroke="#11150a" stroke-width="2"/>
-    <path d="M20 54C22 32 38 17 58 13" fill="none" stroke="#c7d48f" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
-    <ellipse cx="44" cy="24" rx="14" ry="6" transform="rotate(-28 44 24)" fill="#fff" opacity="0.16"/>
-    <path d="M30 20c14-8 40-9 58 2" fill="none" stroke="#11150a" stroke-width="1" opacity="0.45"/>
-    <path d="M10 60h106v9c-30 7-76 7-106 0Z" fill="url(#hm-rim)" stroke="#0c0f06" stroke-width="2"/>
-    <path d="M12 63h102" stroke="#6b7a3f" stroke-width="1" opacity="0.6"/>
-    <path d="M66 44h40c6 0 9 3 9 9v33c0 6-3 9-9 9H78c-7 0-12-5-12-12Z" fill="url(#hm-plate)" stroke="#0c0f06" stroke-width="2"/>
-    <path d="M73 51h32c3 0 5 2 5 5v25c0 3-2 5-5 5H80c-4 0-7-3-7-7Z" fill="none" stroke="#11150a" stroke-width="1.5" opacity="0.7"/>
-    <path d="M74 52h30" stroke="#8c9a5c" stroke-width="1.2" opacity="0.6"/>
-    <circle cx="72" cy="50" r="2.4" fill="#8a8f80" stroke="#0c0f06"/><circle cx="109" cy="50" r="2.4" fill="#8a8f80" stroke="#0c0f06"/>
-    <circle cx="74" cy="89" r="2.4" fill="#8a8f80" stroke="#0c0f06"/><circle cx="109" cy="89" r="2.4" fill="#8a8f80" stroke="#0c0f06"/>
-    <rect x="80" y="30" width="26" height="7" rx="1.5" fill="#1c2210" stroke="#0c0f06" stroke-width="1.5"/>
-    <path d="M84 30v7M88 30v7M92 30v7M96 30v7M100 30v7" stroke="#3f4a24" stroke-width="1.2"/>
-    <path d="M70 95c-6 5-16 7-26 6" fill="none" stroke="#1a1a14" stroke-width="4" stroke-linecap="round"/>
-    <rect x="46" y="97" width="7" height="6" rx="1" fill="#6b6b5f" stroke="#1a1a14"/>
-    <path d="M40 10c-3 2-5 3-6 5" stroke="#d6e0a6" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>`,
+    <rect x="3" y="12" width="58" height="29" rx="3" fill="url(#c4-block)" stroke="#2a2416" stroke-width="1.6"/>
+    <path d="M22 12v29M42 12v29" stroke="#6b5d38" stroke-width="1.4"/>
+    <path d="M3 22h58M3 32h58" stroke="#3a3a3a" stroke-width="3" opacity="0.75"/>
+    <rect x="14" y="3" width="36" height="22" rx="2.5" fill="url(#c4-body)" stroke="#050506" stroke-width="1.6"/>
+    <rect x="18" y="6" width="20" height="6" rx="1" fill="#0b2a12" stroke="#050506"/>
+    <path d="M20 9h2M23 9h2M26 9h2M29 9h2M32 9h2M35 9h1" stroke="#4ade80" stroke-width="1.6"/>
+    <g fill="#9ca3af"><rect x="18" y="14" width="4" height="3" rx="0.6"/><rect x="24" y="14" width="4" height="3" rx="0.6"/><rect x="30" y="14" width="4" height="3" rx="0.6"/>
+    <rect x="18" y="19" width="4" height="3" rx="0.6"/><rect x="24" y="19" width="4" height="3" rx="0.6"/><rect x="30" y="19" width="4" height="3" rx="0.6"/></g>
+    <circle class="led" cx="44" cy="9" r="2.6" fill="#ef4444"/>
+    <path d="M50 8c6 0 9 3 10 8M50 14c4 0 7 2 8 6" fill="none" stroke="#dc2626" stroke-width="1.4"/>
+    <path d="M50 11c5 0 8 2 9 6" fill="none" stroke="#2563eb" stroke-width="1.4"/>`,
   ],
-  // An AK-47, side view: wood stock, grip and handguards with grain, steel receiver and dust cover,
-  // ribbed curved magazine, rear sight, gas tube, front sight and slant muzzle brake
-  ak: [
-    "0 0 300 100",
-    `<defs>
-      <linearGradient id="ak-wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9773d"/><stop offset="0.35" stop-color="#9c4f22"/><stop offset="1" stop-color="#4f230b"/></linearGradient>
-      <linearGradient id="ak-steel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b7079"/><stop offset="0.3" stop-color="#3a3d44"/><stop offset="1" stop-color="#121317"/></linearGradient>
-      <linearGradient id="ak-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4d54"/><stop offset="1" stop-color="#0d0e11"/></linearGradient>
-    </defs>
-    <path d="M80 30 12 33c-5 0-7 3-7 7v17c0 5 3 7 7 7h8c22-6 42-12 60-17Z" fill="url(#ak-wood)" stroke="#2a1405" stroke-width="1.6"/>
-    <path d="M18 38c18-1 40-3 58-4M20 46c16-2 36-5 54-8M24 55c14-4 30-8 46-12" fill="none" stroke="#5e2c0e" stroke-width="0.9" opacity="0.7"/>
-    <path d="M14 35c20-1 44-2 64-3" stroke="#e7a36b" stroke-width="1.2" opacity="0.6"/>
-    <path d="M5 38c0-3 2-5 5-5h3v31h-3c-3 0-5-2-5-5Z" fill="url(#ak-dark)" stroke="#08090b" stroke-width="1.2"/>
-    <path d="M78 27c0-3 2-5 5-5h86c3 0 5 2 5 5v22H78Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.6"/>
-    <path d="M82 25h86" stroke="#9aa0a8" stroke-width="1.2" opacity="0.8"/>
-    <path d="M80 33h92" stroke="#15161a" stroke-width="1.2"/>
-    <path d="M88 37h40l3 3H88Z" fill="#7d828a" stroke="#08090b" stroke-width="0.8"/>
-    <rect x="156" y="31" width="10" height="5" rx="2" fill="#80858d" stroke="#08090b" stroke-width="0.8"/>
-    <circle cx="96" cy="45" r="1.3" fill="#9aa0a8"/><circle cx="142" cy="45" r="1.3" fill="#9aa0a8"/><circle cx="160" cy="45" r="1.3" fill="#9aa0a8"/>
-    <path d="M110 49c1 10 6 13 14 13h9V49" fill="none" stroke="#202227" stroke-width="3"/>
-    <path d="M121 49c1 4 0 7-2 9" fill="none" stroke="#3a3d44" stroke-width="2.2" stroke-linecap="round"/>
-    <path d="M96 49h18l-8 33c-1 4-3 5-7 5h-9c-3 0-4-2-3-5Z" fill="url(#ak-wood)" stroke="#2a1405" stroke-width="1.6"/>
-    <path d="M100 54l-6 26M106 54l-6 27" stroke="#5e2c0e" stroke-width="0.9" opacity="0.7"/>
-    <path d="M138 49h26c2 16 10 30 24 40l-18 9c-16-11-27-28-32-49Z" fill="url(#ak-dark)" stroke="#08090b" stroke-width="1.6"/>
-    <path d="M146 52c3 14 9 26 20 36M154 51c3 14 10 26 21 35" fill="none" stroke="#5a5e66" stroke-width="1.4" opacity="0.8"/>
-    <path d="M140 51c3 16 11 31 26 44" fill="none" stroke="#7d828a" stroke-width="1" opacity="0.6"/>
-    <path d="M168 17h14v13h-14Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.4"/>
-    <path d="M170 14h10v4h-10Z" fill="#2a2c31" stroke="#08090b"/>
-    <path d="M182 22c0-3 2-4 4-4h44c3 0 5 2 5 5v8h-53Z" fill="url(#ak-wood)" stroke="#2a1405" stroke-width="1.6"/>
-    <path d="M188 21h40" stroke="#e7a36b" stroke-width="1.2" opacity="0.6"/>
-    <path d="M190 26h36" stroke="#5e2c0e" stroke-width="0.9" opacity="0.7"/>
-    <path d="M174 34h62c4 0 6 3 6 7v4c0 4-2 7-6 7h-62Z" fill="url(#ak-wood)" stroke="#2a1405" stroke-width="1.6"/>
-    <path d="M180 37h52M182 47h50" stroke="#5e2c0e" stroke-width="0.9" opacity="0.7"/>
-    <path d="M178 36h56" stroke="#e7a36b" stroke-width="1" opacity="0.55"/>
-    <path d="M174 31h8v3h-8Z" fill="#202227"/>
-    <path d="M235 24h14v13h-14Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.4"/>
-    <path d="M242 36h44v6h-44Z" fill="url(#ak-dark)" stroke="#08090b" stroke-width="1.2"/>
-    <path d="M244 37h40" stroke="#80858d" stroke-width="0.8"/>
-    <path d="M244 45h36" stroke="#2a2c31" stroke-width="2" stroke-linecap="round"/>
-    <path d="M266 28h12v8h-12Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.2"/>
-    <path d="M268 20c0-3 8-3 8 0v8h-8Z" fill="none" stroke="#2a2c31" stroke-width="2"/>
-    <path d="M271 21h2v7h-2Z" fill="#15161a"/>
-    <path d="M284 34h11l3 4v6l-4 3h-10Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.2"/>
-    <path d="M287 34l6 6M291 34l5 5" stroke="#15161a" stroke-width="1"/>
-    <path d="M250 32a3 3 0 1 1 0 0.1" fill="none" stroke="#3a3d44" stroke-width="1.5"/>`,
+  // An airdrop: a red and white parachute, its cords, and a supply crate
+  airdrop: [
+    "0 0 48 64",
+    `<defs><linearGradient id="ad-crate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b6b8a"/><stop offset="1" stop-color="#26304a"/></linearGradient></defs>
+    <path d="M3 20C3 9 12 2 24 2s21 7 21 18c-3-2-6-2-8 0-3-2-7-2-9 0-3-2-5-2-8 0-3-2-6-2-9 0-3-2-5-2-8 0Z" fill="#dc2626" stroke="#450a0a" stroke-width="1.4"/>
+    <path d="M11 4c-2 5-3 10-3 16M24 2v18M37 4c2 5 3 10 3 16" fill="none" stroke="#f8fafc" stroke-width="4"/>
+    <path d="M5 20l13 22M20 20l3 22M28 20l-3 22M43 20L30 42" stroke="#e5e7eb" stroke-width="0.9"/>
+    <rect x="13" y="41" width="22" height="20" rx="2" fill="url(#ad-crate)" stroke="#0f1424" stroke-width="1.6"/>
+    <path d="M13 47h22M13 55h22M24 41v20" stroke="#0f1424" stroke-width="1.2"/>
+    <path d="M15 43h8" stroke="#94a3c0" stroke-width="1.2"/>
+    <rect x="21" y="49" width="6" height="4" fill="#f59e0b"/>`,
   ],
   // A football, shaded like a sphere, with its pentagon patches curving over the edge
   ball: [
@@ -433,7 +393,7 @@ function decoration(name, spot) {
 function effects(fx) {
   const box = el("span", "mark-fx");
   box.setAttribute("aria-hidden", "true");
-  const count = fx === "bolt" || fx === "ice" ? 6 : 12;
+  const count = fx === "bolt" || fx === "ice" ? 6 : fx === "cs2" ? 5 : 12;
   for (let i = 0; i < count; i++) {
     const bit = el("i");
     bit.style.setProperty("--x", `${Math.round(Math.random() * 100)}%`);
@@ -443,6 +403,20 @@ function effects(fx) {
     box.append(bit);
   }
   if (fx === "ice") box.append(el("b", "ice-ring"), el("b", "ice-ring late"));
+  if (fx === "cs2") {
+    // A kill feed in the corner, and kill rewards floating up
+    const feed = el("span", "killfeed");
+    ["Entry", "AWPer", "Lurker"].forEach((victim) => {
+      const row = el("span", "kill");
+      row.append(el("b", null, "Lexor2k"), el("span", "kill-gun"), el("span", "kill-hs"), el("span", null, victim));
+      feed.append(row);
+    });
+    box.append(feed, el("b", "cash-pop", "+$300"), el("b", "cash-pop late", "+$300"));
+    // A crosshair flicking between targets, and an airdrop crate drifting down on its parachute
+    const cross = el("span", "cs-cross");
+    cross.append(el("span", "cs-hit"));
+    box.append(cross, decoration("airdrop", "drop"));
+  }
   if (fx === "bolt") {
     for (let i = 0; i < 2; i++) {
       const bolt = document.createElementNS("http://www.w3.org/2000/svg", "svg");

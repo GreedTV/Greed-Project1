@@ -520,7 +520,7 @@ h1, h2, h3, .logo {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 8px 6px;
   padding: 44px 12px 12px;
 }
@@ -684,8 +684,12 @@ h1, h2, h3, .logo {
 .deco-blackhole.at-tr { width: 64px; transform: translate(14px, -80px) rotate(-10deg); }
 .deco-mouse.at-br { width: 30px; transform: translate(32px, 14px) rotate(14deg); }
 .deco-grenade.at-br { width: 38px; }
-.deco-ak.at-bottom { width: 176px; transform: translate(-50%, 18px) rotate(-9deg); }
-.deco-helmet.at-tr { width: 60px; }
+.deco-c4.at-br { width: 50px; transform: translate(22px, 26px) rotate(-6deg); }
+.deco-c4 .led { animation: c4-blink 1s steps(1, end) infinite; }
+
+@keyframes c4-blink {
+  50% { fill: #3f0d0d; }
+}
 .deco-scope.at-br { width: 56px; transform: translate(18px, 30px) rotate(-12deg); }
 .deco-knife.at-br { width: 46px; }
 .deco-mouse.at-br { width: 32px; }
@@ -1048,11 +1052,13 @@ h1, h2, h3, .logo {
   75% { filter: drop-shadow(-2px 0 0 rgba(255, 0, 90, 0.9)) drop-shadow(2px 0 0 rgba(0, 220, 255, 0.9)); transform: translateX(1px); }
 }
 
-/* Lexor2k: an icy flash pulsing out */
-.fx-frost:hover .mark-logo { animation-name: hv-frost; animation-duration: 1.2s; }
-@keyframes hv-frost {
-  0%, 100% { filter: drop-shadow(0 0 8px #22d3ee) brightness(1); }
-  50% { filter: drop-shadow(0 0 26px #22d3ee) drop-shadow(0 0 8px #e0faff) brightness(1.35); }
+/* Lexor2k: hit by a flashbang */
+.fx-cs2:hover .mark-logo { animation-name: hv-flash; animation-duration: 1.6s; }
+@keyframes hv-flash {
+  0% { filter: brightness(1); }
+  6% { filter: brightness(4) saturate(0) drop-shadow(0 0 30px #fff); }
+  40% { filter: brightness(2.2) saturate(0.3) drop-shadow(0 0 20px #fff); }
+  100% { filter: brightness(1) drop-shadow(0 0 10px #22d3ee); }
 }
 
 /* Icy9x: frozen over, shivering in the cold */
@@ -1194,6 +1200,175 @@ h1, h2, h3, .logo {
   100% { background-position: -20% 0; }
 }
 
+
+/* CS2 (Lexor2k): tracers, a kill feed, kill rewards, a roaming crosshair and an airdrop */
+.fx-cs2 .mark-fx {
+  z-index: 3;
+}
+
+.fx-cs2 .mark-fx i {
+  left: -10%;
+  width: 38px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #fde68a 70%, #fff);
+  box-shadow: 0 0 6px #f59e0b;
+  transform: rotate(-12deg);
+  animation-name: fx-tracer;
+  animation-timing-function: linear;
+  animation-duration: calc(var(--t) * 0.7);
+}
+
+@keyframes fx-tracer {
+  0%, 70% { translate: 0 0; opacity: 0; }
+  72% { opacity: 1; }
+  86% { translate: 220px -40px; opacity: 1; }
+  87%, 100% { translate: 220px -40px; opacity: 0; }
+}
+
+.killfeed {
+  position: absolute;
+  top: -4px;
+  right: -26px;
+  z-index: 4;
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+}
+
+.kill {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 4px;
+  font-family: "Inter", sans-serif;
+  font-size: 0.5rem;
+  font-weight: 700;
+  font-style: normal;
+  white-space: nowrap;
+  color: #e5e7eb;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid #e0123c;
+  border-radius: 2px;
+  opacity: 0;
+  animation: kill-in 6s ease-out infinite;
+}
+
+.kill b {
+  color: #67e8f9;
+}
+
+.kill:nth-child(2) { animation-delay: 1.2s; }
+.kill:nth-child(3) { animation-delay: 2.4s; }
+
+.kill-gun {
+  width: 16px;
+  height: 5px;
+  background: #e5e7eb;
+  clip-path: polygon(0 30%, 30% 20%, 34% 0, 40% 20%, 100% 25%, 100% 50%, 62% 55%, 58% 100%, 50% 100%, 50% 55%, 36% 60%, 30% 100%, 22% 100%, 24% 60%, 0 75%);
+}
+
+.kill-hs {
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 50%;
+  background: radial-gradient(circle, #e5e7eb 1.2px, transparent 1.6px);
+}
+
+@keyframes kill-in {
+  0% { opacity: 0; transform: translateX(10px); }
+  5%, 55% { opacity: 1; transform: none; }
+  65%, 100% { opacity: 0; transform: none; }
+}
+
+.cash-pop {
+  position: absolute;
+  left: 4px;
+  bottom: 20px;
+  font-family: "Barlow Semi Condensed", "Inter", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #4ade80;
+  text-shadow: 0 0 6px rgba(74, 222, 128, 0.8), 0 1px 0 #000;
+  opacity: 0;
+  animation: cash-pop 4s ease-out infinite;
+}
+
+.cash-pop.late {
+  left: auto;
+  right: 0;
+  animation-delay: -2s;
+}
+
+@keyframes cash-pop {
+  0%, 40% { transform: translateY(0); opacity: 0; }
+  45% { opacity: 1; }
+  80% { transform: translateY(-40px); opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* the crosshair: four lines and a dot, flicking to a spot, firing, then moving on */
+.cs-cross {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  width: 22px;
+  height: 22px;
+  margin: -11px;
+  background:
+    linear-gradient(#67e8f9, #67e8f9) 50% 0 / 2px 7px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 50% 100% / 2px 7px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 0 50% / 7px 2px no-repeat,
+    linear-gradient(#67e8f9, #67e8f9) 100% 50% / 7px 2px no-repeat,
+    radial-gradient(circle, #67e8f9 1.5px, transparent 2px);
+  filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 4px rgba(34, 211, 238, 0.8));
+  animation: cs-aim 6s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+}
+
+@keyframes cs-aim {
+  0%, 12% { transform: translate(-30px, -24px); }
+  18%, 30% { transform: translate(26px, -10px); }
+  31% { transform: translate(26px, -14px) scale(1.25); }
+  34%, 48% { transform: translate(26px, -10px); }
+  54%, 66% { transform: translate(-14px, 22px); }
+  67% { transform: translate(-14px, 18px) scale(1.25); }
+  70%, 82% { transform: translate(-14px, 22px); }
+  88%, 100% { transform: translate(-30px, -24px); }
+}
+
+/* the hit marker when it fires */
+.cs-hit {
+  position: absolute;
+  inset: -4px;
+  background:
+    linear-gradient(45deg, transparent 46%, #fff 46% 54%, transparent 54%),
+    linear-gradient(-45deg, transparent 46%, #fff 46% 54%, transparent 54%);
+  -webkit-mask: radial-gradient(circle, transparent 6px, #000 6.5px);
+  mask: radial-gradient(circle, transparent 6px, #000 6.5px);
+  opacity: 0;
+  animation: cs-hit 6s steps(1, end) infinite;
+}
+
+@keyframes cs-hit {
+  0%, 30%, 36%, 66%, 72%, 100% { opacity: 0; }
+  31%, 67% { opacity: 1; }
+}
+
+.deco-airdrop.at-drop {
+  z-index: 0;
+  width: 34px;
+  transform: translate(-106px, -96px);
+  animation: airdrop 9s linear infinite;
+}
+
+@keyframes airdrop {
+  0% { translate: 0 0; rotate: -6deg; opacity: 0; }
+  8% { opacity: 1; }
+  50% { rotate: 6deg; }
+  85% { opacity: 1; }
+  100% { translate: 8px 120px; rotate: -4deg; opacity: 0; }
+}
 
 /* Spark: small motes in their color (the viewer's own streamers) */
 .fx-spark .mark-fx i {
@@ -1520,6 +1695,12 @@ h1, h2, h3, .logo {
   .fx-warp .mark-logo,
   .stage-fig:hover .mark-logo,
   .ice-ring,
+  .kill,
+  .cash-pop,
+  .cs-cross,
+  .cs-hit,
+  .deco-airdrop,
+  .deco-c4 .led,
   .fx-ice .mark-art::after,
   .mark-shadow,
   .mark-fx,
