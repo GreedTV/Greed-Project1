@@ -195,6 +195,11 @@ function compact(n) {
 // Small drawings that sit on a picture's edge: [viewBox, svg inside]. Placed by `deco: [[name, spot]]`
 // in FEATURED; spots are tl / tr / bl / br (corners), top and bottom (across the edge).
 const DECO = {
+  // The AK in the kill feed: a white side view of the rifle
+  killak: [
+    "0 0 60 16",
+    `<path d="M0 4l14 1V4h20V3h2v1h8v1h9V3h2v2h3v2H44v1H34c0 3 2 6 5 7l-4 1c-3-2-5-5-6-8h-7l-2 6h-4l1-6h-3L4 11 0 10Z" fill="#e5e7eb"/>`,
+  ],
   // An airdrop: a red and white parachute, its cords, and a supply crate
   airdrop: [
     "0 0 48 64",
@@ -389,7 +394,7 @@ function effects(fx) {
     const feed = el("span", "killfeed");
     ["Entry", "AWPer", "Lurker"].forEach((victim) => {
       const row = el("span", "kill");
-      row.append(el("b", null, "Lexor2k"), el("span", "kill-gun"), el("span", "kill-hs"), el("span", null, victim));
+      row.append(el("b", null, "Lexor2k"), decoration("killak", "feed"), el("span", "kill-hs"), el("span", null, victim));
       feed.append(row);
     });
     box.append(feed, el("b", "cash-pop", "+$300"), el("b", "cash-pop late", "+$300"));
