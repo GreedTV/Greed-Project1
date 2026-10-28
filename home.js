@@ -14,7 +14,7 @@ function el(tag, className, text) {
 }
 
 // ---------- Streamers ----------
-// color: their glow; fx: the effect around their picture (frost, warp, snow, speed, bolt, glitch, gold, aim,
+// color: their glow; fx: the effect around their picture (frost, warp, ice, speed, bolt, glitch, gold, aim,
 // fire, smoke; spark for anyone else); deco: drawings on the picture's edge (see DECO)
 // picture: their channel picture, so it shows before the Worker answers (the Worker's newer one replaces it)
 const FEATURED = [
@@ -41,7 +41,7 @@ const FEATURED = [
     name: "icy9x",
     label: "Icy9x",
     color: "#7dd3fc",
-    fx: "snow",
+    fx: "ice",
     deco: [["icicles", "top"]],
     picture: "https://files.kick.com/images/user/33057902/profile_image/conversion/10c55280-1d41-4cb2-93c2-c37abf825c87-fullsize.webp",
   },
@@ -195,36 +195,194 @@ function compact(n) {
 // Small drawings that sit on a picture's edge: [viewBox, svg inside]. Placed by `deco: [[name, spot]]`
 // in FEATURED; spots are tl / tr / bl / br (corners), top and bottom (across the edge).
 const DECO = {
-  // A level 3 style combat helmet: olive dome, ear guards, front mount and chin strap
+  // A level 3 combat helmet, side-front view: shaded olive dome, rim, bolted ear plate, side rail and strap
   helmet: [
-    "0 0 64 52",
-    `<path d="M6 36C6 15 19 4 33 4s27 10 27 30v6h-9l-2-8H17l-3 10H6Z" fill="#3f4a1f" stroke="#141708" stroke-width="2.5" stroke-linejoin="round"/>
-    <path d="M14 30C15 17 23 9 33 9" fill="none" stroke="#7a8a3a" stroke-width="3" stroke-linecap="round"/>
-    <path d="M17 32h32l2 8H15Z" fill="#2c3415" stroke="#141708" stroke-width="2" stroke-linejoin="round"/>
-    <rect x="27" y="11" width="13" height="8" rx="2" fill="#1b1f0c" stroke="#141708" stroke-width="1.5"/>
-    <rect x="30" y="13" width="7" height="4" rx="1" fill="#5c6b2a"/>
-    <path d="M6 38h8l1 7H8Z" fill="#2c3415" stroke="#141708" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M51 40h9v5l-7 2Z" fill="#2c3415" stroke="#141708" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M12 45c6 6 34 6 42 0" fill="none" stroke="#1b1f0c" stroke-width="2.5"/>
-    <circle cx="47" cy="22" r="2" fill="#1b1f0c"/><circle cx="20" cy="22" r="2" fill="#1b1f0c"/>`,
+    "0 0 120 104",
+    `<defs>
+      <radialGradient id="hm-dome" cx="0.36" cy="0.22" r="0.85"><stop offset="0" stop-color="#9aab63"/><stop offset="0.45" stop-color="#5d6d33"/><stop offset="1" stop-color="#262f12"/></radialGradient>
+      <linearGradient id="hm-plate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#55633a"/><stop offset="1" stop-color="#1f2610"/></linearGradient>
+      <linearGradient id="hm-rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a4620"/><stop offset="1" stop-color="#161b09"/></linearGradient>
+    </defs>
+    <path d="M12 62C12 27 37 7 64 7c29 0 50 21 50 52v8H12Z" fill="url(#hm-dome)" stroke="#11150a" stroke-width="2"/>
+    <path d="M20 54C22 32 38 17 58 13" fill="none" stroke="#c7d48f" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+    <ellipse cx="44" cy="24" rx="14" ry="6" transform="rotate(-28 44 24)" fill="#fff" opacity="0.16"/>
+    <path d="M30 20c14-8 40-9 58 2" fill="none" stroke="#11150a" stroke-width="1" opacity="0.45"/>
+    <path d="M10 60h106v9c-30 7-76 7-106 0Z" fill="url(#hm-rim)" stroke="#0c0f06" stroke-width="2"/>
+    <path d="M12 63h102" stroke="#6b7a3f" stroke-width="1" opacity="0.6"/>
+    <path d="M66 44h40c6 0 9 3 9 9v33c0 6-3 9-9 9H78c-7 0-12-5-12-12Z" fill="url(#hm-plate)" stroke="#0c0f06" stroke-width="2"/>
+    <path d="M73 51h32c3 0 5 2 5 5v25c0 3-2 5-5 5H80c-4 0-7-3-7-7Z" fill="none" stroke="#11150a" stroke-width="1.5" opacity="0.7"/>
+    <path d="M74 52h30" stroke="#8c9a5c" stroke-width="1.2" opacity="0.6"/>
+    <circle cx="72" cy="50" r="2.4" fill="#8a8f80" stroke="#0c0f06"/><circle cx="109" cy="50" r="2.4" fill="#8a8f80" stroke="#0c0f06"/>
+    <circle cx="74" cy="89" r="2.4" fill="#8a8f80" stroke="#0c0f06"/><circle cx="109" cy="89" r="2.4" fill="#8a8f80" stroke="#0c0f06"/>
+    <rect x="80" y="30" width="26" height="7" rx="1.5" fill="#1c2210" stroke="#0c0f06" stroke-width="1.5"/>
+    <path d="M84 30v7M88 30v7M92 30v7M96 30v7M100 30v7" stroke="#3f4a24" stroke-width="1.2"/>
+    <path d="M70 95c-6 5-16 7-26 6" fill="none" stroke="#1a1a14" stroke-width="4" stroke-linecap="round"/>
+    <rect x="46" y="97" width="7" height="6" rx="1" fill="#6b6b5f" stroke="#1a1a14"/>
+    <path d="M40 10c-3 2-5 3-6 5" stroke="#d6e0a6" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>`,
   ],
-  // An AK rifle: wooden stock, grip and handguard, steel receiver, curved magazine, barrel and sights
+  // An AK-47, side view: wood stock, grip and handguards with grain, steel receiver and dust cover,
+  // ribbed curved magazine, rear sight, gas tube, front sight and slant muzzle brake
   ak: [
-    "0 0 170 52",
-    `<path d="M3 15l38 5v11L11 37l-8-4Z" fill="#8b4a22" stroke="#1a0f08" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M9 20l26 3M9 30l24-3" stroke="#b86b38" stroke-width="1.5"/>
-    <path d="M39 17h56v14H39Z" fill="#2b2b30" stroke="#0d0d10" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M42 20h46" stroke="#55555e" stroke-width="2"/>
-    <path d="M52 31h8l-4 15h-8Z" fill="#7a3f1c" stroke="#1a0f08" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M60 31q2 7 9 7" fill="none" stroke="#0d0d10" stroke-width="2"/>
-    <path d="M68 31h12c2 8 6 14 12 17l-11 3c-8-4-12-11-13-20Z" fill="#1d1d21" stroke="#0d0d10" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M72 35c2 5 4 9 8 12" fill="none" stroke="#3d3d45" stroke-width="1.5"/>
-    <path d="M95 19h30v11H95Z" fill="#9a5426" stroke="#1a0f08" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M99 22v5M104 22v5M109 22v5M114 22v5M119 22v5" stroke="#6b3616" stroke-width="1.5"/>
-    <path d="M95 13h38v5H95Z" fill="#2b2b30" stroke="#0d0d10" stroke-width="1.5"/>
-    <path d="M125 22h42v5h-42Z" fill="#1d1d21" stroke="#0d0d10" stroke-width="1.5"/>
-    <path d="M148 14h4v8h-4ZM88 11h5v6h-5Z" fill="#1d1d21" stroke="#0d0d10" stroke-width="1.2"/>
-    <path d="M163 20h5v9h-5Z" fill="#111" />`,
+    "0 0 300 100",
+    `<defs>
+      <linearGradient id="ak-wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9773d"/><stop offset="0.35" stop-color="#9c4f22"/><stop offset="1" stop-color="#4f230b"/></linearGradient>
+      <linearGradient id="ak-steel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b7079"/><stop offset="0.3" stop-color="#3a3d44"/><stop offset="1" stop-color="#121317"/></linearGradient>
+      <linearGradient id="ak-dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4d54"/><stop offset="1" stop-color="#0d0e11"/></linearGradient>
+    </defs>
+    <path d="M80 30 12 33c-5 0-7 3-7 7v17c0 5 3 7 7 7h8c22-6 42-12 60-17Z" fill="url(#ak-wood)" stroke="#2a1405" stroke-width="1.6"/>
+    <path d="M18 38c18-1 40-3 58-4M20 46c16-2 36-5 54-8M24 55c14-4 30-8 46-12" fill="none" stroke="#5e2c0e" stroke-width="0.9" opacity="0.7"/>
+    <path d="M14 35c20-1 44-2 64-3" stroke="#e7a36b" stroke-width="1.2" opacity="0.6"/>
+    <path d="M5 38c0-3 2-5 5-5h3v31h-3c-3 0-5-2-5-5Z" fill="url(#ak-dark)" stroke="#08090b" stroke-width="1.2"/>
+    <path d="M78 27c0-3 2-5 5-5h86c3 0 5 2 5 5v22H78Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.6"/>
+    <path d="M82 25h86" stroke="#9aa0a8" stroke-width="1.2" opacity="0.8"/>
+    <path d="M80 33h92" stroke="#15161a" stroke-width="1.2"/>
+    <path d="M88 37h40l3 3H88Z" fill="#7d828a" stroke="#08090b" stroke-width="0.8"/>
+    <rect x="156" y="31" width="10" height="5" rx="2" fill="#80858d" stroke="#08090b" stroke-width="0.8"/>
+    <circle cx="96" cy="45" r="1.3" fill="#9aa0a8"/><circle cx="142" cy="45" r="1.3" fill="#9aa0a8"/><circle cx="160" cy="45" r="1.3" fill="#9aa0a8"/>
+    <path d="M110 49c1 10 6 13 14 13h9V49" fill="none" stroke="#202227" stroke-width="3"/>
+    <path d="M121 49c1 4 0 7-2 9" fill="none" stroke="#3a3d44" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M96 49h18l-8 33c-1 4-3 5-7 5h-9c-3 0-4-2-3-5Z" fill="url(#ak-wood)" stroke="#2a1405" stroke-width="1.6"/>
+    <path d="M100 54l-6 26M106 54l-6 27" stroke="#5e2c0e" stroke-width="0.9" opacity="0.7"/>
+    <path d="M138 49h26c2 16 10 30 24 40l-18 9c-16-11-27-28-32-49Z" fill="url(#ak-dark)" stroke="#08090b" stroke-width="1.6"/>
+    <path d="M146 52c3 14 9 26 20 36M154 51c3 14 10 26 21 35" fill="none" stroke="#5a5e66" stroke-width="1.4" opacity="0.8"/>
+    <path d="M140 51c3 16 11 31 26 44" fill="none" stroke="#7d828a" stroke-width="1" opacity="0.6"/>
+    <path d="M168 17h14v13h-14Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.4"/>
+    <path d="M170 14h10v4h-10Z" fill="#2a2c31" stroke="#08090b"/>
+    <path d="M182 22c0-3 2-4 4-4h44c3 0 5 2 5 5v8h-53Z" fill="url(#ak-wood)" stroke="#2a1405" stroke-width="1.6"/>
+    <path d="M188 21h40" stroke="#e7a36b" stroke-width="1.2" opacity="0.6"/>
+    <path d="M190 26h36" stroke="#5e2c0e" stroke-width="0.9" opacity="0.7"/>
+    <path d="M174 34h62c4 0 6 3 6 7v4c0 4-2 7-6 7h-62Z" fill="url(#ak-wood)" stroke="#2a1405" stroke-width="1.6"/>
+    <path d="M180 37h52M182 47h50" stroke="#5e2c0e" stroke-width="0.9" opacity="0.7"/>
+    <path d="M178 36h56" stroke="#e7a36b" stroke-width="1" opacity="0.55"/>
+    <path d="M174 31h8v3h-8Z" fill="#202227"/>
+    <path d="M235 24h14v13h-14Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.4"/>
+    <path d="M242 36h44v6h-44Z" fill="url(#ak-dark)" stroke="#08090b" stroke-width="1.2"/>
+    <path d="M244 37h40" stroke="#80858d" stroke-width="0.8"/>
+    <path d="M244 45h36" stroke="#2a2c31" stroke-width="2" stroke-linecap="round"/>
+    <path d="M266 28h12v8h-12Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.2"/>
+    <path d="M268 20c0-3 8-3 8 0v8h-8Z" fill="none" stroke="#2a2c31" stroke-width="2"/>
+    <path d="M271 21h2v7h-2Z" fill="#15161a"/>
+    <path d="M284 34h11l3 4v6l-4 3h-10Z" fill="url(#ak-steel)" stroke="#08090b" stroke-width="1.2"/>
+    <path d="M287 34l6 6M291 34l5 5" stroke="#15161a" stroke-width="1"/>
+    <path d="M250 32a3 3 0 1 1 0 0.1" fill="none" stroke="#3a3d44" stroke-width="1.5"/>`,
+  ],
+  // A football, shaded like a sphere, with its pentagon patches curving over the edge
+  ball: [
+    "0 0 48 48",
+    `<defs>
+      <radialGradient id="bl-sphere" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#ffffff"/><stop offset="0.6" stop-color="#e6e6e6"/><stop offset="1" stop-color="#8f8f8f"/></radialGradient>
+      <clipPath id="bl-clip"><circle cx="24" cy="24" r="20"/></clipPath>
+    </defs>
+    <circle cx="24" cy="24" r="20" fill="url(#bl-sphere)"/>
+    <g clip-path="url(#bl-clip)" fill="#141414">
+      <path d="M24 15l8.5 6.2-3.2 10H18.7l-3.2-10Z"/>
+      <path d="M20 1h8l3 6-7 4-7-4Z"/><path d="M39 12l7 3-1 9-6 1-3-8Z"/><path d="M36 37l6-2 1 8-6 5-5-5Z"/>
+      <path d="M12 37l-6-2-1 8 6 5 5-5Z"/><path d="M9 12l-7 3 1 9 6 1 3-8Z"/>
+    </g>
+    <g clip-path="url(#bl-clip)" stroke="#555" stroke-width="0.9" fill="none">
+      <path d="M24 15V10M32.5 21.2l5-2M29.3 31.2l4 4.5M18.7 31.2l-4 4.5M15.5 21.2l-5-2"/>
+    </g>
+    <circle cx="24" cy="24" r="20" fill="none" stroke="#3a3a3a" stroke-width="1.2"/>
+    <ellipse cx="17" cy="13" rx="6" ry="3" transform="rotate(-30 17 13)" fill="#fff" opacity="0.7"/>`,
+  ],
+  // A game controller: glossy shell, rubber thumbsticks, d-pad and lit face buttons
+  pad: [
+    "0 0 72 46",
+    `<defs>
+      <linearGradient id="pd-shell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4a52"/><stop offset="0.4" stop-color="#25252b"/><stop offset="1" stop-color="#0b0b0e"/></linearGradient>
+      <radialGradient id="pd-stick" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#55555e"/><stop offset="1" stop-color="#0d0d10"/></radialGradient>
+    </defs>
+    <path d="M18 6h36c10 0 15 10 16 22 1 10-3 15-10 15-5 0-8-4-11-9H23c-3 5-6 9-11 9-7 0-11-5-10-15C3 16 8 6 18 6Z" fill="url(#pd-shell)" stroke="#050506" stroke-width="1.6"/>
+    <path d="M18 8h36c5 0 9 3 11 8" fill="none" stroke="#8a8a95" stroke-width="1.2" opacity="0.7"/>
+    <path d="M15 17h4v-4h4v4h4v4h-4v4h-4v-4h-4Z" fill="#141418" stroke="#3a3a42" stroke-width="0.8"/>
+    <circle cx="52" cy="14" r="2.8" fill="#16a34a" stroke="#052e14" stroke-width="0.8"/><circle cx="58" cy="20" r="2.8" fill="#dc2626" stroke="#450a0a" stroke-width="0.8"/>
+    <circle cx="46" cy="20" r="2.8" fill="#2563eb" stroke="#0b1d4d" stroke-width="0.8"/><circle cx="52" cy="26" r="2.8" fill="#eab308" stroke="#422006" stroke-width="0.8"/>
+    <circle cx="51.3" cy="13.2" r="0.9" fill="#fff" opacity="0.7"/><circle cx="57.3" cy="19.2" r="0.9" fill="#fff" opacity="0.7"/><circle cx="45.3" cy="19.2" r="0.9" fill="#fff" opacity="0.7"/><circle cx="51.3" cy="25.2" r="0.9" fill="#fff" opacity="0.7"/>
+    <circle cx="27" cy="30" r="5" fill="url(#pd-stick)" stroke="#050506"/><circle cx="45" cy="30" r="5" fill="url(#pd-stick)" stroke="#050506"/>
+    <circle cx="27" cy="30" r="2.6" fill="none" stroke="#2c2c33"/><circle cx="45" cy="30" r="2.6" fill="none" stroke="#2c2c33"/>
+    <rect x="31" y="14" width="10" height="5" rx="2.5" fill="#1a1a1f" stroke="#3a3a42" stroke-width="0.6"/>`,
+  ],
+  // Gaming headphones: padded band, metal sliders, leather cushions and lit cups
+  headset: [
+    "0 0 150 76",
+    `<defs>
+      <linearGradient id="hs-band" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3a42"/><stop offset="1" stop-color="#0b0b0e"/></linearGradient>
+      <linearGradient id="hs-cup" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3d3d45"/><stop offset="1" stop-color="#09090b"/></linearGradient>
+    </defs>
+    <path d="M16 48C16 22 43 6 75 6s59 16 59 42" fill="none" stroke="#0b0b0e" stroke-width="11" stroke-linecap="round"/>
+    <path d="M16 48C16 22 43 6 75 6s59 16 59 42" fill="none" stroke="url(#hs-band)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M24 38C30 21 50 11 75 11" fill="none" stroke="#6b6b75" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M42 14c10-4 22-6 33-6s23 2 33 6" fill="none" stroke="#1a1a1f" stroke-width="7" stroke-linecap="round"/>
+    <rect x="12" y="40" width="7" height="12" rx="1.5" fill="#9ca3af" stroke="#2a2a30"/><rect x="131" y="40" width="7" height="12" rx="1.5" fill="#9ca3af" stroke="#2a2a30"/>
+    <rect x="3" y="48" width="24" height="27" rx="9" fill="url(#hs-cup)" stroke="#050506" stroke-width="1.6"/>
+    <rect x="123" y="48" width="24" height="27" rx="9" fill="url(#hs-cup)" stroke="#050506" stroke-width="1.6"/>
+    <rect x="9" y="54" width="12" height="15" rx="5" fill="none" stroke="#53fc18" stroke-width="2.4"/>
+    <rect x="129" y="54" width="12" height="15" rx="5" fill="none" stroke="#53fc18" stroke-width="2.4"/>
+    <path d="M7 52c3-2 7-3 10-3M127 52c3-2 7-3 10-3" fill="none" stroke="#6b6b75" stroke-width="1.2" stroke-linecap="round"/>`,
+  ],
+  // A karambit with a polished gold blade, bevelled edge, black grip and finger ring
+  knife: [
+    "0 0 60 60",
+    `<defs>
+      <linearGradient id="kn-blade" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset="0.35" stop-color="#f4b324"/><stop offset="0.7" stop-color="#b7791f"/><stop offset="1" stop-color="#fde68a"/></linearGradient>
+      <linearGradient id="kn-grip" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3a3a42"/><stop offset="1" stop-color="#0b0b0e"/></linearGradient>
+    </defs>
+    <path d="M14 8c22 0 38 14 40 36-8-12-19-19-32-21Z" fill="url(#kn-blade)" stroke="#5a3d00" stroke-width="1.4"/>
+    <path d="M19 11c16 1 28 11 32 25" fill="none" stroke="#fffbe8" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M22 23c11 2 21 8 30 18" fill="none" stroke="#7a5200" stroke-width="1" opacity="0.6"/>
+    <path d="M23 22l-9 17c-1 3 0 5 3 6l3 1 10-20Z" fill="url(#kn-grip)" stroke="#050506" stroke-width="1.4"/>
+    <path d="M20 31l3 1M18 35l3 1M16 39l3 1" stroke="#55555e" stroke-width="1.2"/>
+    <circle cx="13" cy="48" r="7" fill="none" stroke="#1d1d21" stroke-width="4.5"/>
+    <circle cx="13" cy="48" r="7" fill="none" stroke="#55555e" stroke-width="1"/>
+    <circle cx="25" cy="24" r="1.3" fill="#d4d4d8"/>`,
+  ],
+  // A gaming mouse: glossy black shell, split buttons, ridged wheel, side buttons and a red light strip
+  mouse: [
+    "0 0 40 60",
+    `<defs>
+      <linearGradient id="ms-shell" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a4a52"/><stop offset="0.45" stop-color="#1c1c21"/><stop offset="1" stop-color="#050506"/></linearGradient>
+    </defs>
+    <path d="M20 3c11 0 17 9 17 22v11c0 13-8 21-17 21S3 49 3 36V25C3 12 9 3 20 3Z" fill="url(#ms-shell)" stroke="#000" stroke-width="1.6"/>
+    <path d="M20 3v19M4 23h32" stroke="#000" stroke-width="1.4"/>
+    <path d="M9 9c3-4 6-5 9-5" fill="none" stroke="#9a9aa5" stroke-width="1.4" stroke-linecap="round"/>
+    <rect x="17.5" y="9" width="5" height="10" rx="2.5" fill="#2a2a30" stroke="#000"/>
+    <path d="M18.5 11h3M18.5 13h3M18.5 15h3M18.5 17h3" stroke="#55555e" stroke-width="0.8"/>
+    <rect x="3" y="27" width="3" height="6" rx="1" fill="#2a2a30"/><rect x="3" y="34" width="3" height="5" rx="1" fill="#2a2a30"/>
+    <path d="M8 40c2 8 7 12 12 12s10-4 12-12" fill="none" stroke="#ff4655" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M8 40c2 8 7 12 12 12s10-4 12-12" fill="none" stroke="#ff4655" stroke-width="6" stroke-linecap="round" opacity="0.25"/>`,
+  ],
+  // A frag grenade: shaded olive body, steel fuse, spoon lever, pin and ring
+  grenade: [
+    "0 0 48 60",
+    `<defs>
+      <radialGradient id="gn-body" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#8a9a55"/><stop offset="0.5" stop-color="#4b5a26"/><stop offset="1" stop-color="#1c230c"/></radialGradient>
+      <linearGradient id="gn-steel" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d4d4d8"/><stop offset="0.5" stop-color="#8a8f98"/><stop offset="1" stop-color="#3f434a"/></linearGradient>
+    </defs>
+    <ellipse cx="21" cy="38" rx="16" ry="19" fill="url(#gn-body)" stroke="#0c0f06" stroke-width="1.6"/>
+    <path d="M10 28c3-4 7-6 11-7" fill="none" stroke="#c7d48f" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+    <path d="M7 44c9 3 19 3 28 0" fill="none" stroke="#1c230c" stroke-width="1.2" opacity="0.7"/>
+    <rect x="14" y="13" width="14" height="8" rx="1.5" fill="url(#gn-steel)" stroke="#1a1c20" stroke-width="1.2"/>
+    <path d="M14 16h14" stroke="#4b4f56" stroke-width="0.8"/>
+    <path d="M27 14h7c3 0 4 2 4 4l-2 24c0 2-2 3-3 2" fill="none" stroke="url(#gn-steel)" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="M27 14h7c3 0 4 2 4 4l-2 24" fill="none" stroke="#1a1c20" stroke-width="0.8"/>
+    <path d="M12 17H8" stroke="#8a8f98" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="6" cy="11" r="6" fill="none" stroke="url(#gn-steel)" stroke-width="2.4"/>`,
+  ],
+  // A rifle scope, side view: matte tube, turrets, ribbed eyepiece and a lens catching the light
+  scope: [
+    "0 0 80 40",
+    `<defs>
+      <linearGradient id="sc-tube" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b7079"/><stop offset="0.35" stop-color="#2c2f35"/><stop offset="1" stop-color="#0b0c0f"/></linearGradient>
+      <radialGradient id="sc-lens" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#bfe9ff"/><stop offset="0.5" stop-color="#2563eb"/><stop offset="1" stop-color="#0b1030"/></radialGradient>
+    </defs>
+    <path d="M4 14h12l6 3h36l6-4h10v16H64l-6-4H22l-6 3H4Z" fill="url(#sc-tube)" stroke="#050506" stroke-width="1.4"/>
+    <path d="M6 15h10M24 18h32M66 14h8" stroke="#9aa0a8" stroke-width="1" opacity="0.7"/>
+    <rect x="34" y="7" width="10" height="10" rx="1.5" fill="url(#sc-tube)" stroke="#050506" stroke-width="1.2"/>
+    <path d="M36 8v8M39 8v8M42 8v8" stroke="#55595f" stroke-width="0.8"/>
+    <rect x="35" y="25" width="8" height="7" rx="1.5" fill="url(#sc-tube)" stroke="#050506" stroke-width="1.2"/>
+    <path d="M8 14v16M11 14v16" stroke="#15161a" stroke-width="1.2"/>
+    <ellipse cx="75" cy="21" rx="3" ry="7.5" fill="url(#sc-lens)" stroke="#050506"/>
+    <path d="M74.5 16c1 1 1 3 0 4" stroke="#fff" stroke-width="1" opacity="0.8"/>`,
   ],
   // A black hole with a Saturn ring: the back of the ring, the dark core with its glowing edge, then the front
   blackhole: [
@@ -259,73 +417,6 @@ const DECO = {
     <path d="M14 7c30-3 92-3 122 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
     <circle cx="45" cy="38" r="1.6" fill="#e0f2fe"/><circle cx="109" cy="36" r="1.4" fill="#e0f2fe"/>`,
   ],
-  // A football: white with black patches
-  ball: [
-    "0 0 40 40",
-    `<circle cx="20" cy="20" r="17" fill="#fafafa" stroke="#111" stroke-width="2.5"/>
-    <path d="M20 12l7 5-3 8h-8l-3-8Z" fill="#111"/>
-    <path d="M20 12V4M27 17l8-3M24 25l5 7M16 25l-5 7M13 17l-8-3" stroke="#111" stroke-width="1.8"/>
-    <path d="M14 4l6 3 6-3M35 12l-1 7 4 5M31 34l-5-3-6 3M9 34l5-3 0 0M5 12l1 7-4 5" fill="none" stroke="#111" stroke-width="1.6"/>
-    <path d="M10 9a14 14 0 0 1 9-5" fill="none" stroke="#fff" stroke-width="2" opacity="0.8"/>`,
-  ],
-  // A game controller with a d-pad and colored buttons
-  pad: [
-    "0 0 56 36",
-    `<path d="M14 5h28c8 0 12 8 13 18 1 8-3 12-8 12-4 0-6-4-9-8H18c-3 4-5 8-9 8-5 0-9-4-8-12C2 13 6 5 14 5Z" fill="#2a2333" stroke="#0e0b12" stroke-width="2.5" stroke-linejoin="round"/>
-    <path d="M14 8h28" stroke="#4a3f59" stroke-width="2"/>
-    <path d="M12 15h4v-4h4v4h4v4h-4v4h-4v-4h-4Z" fill="#0e0b12"/>
-    <circle cx="40" cy="12" r="2.4" fill="#facc15"/><circle cx="45" cy="17" r="2.4" fill="#ef4444"/>
-    <circle cx="35" cy="17" r="2.4" fill="#3b82f6"/><circle cx="40" cy="22" r="2.4" fill="#22c55e"/>
-    <circle cx="22" cy="25" r="3.2" fill="#0e0b12"/><circle cx="34" cy="25" r="3.2" fill="#0e0b12"/>`,
-  ],
-  // Gaming headphones arching over the top
-  headset: [
-    "0 0 150 70",
-    `<path d="M14 58C14 26 42 8 75 8s61 18 61 50" fill="none" stroke="#111114" stroke-width="10" stroke-linecap="round"/>
-    <path d="M22 52C24 28 46 14 75 14" fill="none" stroke="#53fc18" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-    <rect x="2" y="40" width="22" height="30" rx="7" fill="#1b1b1f" stroke="#0a0a0c" stroke-width="2.5"/>
-    <rect x="126" y="40" width="22" height="30" rx="7" fill="#1b1b1f" stroke="#0a0a0c" stroke-width="2.5"/>
-    <rect x="7" y="46" width="12" height="18" rx="4" fill="#53fc18"/>
-    <rect x="131" y="46" width="12" height="18" rx="4" fill="#53fc18"/>`,
-  ],
-  // A curved gold knife with a ring handle
-  knife: [
-    "0 0 48 48",
-    `<path d="M10 6c18 2 30 14 32 30-6-10-16-16-26-17Z" fill="#f5b70a" stroke="#4a3200" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M14 9c12 2 21 10 25 20" fill="none" stroke="#fff4c2" stroke-width="2" stroke-linecap="round"/>
-    <path d="M16 19l-6 13" stroke="#1d1d21" stroke-width="7" stroke-linecap="round"/>
-    <path d="M14 23l-3 6" stroke="#55555e" stroke-width="2"/>
-    <circle cx="8" cy="38" r="6" fill="none" stroke="#f5b70a" stroke-width="3"/>
-    <circle cx="8" cy="38" r="6" fill="none" stroke="#4a3200" stroke-width="1" />`,
-  ],
-  // A gaming mouse with a red stripe
-  mouse: [
-    "0 0 32 46",
-    `<path d="M16 3c8 0 13 7 13 18v8c0 9-6 14-13 14S3 38 3 29v-8C3 10 8 3 16 3Z" fill="#1d1d21" stroke="#0a0a0c" stroke-width="2.5"/>
-    <path d="M16 3v14M3 18h26" stroke="#0a0a0c" stroke-width="2"/>
-    <rect x="14" y="8" width="4" height="7" rx="2" fill="#ff4655"/>
-    <path d="M6 30c2 6 6 9 10 9s8-3 10-9" fill="none" stroke="#ff4655" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M7 8c2-2 4-3 6-3" fill="none" stroke="#55555e" stroke-width="1.5"/>`,
-  ],
-  // A grenade with its pin and ring
-  grenade: [
-    "0 0 40 48",
-    `<ellipse cx="18" cy="30" rx="13" ry="15" fill="#3f4a1f" stroke="#141708" stroke-width="2.5"/>
-    <path d="M8 24h20M6 32h24M8 40h20M14 16v28M22 16v28" stroke="#2c3415" stroke-width="2"/>
-    <rect x="12" y="10" width="12" height="7" rx="1.5" fill="#55555e" stroke="#141708" stroke-width="2"/>
-    <path d="M24 12h8l4 10" fill="none" stroke="#9ca3af" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="30" cy="6" r="5" fill="none" stroke="#fb923c" stroke-width="2.5"/>
-    <path d="M11 22c1-3 3-5 6-6" fill="none" stroke="#7a8a3a" stroke-width="2" stroke-linecap="round"/>`,
-  ],
-  // A sniper scope's view: ring, cross lines and range dots
-  scope: [
-    "0 0 44 44",
-    `<circle cx="22" cy="22" r="19" fill="rgba(10,12,16,0.75)" stroke="#cbd5e1" stroke-width="3"/>
-    <circle cx="22" cy="22" r="19" fill="none" stroke="#0a0a0c" stroke-width="1"/>
-    <path d="M22 5v12M22 27v12M5 22h12M27 22h12" stroke="#e5e7eb" stroke-width="1.6"/>
-    <circle cx="22" cy="22" r="1.8" fill="#ef4444"/>
-    <path d="M22 30v1M22 33v1M30 22h1M33 22h1M13 22h1M10 22h1" stroke="#e5e7eb" stroke-width="2"/>`,
-  ],
 };
 
 function decoration(name, spot) {
@@ -342,7 +433,7 @@ function decoration(name, spot) {
 function effects(fx) {
   const box = el("span", "mark-fx");
   box.setAttribute("aria-hidden", "true");
-  const count = fx === "bolt" ? 6 : 12;
+  const count = fx === "bolt" || fx === "ice" ? 6 : 12;
   for (let i = 0; i < count; i++) {
     const bit = el("i");
     bit.style.setProperty("--x", `${Math.round(Math.random() * 100)}%`);
@@ -351,6 +442,7 @@ function effects(fx) {
     bit.style.setProperty("--t", `${(1.6 + Math.random() * 2.4).toFixed(2)}s`);
     box.append(bit);
   }
+  if (fx === "ice") box.append(el("b", "ice-ring"), el("b", "ice-ring late"));
   if (fx === "bolt") {
     for (let i = 0; i < 2; i++) {
       const bolt = document.createElementNS("http://www.w3.org/2000/svg", "svg");
