@@ -14,7 +14,8 @@ function el(tag, className, text) {
 }
 
 // ---------- Streamers ----------
-// color: their glow; fx: the effect around their picture (frost, speed, bolt, glitch; spark for anyone else)
+// color: their glow; fx: the effect around their picture (frost, speed, bolt, glitch, gold, aim, cash, fire,
+// smoke, confetti; spark for anyone else)
 // picture: their channel picture, so it shows before the Worker answers (the Worker's newer one replaces it)
 const FEATURED = [
   {
@@ -48,6 +49,54 @@ const FEATURED = [
     color: "#53fc18",
     fx: "glitch",
     picture: "https://files.kick.com/images/user/676/profile_image/conversion/931b4e8f-5445-427c-bd82-b473530390cc-fullsize.webp",
+  },
+  {
+    platform: "twitch",
+    name: "ohnepixel",
+    label: "ohnePixel",
+    color: "#f5b70a",
+    fx: "gold",
+    picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/5742b015-e6ed-4f7c-a1dd-87cd88fe1eb9-profile_image-300x300.png",
+  },
+  {
+    platform: "twitch",
+    name: "tenz",
+    label: "TenZ",
+    color: "#ff4655",
+    fx: "aim",
+    picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/dfb5c790-5ea6-4543-bc2b-0f5f79b1f959-profile_image-300x300.png",
+  },
+  {
+    platform: "kick",
+    name: "adinross",
+    label: "Adin Ross",
+    color: "#4ade80",
+    fx: "cash",
+    picture: "https://files.kick.com/images/user/904404/profile_image/conversion/e344be03-aff2-4791-ae5a-22a9ac4cf89a-fullsize.webp",
+  },
+  {
+    platform: "twitch",
+    name: "jynxzi",
+    label: "Jynxzi",
+    color: "#fb923c",
+    fx: "fire",
+    picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/645d98a0-a2eb-48a3-b687-cfbc55243e4a-profile_image-300x300.png",
+  },
+  {
+    platform: "twitch",
+    name: "shroud",
+    label: "shroud",
+    color: "#cbd5e1",
+    fx: "smoke",
+    picture: "https://static-cdn.jtvnw.net/jtv_user_pictures/c754eebf-745b-4e0a-814a-10bcaecaabbc-profile_image-300x300.png",
+  },
+  {
+    platform: "youtube",
+    name: "@ludwig",
+    label: "Ludwig",
+    color: "#facc15",
+    fx: "confetti",
+    picture: "https://yt3.googleusercontent.com/ytc/AIdro_nBvD2_i9JPqMIZoH-3Pct438PAEd1d4rLEd1LCCLEEmKc=s900-c-k-c0x00ffffff-no-rj",
   },
 ];
 
@@ -156,6 +205,8 @@ function effects(fx) {
 }
 
 function setPicture(a, url) {
+  // YouTube pictures come 900px wide; ask for a small one
+  if (url) url = url.replace(/(googleusercontent\.com\/[^=]+)=s\d+/, "$1=s240");
   const art = a.querySelector(".mark-art");
   const old = art.querySelector("img");
   if (!url || (old && old.src === url)) return;
