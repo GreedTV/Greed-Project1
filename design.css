@@ -695,8 +695,7 @@ h1, h2, h3, .logo {
 .deco-mouse.at-br { width: 32px; }
 
 /* st0pcs: the editing timeline sits under his picture, not over it */
-.deco-timeline.at-bottom { width: 150px; transform: translate(-50%, 66px); }
-.stage-fig:has(.deco-timeline) .streamer-plate { margin-top: 46px; }
+.deco-timeline.at-bottom { width: 108px; transform: translate(-50%, 57px); }
 
 /* the editing timeline's playhead runs along it */
 .deco .playhead {
