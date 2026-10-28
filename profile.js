@@ -259,9 +259,7 @@ function renderMap() {
     const g = svg("g", { class: `map-spot${d.open ? "" : " locked"}${selectedPlace === d.id ? " selected" : ""}${trip && trip.dungeon === d.id ? " active" : ""}`, tabindex: 0, role: "button" });
     g.setAttribute("aria-label", d.open ? `${d.name}, level ${d.level}` : `${d.name}, unlocks at level ${d.level}`);
     g.append(svg("circle", { cx: x, cy: y, r: 30, class: "spot-ring" }));
-    const icon = svg("text", { x, y: y + 11, "text-anchor": "middle", "font-size": 30 });
-    icon.textContent = d.open ? d.emoji : "🔒";
-    g.append(icon);
+    g.append(mapIcon(d.open ? d.emoji : "🔒", x, y, 34));
     const label = svg("text", { x, y: y + 50, "text-anchor": "middle", class: "spot-label" });
     label.textContent = d.open ? d.name : `${d.name} · Lv ${d.level}`;
     g.append(label);
@@ -277,11 +275,26 @@ function renderMap() {
   // The adventurer's marker while away
   if (trip) {
     const { x, y } = MAP_SPOTS[trip.dungeon];
-    const flag = svg("text", { x: x + 26, y: y - 22, "font-size": 22, class: "trip-flag" });
-    flag.textContent = trip.done ? "🎁" : "🚩";
+    const flag = mapIcon(trip.done ? "🎁" : "🚩", x + 30, y - 30, 24);
+    flag.classList.add("trip-flag");
     root.append(flag);
   }
   map.replaceChildren(root);
+}
+
+// A map pin: the place's pixel art (icons.js), or the emoji as text if there's no drawing for it
+function mapIcon(emoji, x, y, size) {
+  const art = typeof SinnersIcons !== "undefined" && SinnersIcons.svg(emoji);
+  if (!art) {
+    const t = svg("text", { x, y: y + size / 3, "text-anchor": "middle", "font-size": size * 0.88 });
+    t.textContent = emoji;
+    return t;
+  }
+  art.setAttribute("x", x - size / 2);
+  art.setAttribute("y", y - size / 2);
+  art.style.width = art.style.height = `${size}px`; // map units (the .px size is for text)
+  art.classList.add("px-map-pin");
+  return art;
 }
 
 const powerOf = (s) => Math.round(s.atk + 0.8 * s.def + 0.25 * s.hp);

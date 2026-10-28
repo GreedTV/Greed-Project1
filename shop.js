@@ -190,7 +190,7 @@ function renderCosmetics() {
   const box = $("cosmetics");
   if (!cos) return box.replaceChildren(el("p", "shop-empty", "Cosmetics are unavailable right now."));
   const owned = new Set(cos.owned || []);
-  const labels = { hat: "🎩 Hats", cape: "🧣 Capes", pet: "🐾 Pets", color: "🎨 Name colors" };
+  const labels = { hat: "Hats", cape: "Capes", pet: "Pets", color: "Name colors" };
   box.replaceChildren(
     ...Object.entries(labels).flatMap(([kind, label]) => {
       const grid = el("div", "gear-grid");

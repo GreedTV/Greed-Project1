@@ -25,6 +25,7 @@ GitHub Pages serves each page without `.html` (e.g. `/watch`), and the site link
 
 - `config.js`: the Worker address (`WORKER_URL`)
 - `theme.js`: light / dark theme toggle, loaded in <head> on all pages
+- `icons.js`: pixel-art drawings that replace the game's emojis everywhere (bosses, monsters, places, potions, coins, medals, quests, cosmetics, reactions); the data still uses emojis and this swaps them as pages are built, skipping chat and inputs
 - `design.css`: the site's look, loaded after `styles.css` on every page (colors, type, header, footer, buttons, tabs, Home layout)
 - `script.js`: menu and scroll animations (all pages)
 - `auth.js`: Discord login and the menu's Log in / profile button (all pages)

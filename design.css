@@ -1143,3 +1143,248 @@ body:has(.legal) .page-hero .container {
 .profile-login .button {
   justify-content: center;
 }
+
+/* ---------- Pixel icons (icons.js): the game's emojis drawn as pixel art ---------- */
+.px {
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+  overflow: visible;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
+}
+
+.px.px-wide {
+  width: 1.35em;
+}
+
+/* Rare things catch the light even at text size */
+.px.fx-shine,
+.px.fx-twinkle {
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 2px color-mix(in srgb, var(--px-glow) 55%, transparent));
+}
+
+/* Showcase spots: big icons with their full effect */
+:is(.boss-emoji, .boss-strip-emoji, .fighter-emoji, .ach-emoji, .streak-big, .boss-icon, .px-show) .px {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+:is(.boss-emoji, .boss-strip-emoji, .fighter-emoji, .ach-emoji, .px-show) .px {
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px color-mix(in srgb, var(--px-glow) 70%, transparent));
+}
+
+:is(.boss-emoji, .boss-strip-emoji, .fighter-emoji, .px-show) .px.fx-boss {
+  animation: px-boss 3.2s ease-in-out infinite;
+}
+
+:is(.boss-emoji, .boss-strip-emoji, .fighter-emoji, .ach-emoji, .px-show) .px.fx-flicker,
+.streak-big .px.fx-flicker {
+  animation: px-flicker 1.4s steps(4) infinite;
+}
+
+:is(.fighter-emoji, .ach-emoji, .px-show, .wardrobe-panel, .buff-chip) .px.fx-bounce {
+  animation: px-bounce 1.6s ease-in-out infinite;
+}
+
+:is(.fighter-emoji, .ach-emoji, .px-show, .wardrobe-panel) .px.fx-float {
+  animation: px-float 2.6s ease-in-out infinite;
+}
+
+:is(.ach-emoji, .px-show, .buff-chip) .px.fx-bubble {
+  animation: px-bubble 2s ease-in-out infinite;
+}
+
+:is(.ach-emoji, .px-show) .px.fx-beat {
+  animation: px-beat 1.2s ease-in-out infinite;
+}
+
+:is(.ach-emoji, .px-show, .wardrobe-panel) .px.fx-twinkle {
+  animation: px-twinkle 2.4s ease-in-out infinite;
+}
+
+:is(.ach-emoji, .px-show) .px.fx-glow {
+  animation: px-glow 2.4s ease-in-out infinite;
+}
+
+:is(.ach-emoji, .px-show, .wardrobe-panel) .px.fx-wave {
+  transform-origin: 20% 100%;
+  animation: px-wave 1.8s ease-in-out infinite;
+}
+
+/* Locked achievements stay grey and still */
+.ach:not(.earned) .ach-emoji .px {
+  filter: grayscale(1) brightness(0.6);
+  animation: none;
+}
+
+/* The world boss: a pulsing aura and drifting embers behind it */
+.boss-emoji,
+.boss-strip-emoji {
+  position: relative;
+  isolation: isolate;
+}
+
+.boss-emoji::before,
+.boss-strip-emoji::before {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.35), transparent 65%);
+  animation: px-aura 3.2s ease-in-out infinite;
+}
+
+.boss-emoji::after {
+  content: "";
+  position: absolute;
+  inset: -10% 0 0;
+  z-index: -1;
+  background-image:
+    radial-gradient(2px 2px at 20% 80%, #f97316, transparent),
+    radial-gradient(2px 2px at 70% 90%, #facc15, transparent),
+    radial-gradient(1.5px 1.5px at 45% 70%, #ef4444, transparent),
+    radial-gradient(2px 2px at 85% 60%, #f97316, transparent),
+    radial-gradient(1.5px 1.5px at 10% 50%, #facc15, transparent);
+  animation: px-embers 2.8s linear infinite;
+}
+
+.boss-emoji.defeated .px {
+  filter: grayscale(1) brightness(0.55);
+  animation: none;
+}
+
+.boss-emoji.defeated::before,
+.boss-emoji.defeated::after {
+  display: none;
+}
+
+/* Map pins drawn with art */
+.map-spot .px-map-pin {
+  overflow: visible;
+}
+
+.map-spot:not(.locked):hover .px-map-pin,
+.map-spot.selected .px-map-pin {
+  filter: drop-shadow(0 0 3px var(--px-glow));
+}
+
+.map-spot.locked .px-map-pin {
+  filter: grayscale(0.4) brightness(0.8);
+}
+
+@keyframes px-boss {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4%) scale(1.04); }
+}
+
+@keyframes px-flicker {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px var(--px-glow)); }
+  25% { transform: scale(1.05, 0.97); filter: drop-shadow(0 0 8px var(--px-glow)); }
+  50% { transform: scale(0.97, 1.04); filter: drop-shadow(0 0 5px var(--px-glow)); }
+  75% { transform: scale(1.03, 0.98); filter: drop-shadow(0 0 9px var(--px-glow)); }
+}
+
+@keyframes px-bounce {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  40% { transform: translateY(-12%) scale(0.96, 1.05); }
+  60% { transform: translateY(0) scale(1.06, 0.94); }
+}
+
+@keyframes px-float {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-10%); opacity: 0.8; }
+}
+
+@keyframes px-bubble {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-6deg); }
+  75% { transform: rotate(6deg); }
+}
+
+@keyframes px-beat {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.14); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.1); }
+}
+
+@keyframes px-twinkle {
+  0%, 100% { filter: drop-shadow(0 0 2px var(--px-glow)); transform: rotate(0) scale(1); }
+  50% { filter: drop-shadow(0 0 9px var(--px-glow)); transform: rotate(8deg) scale(1.06); }
+}
+
+@keyframes px-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px var(--px-glow)); }
+  50% { filter: drop-shadow(0 0 8px var(--px-glow)); }
+}
+
+@keyframes px-wave {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(-8deg); }
+}
+
+@keyframes px-aura {
+  0%, 100% { opacity: 0.6; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes px-embers {
+  from { transform: translateY(10%); opacity: 1; }
+  to { transform: translateY(-35%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .px,
+  .boss-emoji::before,
+  .boss-emoji::after,
+  .boss-strip-emoji::before {
+    animation: none !important;
+  }
+}
+
+/* Watch party: reaction buttons and the reactions floating over the video */
+.party-react .px {
+  width: 1.3em;
+  height: 1.3em;
+  transition: transform 0.12s;
+}
+
+.party-react:hover .px {
+  transform: scale(1.2) rotate(-6deg);
+  filter: drop-shadow(0 0 5px var(--px-glow));
+}
+
+.float-emoji .px {
+  width: 1.4em;
+  height: 1.4em;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.6)) drop-shadow(0 0 8px var(--px-glow));
+}
+
+.home-side .boss-strip-emoji {
+  font-size: 2.6rem;
+  align-self: center;
+}
+
+.extra-icon {
+  font-size: 2rem;
+}
+
+.extra-icon .px {
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 0 5px color-mix(in srgb, var(--px-glow) 60%, transparent));
+}
+
+.extra-card:hover .extra-icon .px {
+  animation: px-bubble 1.4s ease-in-out infinite;
+}
+
+.shop-foot .button,
+.shop-price {
+  white-space: nowrap;
+}
+
+.shop-foot .button {
+  padding: 8px 12px;
+}
