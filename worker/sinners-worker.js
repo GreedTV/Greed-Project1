@@ -193,6 +193,7 @@ export default {
 
       if (path === "/youtube/channel" && request.method === "GET") return await youtubeChannel(url, cors);
       if (path === "/youtube/live" && request.method === "GET") return await youtubeLive(url, cors);
+      if (path === "/live" && request.method === "GET") return await liveStatus(url, env, cors);
       if (path === "/youtube/search" && request.method === "GET") return await youtubeSearch(url, cors);
 
       const shopImage = path.match(/^\/shop\/image\/(\d+)$/);
@@ -337,10 +338,16 @@ async function youtubeChannel(url, cors) {
 async function youtubeLive(url, cors) {
   const id = url.searchParams.get("channel") || "";
   if (!UC_ID.test(id)) fail("Unknown YouTube channel", 400);
-  // The channel's Live tab lists its streams; one that's on air carries a LIVE badge.
-  // (The /live page itself is a video page, which YouTube may not show to servers.)
+  const info = await youtubeLiveInfo(id);
+  if (!info) fail("Couldn't reach YouTube", 502);
+  return json(info, 200, { ...cors, "Cache-Control": "public, max-age=60" });
+}
+
+// The channel's Live tab lists its streams; one that's on air carries a LIVE badge.
+// (The /live page itself is a video page, which YouTube may not show to servers.)
+async function youtubeLiveInfo(id) {
   const html = await youtubePage(`/channel/${id}/streams`);
-  if (!html) fail("Couldn't reach YouTube", 502);
+  if (!html) return null;
 
   let videoId = null;
   let title = "";
@@ -362,11 +369,7 @@ async function youtubeLive(url, cors) {
   }
   const live = !!videoId;
   const name = (html.match(/<meta property="og:title" content="([^"]*)"/) || [])[1];
-  return json(
-    { live, videoId, title: live ? clean(decodeHtml(title), 120) : "", name: clean(decodeHtml(name || ""), 80) },
-    200,
-    { ...cors, "Cache-Control": "public, max-age=60" }
-  );
+  return { live, videoId, title: live ? clean(decodeHtml(title), 120) : "", name: clean(decodeHtml(name || ""), 80) };
 }
 
 // Search results for the Content page. The page's data sits in a "ytInitialData" JSON blob;
@@ -444,6 +447,78 @@ async function kickChannel(slug) {
     if (!res.ok) fail(`Kick didn't answer (${res.status}).`, 502);
     return res.json();
   });
+}
+
+// ---------- Live status (the streamers on the Home page) ----------
+// GET /live?ch=kick:name,twitch:name,youtube:@handle -> { "kick:name": { live, viewers, title, avatar }, ... }
+// Live status is checked at most every 90 seconds per channel, whoever asks; channel pictures once a day.
+
+const LIVE_CHECKS = {
+  async kick(slug) {
+    const res = await fetch(`https://kick.com/api/v2/channels/${slug.toLowerCase()}`, { headers: BROWSER_HEADERS });
+    if (!res.ok) return { live: false };
+    const ch = await res.json();
+    const ls = ch.livestream;
+    const avatar = (ch.user && ch.user.profile_pic) || "";
+    return ls ? { live: true, viewers: ls.viewer_count || 0, title: clean(ls.session_title, 120), avatar } : { live: false, avatar };
+  },
+  async twitch(login, env) {
+    const token = await twitchAppToken(env);
+    if (!token) return { live: false };
+    const headers = { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}` };
+    const name = encodeURIComponent(login.toLowerCase());
+    const [streams, avatar] = await Promise.all([
+      fetch(`https://api.twitch.tv/helix/streams?user_login=${name}`, { headers }).then((r) => (r.ok ? r.json() : {})),
+      cached(`av:twitch:${name}`, 86400000, async () => {
+        const res = await fetch(`https://api.twitch.tv/helix/users?login=${name}`, { headers });
+        return res.ok ? (((await res.json()).data || [])[0] || {}).profile_image_url || "" : "";
+      }),
+    ]);
+    const stream = (streams.data || [])[0];
+    return stream ? { live: true, viewers: stream.viewer_count || 0, title: clean(stream.title, 120), avatar } : { live: false, avatar };
+  },
+  async youtube(handle) {
+    const channel = await cached(`yt:${handle.toLowerCase()}`, 86400000, async () => {
+      const html = await youtubePage(UC_ID.test(handle) ? `/channel/${handle}` : `/@${encodeURIComponent(handle.replace(/^@/, ""))}`);
+      const found = channelFromPage(html);
+      if (found) found.avatar = (html.match(/<meta property="og:image" content="([^"]*)"/) || [])[1] || "";
+      return found;
+    });
+    if (!channel) return { live: false };
+    const info = await youtubeLiveInfo(channel.id);
+    return info && info.live ? { live: true, title: info.title, avatar: channel.avatar } : { live: false, avatar: channel.avatar };
+  },
+};
+
+let twitchApp = null; // { token, until }
+async function twitchAppToken(env) {
+  if (!env.TWITCH_CLIENT_ID || !env.TWITCH_CLIENT_SECRET) return null;
+  if (twitchApp && twitchApp.until > Date.now()) return twitchApp.token;
+  const res = await fetch("https://id.twitch.tv/oauth2/token", {
+    method: "POST",
+    body: new URLSearchParams({ client_id: env.TWITCH_CLIENT_ID, client_secret: env.TWITCH_CLIENT_SECRET, grant_type: "client_credentials" }),
+  });
+  if (!res.ok) return null;
+  const tok = await res.json();
+  twitchApp = { token: tok.access_token, until: Date.now() + (tok.expires_in - 300) * 1000 };
+  return twitchApp.token;
+}
+
+async function liveStatus(url, env, cors) {
+  const channels = String(url.searchParams.get("ch") || "").split(",").slice(0, 24);
+  const out = {};
+  await Promise.all(
+    channels.map(async (key) => {
+      const m = key.match(/^(kick|twitch|youtube):(@?[\w.-]{2,40})$/i);
+      if (!m) return;
+      try {
+        out[key] = await cached(`live:${key.toLowerCase()}`, 90000, () => LIVE_CHECKS[m[1].toLowerCase()](m[2], env));
+      } catch (e) {
+        out[key] = { live: false };
+      }
+    })
+  );
+  return json(out, 200, { ...cors, "Cache-Control": "public, max-age=60" });
 }
 
 async function kickChatInfo(slug, cors) {
