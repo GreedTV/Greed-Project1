@@ -234,18 +234,18 @@ document.getElementById("clear-queue").addEventListener("click", async () => {
 
 const API = WORKER_URL.replace(/\/$/, "");
 const CHIPS = [
-  ["🎮 Gaming", "gaming"],
-  ["🔴 Live now", "gaming", true],
-  ["🎬 Streamer highlights", "streamer highlights"],
-  ["🏆 Esports", "esports highlights"],
-  ["🔫 CS2", "cs2"],
-  ["🎯 Valorant", "valorant"],
-  ["⛏️ Minecraft", "minecraft"],
-  ["🚗 GTA", "gta"],
-  ["🎵 Music", "music mix"],
-  ["🎙️ Podcasts", "podcast"],
-  ["😂 Funny", "funny moments"],
-  ["⚽ Football", "football highlights"],
+  ["Gaming", "gaming"],
+  ["Live now", "gaming", true],
+  ["Streamer highlights", "streamer highlights"],
+  ["Esports", "esports highlights"],
+  ["CS2", "cs2"],
+  ["Valorant", "valorant"],
+  ["Minecraft", "minecraft"],
+  ["GTA", "gta"],
+  ["Music", "music mix"],
+  ["Podcasts", "podcast"],
+  ["Funny", "funny moments"],
+  ["Football", "football highlights"],
 ];
 
 const chipsBox = document.getElementById("yt-chips");

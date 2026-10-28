@@ -874,3 +874,272 @@ body:has(main .container.wide) .site-footer .container {
     padding: 0 10px;
   }
 }
+
+/* ---------- Leftover glows and gradients in shared UI (game items keep their rarity effects) ---------- */
+.button.danger {
+  background: #b91c1c;
+}
+
+.button.danger:hover {
+  background: #991b1b;
+}
+
+.button.twitch-btn {
+  background: #9146ff;
+}
+
+.button.twitch-btn:hover {
+  background: #7c3aed;
+}
+
+.discord-btn:hover {
+  box-shadow: none;
+  filter: brightness(0.92);
+}
+
+.xp-bar span {
+  background: var(--accent);
+}
+
+.live-banner {
+  box-shadow: none;
+}
+
+.bet-choice.mine {
+  box-shadow: inset 0 0 0 2px var(--c);
+}
+
+.browse-logo {
+  filter: none;
+}
+
+.boss-strip,
+.boss-strip.defeated,
+.cotw,
+.cotw-home {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid #b91c1c;
+  box-shadow: none;
+}
+
+.boss-strip.defeated,
+.cotw,
+.cotw-home {
+  border-left-color: #d97706;
+}
+
+.home-side .boss-strip,
+.home-side .cotw-home {
+  border: 0;
+  border-left: 3px solid #b91c1c;
+}
+
+.home-side .cotw-home {
+  border-top: 1px solid var(--border);
+  border-left-color: #d97706;
+}
+
+.queue-item.playing {
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ---------- Watch: chat panel, streamer list ---------- */
+.chat-head {
+  padding: 0;
+  gap: 0;
+}
+
+.chat-tabs {
+  gap: 0;
+  border-bottom: 0;
+}
+
+.chat-tab {
+  padding: 11px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+
+.chat-tab:hover {
+  color: var(--text);
+}
+
+.chat-tab.active {
+  background: none;
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.chat-stream {
+  margin: 8px 10px 0;
+  border-radius: 4px;
+}
+
+.tchat-foot .button {
+  padding: 8px 14px;
+}
+
+.streamer {
+  padding: 8px 10px;
+  border-radius: 4px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.streamer:hover {
+  transform: none;
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.streamer.selected {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.watch-toolbar h2 {
+  font-size: 1.35rem;
+}
+
+/* ---------- Content: YouTube browsing ---------- */
+.browse-head h2 {
+  font-size: 1.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.browse-logo {
+  width: 26px;
+  height: 26px;
+}
+
+.yt-chip {
+  padding: 5px 11px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.yt-chip:hover {
+  border-color: var(--border-strong);
+}
+
+.yt-chip.active {
+  color: var(--bg);
+  background: var(--text);
+  border-color: var(--text);
+}
+
+/* ---------- Games ---------- */
+.game-picker .game-tab-icon {
+  display: none;
+}
+
+.game-tab-title {
+  font-size: 1rem;
+}
+
+.points-bar {
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+/* ---------- Gallery tabs and share form ---------- */
+.tabs {
+  justify-content: flex-start;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  margin-bottom: -1px;
+  padding: 10px 16px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+
+.tab.active {
+  background: none;
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.share-form {
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+.share-form h3 {
+  font-size: 1.05rem;
+}
+
+input[type="text"],
+input[type="url"],
+input[type="search"],
+input[type="number"],
+input[type="password"],
+textarea,
+select {
+  border-radius: 4px;
+}
+
+/* ---------- Terms and Privacy: one reading column ---------- */
+body:has(.legal) .page-hero .container {
+  max-width: 760px;
+}
+
+.legal {
+  font-size: 0.97rem;
+  line-height: 1.7;
+}
+
+.legal h2 {
+  margin: 30px 0 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 1.2rem;
+}
+
+/* ---------- Panels (Profile, Games, Stats): a ruled header row ---------- */
+.side-box {
+  padding: 14px 16px;
+}
+
+.side-box h3 {
+  font-size: 1.1rem;
+}
+
+.side-box > .side-head {
+  margin: -14px -16px 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.side-box > .side-head h3 {
+  margin: 0;
+}
+
+.profile-login {
+  margin: 56px auto;
+  padding: 28px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.profile-login .hero-mini {
+  display: none;
+}
+
+.profile-login .button {
+  justify-content: center;
+}

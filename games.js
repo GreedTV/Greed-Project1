@@ -393,7 +393,7 @@ async function loadLeaderboard() {
   const g = GAMES[currentGame];
   const game = currentGame;
   if (g.bet) return loadRichest();
-  lbTitle.textContent = "🏆 Leaderboard";
+  lbTitle.textContent = "Leaderboard";
   lbHint.textContent = g.lowerIsBetter ? `${g.title}: lowest time wins.` : `${g.title}: highest score wins.`;
   lbList.replaceChildren(el("li", "lb-empty", "Loading…"));
   try {
@@ -429,7 +429,7 @@ async function loadLeaderboard() {
 }
 
 async function loadRichest() {
-  lbTitle.textContent = "🪙 Most points";
+  lbTitle.textContent = "Most points";
   lbHint.textContent = "Earn points by playing the other games.";
   try {
     const data = await (await fetch(`${API}/points/top`)).json();
