@@ -3052,8 +3052,11 @@ img {
   transform: none;
 }
 
+/* Less motion when the computer asks for it, except the streamers on the Home stage */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :not(.stage-scene, .stage-scene *),
+  :not(.stage-scene, .stage-scene *)::before,
+  :not(.stage-scene, .stage-scene *)::after {
     animation: none !important;
     transition: none !important;
   }

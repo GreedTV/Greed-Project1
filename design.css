@@ -1639,28 +1639,6 @@ h1, h2, h3, .logo {
   display: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .mark-art,
-  .deco,
-  .deco .playhead,
-  .fx-warp .mark-logo,
-  .stage-fig:hover .mark-logo,
-  .ice-ring,
-  .kill,
-  .cash-pop,
-  .deco-airdrop,
-  .fx-ice .mark-art::after,
-  .mark-shadow,
-  .mark-fx,
-  .streamer-live b::before {
-    animation: none;
-  }
-
-  .mark-fx {
-    display: none;
-  }
-}
-
 /* The world boss sits in the side column, top right */
 .home-side {
   position: sticky;
