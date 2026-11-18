@@ -677,6 +677,184 @@ $("hero-reroll").addEventListener("click", async () => {
   }
 });
 
+// ---------- Share card ----------
+// A 1200 x 630 picture of your adventurer (the size Discord and X show best) to download, copy or share.
+
+const svgImage = (node, w, h) =>
+  new Promise((resolve, reject) => {
+    const copy = node.cloneNode(true);
+    copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    copy.setAttribute("width", w);
+    copy.setAttribute("height", h);
+    copy.removeAttribute("class");
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(copy))}`;
+  });
+
+async function drawShareCard() {
+  const h = state.hero;
+  const W = 1200;
+  const H = 630;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const c = canvas.getContext("2d");
+  await Promise.all(["700 64px 'Barlow Semi Condensed'", "600 24px Inter", "700 28px Inter"].map((f) => document.fonts.load(f).catch(() => {})));
+  const cls = state.classes.find((x) => x.id === h.cls);
+  const accent = { warrior: "#f59e0b", rogue: "#22c55e", mage: "#a855f7" }[h.cls] || "#e0123c";
+
+  // Background: night, a glow in the class color, and a floor
+  const bg = c.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#120c18");
+  bg.addColorStop(1, "#07060a");
+  c.fillStyle = bg;
+  c.fillRect(0, 0, W, H);
+  const glow = c.createRadialGradient(300, 330, 20, 300, 330, 330);
+  glow.addColorStop(0, `${accent}55`);
+  glow.addColorStop(1, "transparent");
+  c.fillStyle = glow;
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = "rgba(255,255,255,0.03)";
+  for (let x = 0; x < W; x += 40) c.fillRect(x, 0, 1, H);
+  c.fillStyle = "#e0123c";
+  c.fillRect(0, 0, W, 8);
+
+  // The adventurer, big and crisp
+  c.imageSmoothingEnabled = false;
+  const sprite = await svgImage(heroSvg(h.look, wornMap(), h.style || {}), 320, 530);
+  c.fillStyle = "rgba(0,0,0,0.35)";
+  c.beginPath();
+  c.ellipse(300, 560, 150, 22, 0, 0, Math.PI * 2);
+  c.fill();
+  c.drawImage(sprite, 140, 40, 320, 530);
+
+  // Name, level and class
+  const x0 = 560;
+  c.fillStyle = "#ffffff";
+  c.font = "700 72px 'Barlow Semi Condensed', sans-serif";
+  let name = h.name;
+  while (c.measureText(name).width > W - x0 - 60 && name.length > 3) name = name.slice(0, -2);
+  c.fillText(name === h.name ? name : `${name}…`, x0, 140);
+  c.font = "700 30px Inter, sans-serif";
+  c.fillStyle = accent;
+  c.fillText(`Level ${h.level}${cls ? ` ${cls.name}` : " Adventurer"}`, x0, 190);
+
+  // Stats
+  const stats = [
+    ["ATTACK", h.stats.atk],
+    ["DEFENSE", h.stats.def],
+    ["HP", h.stats.hp],
+    ["POWER", h.power],
+  ];
+  stats.forEach(([label, value], i) => {
+    const x = x0 + i * 150;
+    c.fillStyle = "rgba(255,255,255,0.06)";
+    c.fillRect(x, 230, 136, 96);
+    c.fillStyle = accent;
+    c.fillRect(x, 230, 136, 4);
+    c.fillStyle = "#ffffff";
+    c.font = "700 44px 'Barlow Semi Condensed', sans-serif";
+    c.fillText(String(value), x + 16, 288);
+    c.fillStyle = "#a1a1aa";
+    c.font = "600 16px Inter, sans-serif";
+    c.fillText(label, x + 16, 314);
+  });
+
+  // Gear
+  const worn = SLOTS_ORDER.map((s) => wornMap()[s]).filter(Boolean);
+  if (worn.length) {
+    c.fillStyle = "#a1a1aa";
+    c.font = "600 16px Inter, sans-serif";
+    c.fillText("GEAR", x0, 370);
+    const icons = await Promise.all(worn.map((item) => svgImage(SinnersArt.gearIcon(item), 56, 56).catch(() => null)));
+    icons.forEach((img, i) => {
+      if (!img) return;
+      const x = x0 + i * 70;
+      c.fillStyle = "rgba(255,255,255,0.05)";
+      c.fillRect(x, 384, 62, 62);
+      c.strokeStyle = (RARITY[worn[i].rarity] || RARITY.common)[1];
+      c.lineWidth = 2;
+      c.strokeRect(x + 1, 385, 60, 60);
+      c.drawImage(img, x + 3, 387, 56, 56);
+      if (worn[i].plus) {
+        c.fillStyle = "#fbbf24";
+        c.font = "800 14px Inter, sans-serif";
+        c.fillText(`+${worn[i].plus}`, x + 36, 442);
+      }
+    });
+  }
+
+  // Record
+  c.fillStyle = "#d4d4d8";
+  c.font = "600 22px Inter, sans-serif";
+  c.fillText(`${h.wins} dungeon floors won  ·  Arena rating ${h.rating}`, x0, 500);
+
+  // Brand
+  c.fillStyle = "#e0123c";
+  c.fillRect(x0, 545, 44, 44);
+  c.fillStyle = "#ffffff";
+  c.font = "800 30px 'Barlow Semi Condensed', sans-serif";
+  c.fillText("S", x0 + 13, 578);
+  c.fillText("SINNERS", x0 + 58, 578);
+  c.fillStyle = "#a1a1aa";
+  c.font = "600 20px Inter, sans-serif";
+  c.fillText("sinnerstv.com", x0 + 190, 576);
+  return canvas;
+}
+
+const SLOTS_ORDER = ["weapon", "shield", "helmet", "chest", "gloves", "legs", "shoes", "ring"];
+
+async function openShareCard() {
+  const canvas = await drawShareCard();
+  const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
+  const file = new File([blob], `sinners-${state.hero.name.replace(/[^\w-]+/g, "") || "adventurer"}.png`, { type: "image/png" });
+  const box = el("div", "share-card-box");
+  const preview = el("img", "share-preview");
+  preview.src = canvas.toDataURL("image/png");
+  preview.alt = `${state.hero.name}'s adventurer card`;
+  const msg = el("p", "hint share-msg", "Post it on Discord, X or anywhere. It shows your adventurer, gear and stats.");
+  const row = el("div", "share-actions");
+  const download = el("a", "button", "⬇️ Download");
+  download.href = preview.src;
+  download.download = file.name;
+  row.append(download);
+  if (navigator.clipboard && window.ClipboardItem) {
+    const copy = el("button", "button ghost", "📋 Copy image");
+    copy.type = "button";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        msg.textContent = "Copied! Paste it in Discord with Ctrl+V.";
+      } catch (e) {
+        msg.textContent = "Your browser didn't allow copying. Use Download instead.";
+      }
+    });
+    row.append(copy);
+  }
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    const share = el("button", "button ghost", "📤 Share");
+    share.type = "button";
+    share.addEventListener("click", () => navigator.share({ files: [file], title: "My Sinners adventurer", text: "sinnerstv.com" }).catch(() => {}));
+    row.append(share);
+  }
+  box.append(preview, row, msg);
+  await SinnersDialog.alert(box, { title: "Your adventurer card", icon: "📤", wide: true });
+}
+
+$("hero-share").addEventListener("click", async (e) => {
+  const b = e.currentTarget;
+  b.disabled = true;
+  try {
+    await openShareCard();
+  } catch (err) {
+    showResult(`⚠️ Couldn't make the card: ${err.message}`);
+  } finally {
+    b.disabled = false;
+  }
+});
+
 // ---------- Battle scene ----------
 // Plays a fight log from the Worker turn by turn: lunges, hits, criticals, dodges, skills with their
 // own effects (Fireball, Arcane Surge, Cleave, poison, Last Stand), then victory with the loot or defeat.

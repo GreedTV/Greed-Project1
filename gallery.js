@@ -53,6 +53,7 @@ async function load() {
     items = { image: data.images || [], clip: data.clips || [] };
     renderImages();
     renderClips();
+    openFromLink();
   } catch (err) {
     setStatus("image", "The gallery couldn't be loaded right now. Try again later.");
     setStatus("clip", "The gallery couldn't be loaded right now. Try again later.");
@@ -185,18 +186,35 @@ async function loadVotes() {
 }
 
 // ---------- Viewer ----------
+// Full screen with a counter, thumbnails, swipe and arrow keys, zoom for images, and a link to each
+// item (#view=<id>) that opens it straight away.
+
+const counter = document.getElementById("lightbox-count");
+const strip = document.getElementById("lightbox-strip");
+const zoomBtn = document.getElementById("lightbox-zoom");
+const openLink = document.getElementById("lightbox-open");
+let lastFocus = null;
 
 function open(kind, index) {
   current = { kind, index };
+  lastFocus = document.activeElement;
+  renderStrip();
   show();
   lightbox.classList.add("open");
   lightbox.setAttribute("aria-hidden", "false");
+  document.documentElement.classList.add("lightbox-on");
+  lightbox.querySelector(".close").focus();
 }
 
 function close() {
-  lightbox.classList.remove("open");
+  if (!lightbox.classList.contains("open")) return;
+  lightbox.classList.remove("open", "zoomed");
   lightbox.setAttribute("aria-hidden", "true");
+  document.documentElement.classList.remove("lightbox-on");
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   clearMedia();
+  if (location.hash.startsWith("#view=")) history.replaceState(null, "", location.pathname + location.search);
+  if (lastFocus && lastFocus.isConnected) lastFocus.focus();
 }
 
 function clearMedia() {
@@ -207,14 +225,50 @@ function clearMedia() {
 
 function step(delta) {
   const list = items[current.kind];
+  if (list.length < 2) return;
   current.index = (current.index + delta + list.length) % list.length;
   show();
 }
 
+function renderStrip() {
+  const list = items[current.kind];
+  strip.hidden = list.length < 2;
+  strip.replaceChildren(
+    ...list.map((item, i) => {
+      const b = el("button", "strip-thumb");
+      b.type = "button";
+      b.setAttribute("aria-label", item.title || `${cap(current.kind)} ${i + 1}`);
+      const src = item.kind === "image" ? item.url : item.thumb;
+      if (src) {
+        const img = el("img");
+        img.src = src;
+        img.alt = "";
+        img.loading = "lazy";
+        img.referrerPolicy = "no-referrer";
+        b.append(img);
+      } else b.append(el("span", null, "▶"));
+      b.addEventListener("click", () => {
+        current.index = i;
+        show();
+      });
+      return b;
+    })
+  );
+}
+
 function show() {
   clearMedia();
-  const item = items[current.kind][current.index];
+  lightbox.classList.remove("zoomed");
+  const list = items[current.kind];
+  const item = list[current.index];
   if (!item) return;
+  counter.textContent = `${current.index + 1} / ${list.length}`;
+  [...strip.children].forEach((t, i) => t.classList.toggle("on", i === current.index));
+  const on = strip.children[current.index];
+  if (on) on.scrollIntoView({ block: "nearest", inline: "center" });
+  if (item.id) history.replaceState(null, "", `${location.pathname}${location.search}#view=${item.id}`);
+  zoomBtn.hidden = item.kind !== "image";
+  openLink.href = item.kind === "image" ? item.url : item.link;
   const by = byLine(item);
   caption.textContent = [item.title, by].filter(Boolean).join(" — ");
 
@@ -223,7 +277,13 @@ function show() {
     img.src = item.url;
     img.alt = item.title || "Shared image";
     img.referrerPolicy = "no-referrer";
+    img.addEventListener("click", toggleZoom);
     media.append(img);
+    // Have the next and previous ones ready
+    [1, -1].forEach((d) => {
+      const next = list[(current.index + d + list.length) % list.length];
+      if (next && next.kind === "image") new Image().src = next.url;
+    });
     return;
   }
 
@@ -250,6 +310,68 @@ function show() {
     media.append(frame);
   }
   caption.append(" ", link);
+}
+
+// Zoom: 2x, and the picture follows the mouse (or finger) around
+function toggleZoom(e) {
+  const img = media.querySelector("img");
+  if (!img) return;
+  const zoomed = lightbox.classList.toggle("zoomed");
+  if (zoomed && e && e.clientX != null) panTo(e);
+  else img.style.transformOrigin = "";
+}
+
+function panTo(e) {
+  const img = media.querySelector("img");
+  if (!img || !lightbox.classList.contains("zoomed")) return;
+  const r = img.getBoundingClientRect();
+  img.style.transformOrigin = `${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`;
+}
+
+media.addEventListener("pointermove", panTo);
+
+// Swipe left / right to move, down to close (not while zoomed)
+let swipe = null;
+media.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "mouse" || lightbox.classList.contains("zoomed")) return;
+  swipe = { x: e.clientX, y: e.clientY };
+});
+media.addEventListener("pointerup", (e) => {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x;
+  const dy = e.clientY - swipe.y;
+  swipe = null;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) step(dx < 0 ? 1 : -1);
+  else if (dy > 90 && Math.abs(dy) > Math.abs(dx)) close();
+});
+
+zoomBtn.addEventListener("click", () => toggleZoom());
+document.getElementById("lightbox-full").addEventListener("click", () => {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else lightbox.requestFullscreen && lightbox.requestFullscreen().catch(() => {});
+});
+document.getElementById("lightbox-link").addEventListener("click", async (e) => {
+  const b = e.currentTarget;
+  try {
+    await navigator.clipboard.writeText(location.href);
+    b.textContent = "✓";
+  } catch (err) {
+    b.textContent = "✕";
+  }
+  setTimeout(() => (b.textContent = "🔗"), 1500);
+});
+
+// A link to one item (#view=<id>): open it once the gallery has loaded
+function openFromLink() {
+  const id = location.hash.startsWith("#view=") ? location.hash.slice(6) : "";
+  if (!id) return;
+  for (const kind of ["image", "clip"]) {
+    const index = items[kind].findIndex((i) => i.id === id);
+    if (index >= 0) {
+      showTab(kind === "image" ? "images" : "clips");
+      return open(kind, index);
+    }
+  }
 }
 
 let hlsLoading;
@@ -285,14 +407,20 @@ lightbox.addEventListener("click", (e) => {
 });
 function onKey(e) {
   if (!lightbox.classList.contains("open")) return;
-  if (e.key === "Escape") close();
+  if (e.key === "Escape") {
+    if (lightbox.classList.contains("zoomed")) return toggleZoom();
+    if (!document.fullscreenElement) close();
+  }
   if (e.key === "ArrowLeft") step(-1);
   if (e.key === "ArrowRight") step(1);
+  if (e.key.toLowerCase() === "z") toggleZoom();
+  if (e.key.toLowerCase() === "f") document.getElementById("lightbox-full").click();
 }
 document.addEventListener("keydown", onKey);
 // In-site navigation (nav.js): stop listening when this page closes
 SinnersNav.onLeave(() => {
   document.removeEventListener("keydown", onKey);
+  document.documentElement.classList.remove("lightbox-on");
   clearMedia();
 });
 

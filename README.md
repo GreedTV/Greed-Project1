@@ -109,4 +109,7 @@ Platform icons in `icons/` (and inlined on the home page) are from [Simple Icons
 - **Quick search** (`palette.js`): Ctrl+K / ⌘K, "/" or the ⌕ button in the header. Jump to any page or Profile section, type a name to watch it on Kick / Twitch / YouTube, switch the theme, log in or out.
 - **Installable app** (`manifest.webmanifest`, `sw.js`): the service worker only shows a friendly page when offline; nothing is cached, so updates show at once.
 - **404 page** (`404.html`, served by GitHub Pages for unknown addresses), `robots.txt`, `sitemap.xml` and a canonical link on every page.
+- **Notification bell** (`notify.js`): streamers you follow (🔔 on Watch, your Home squad) going live, plus, when logged in, a dungeon floor ready or won, skill points or a class to pick, the daily streak and finished quests, and world boss rewards. Checked every 2 minutes; opening the bell marks them seen.
+- **Adventurer card** (Profile → 📤 Share): a 1200 x 630 picture of your adventurer, class, stats and gear to download, copy or share.
+- **Gallery viewer:** counter, thumbnail strip, swipe, zoom (Z), full screen (F), a link to each item (`/gallery#view=<id>`) and the original.
 - **Accessibility:** "Skip to content" link, visible keyboard focus, and a loading bar at the top while the next page loads (`nav.js`).

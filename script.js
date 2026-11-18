@@ -42,18 +42,18 @@ if (!document.querySelector(".ambient")) {
 
 // Sinners-styled pop-ups in place of the browser's confirm() / alert() boxes.
 //   await SinnersDialog.confirm("Text", { title, yes, no, icon, danger })  -> true / false
-//   await SinnersDialog.alert("Text", { title, icon })
+//   await SinnersDialog.alert("Text", { title, icon })     the message can also be an element; { wide: true } for big content
 const SinnersDialog = (() => {
   let open = null;
 
-  function show(message, { title = "", yes = "Yes", no = "Cancel", icon = "", danger = false, alertOnly = false } = {}) {
+  function show(message, { title = "", yes = "Yes", no = "Cancel", icon = "", danger = false, alertOnly = false, wide = false } = {}) {
     if (open) open(false); // only one at a time
     return new Promise((resolve) => {
       const lastFocus = document.activeElement;
       const overlay = document.createElement("div");
       overlay.className = "dialog-overlay";
       const box = document.createElement("div");
-      box.className = "dialog-box";
+      box.className = "dialog-box" + (wide ? " wide" : "");
       box.setAttribute("role", alertOnly ? "alertdialog" : "dialog");
       box.setAttribute("aria-modal", "true");
       if (icon) box.append(Object.assign(document.createElement("div"), { className: "dialog-icon", textContent: icon }));
@@ -62,7 +62,7 @@ const SinnersDialog = (() => {
         box.setAttribute("aria-labelledby", "dialog-title");
         box.append(h);
       }
-      box.append(Object.assign(document.createElement("p"), { className: "dialog-text", textContent: message }));
+      box.append(message instanceof Node ? message : Object.assign(document.createElement("p"), { className: "dialog-text", textContent: message }));
       const actions = document.createElement("div");
       actions.className = "dialog-actions";
       const ok = Object.assign(document.createElement("button"), { type: "button", className: "button" + (danger ? " danger" : ""), textContent: alertOnly ? "OK" : yes });
@@ -91,7 +91,7 @@ const SinnersDialog = (() => {
           close(false);
         } else if (e.key === "Tab") {
           // keep focus inside the dialog
-          const buttons = [...actions.querySelectorAll("button")];
+          const buttons = [...box.querySelectorAll("button, a[href]")];
           const i = buttons.indexOf(document.activeElement);
           e.preventDefault();
           buttons[(i + (e.shiftKey ? -1 : 1) + buttons.length) % buttons.length].focus();
