@@ -4,11 +4,13 @@
 // The header, footer and shared scripts stay. Each page's own script (watch.js, content.js, ...)
 // is loaded as a module when its page opens. A page whose player is in the mini player isn't
 // thrown away when you leave it: it's "parked" (hidden, still running) so the mini player keeps
-// going, and coming back to it shows it exactly as it was.
+// going, and coming back to it shows it exactly as it was. Several pages can be parked at once
+// (a YouTube video from Content and a stream from Watch, each in its own mini player).
 //
 // Page scripts can use:
-//   SinnersNav.onLeave(fn)   run fn when the page is closed (stop timers, players, listeners)
-//   SinnersNav.onReturn(fn)  run fn(url) when a parked page is opened again
+//   SinnersNav.beforeLeave(fn)  run fn just before the page is left (e.g. shrink a playing video to the mini player)
+//   SinnersNav.onLeave(fn)      run fn when the page is closed (stop timers, players, listeners)
+//   SinnersNav.onReturn(fn)     run fn(url) when a parked page is opened again
 
 const SinnersNav = (() => {
   // The site version from this file's own address (nav.js?v=...), so page scripts load the same version
@@ -35,11 +37,11 @@ const SinnersNav = (() => {
   }
 
   function makePage(main, url, title) {
-    return { name: pageName(url), url, main, title, leave: [], returns: [] };
+    return { name: pageName(url), url, main, title, before: [], leave: [], returns: [] };
   }
 
   let current = makePage(document.querySelector("main"), location.href, document.title);
-  let parked = null;
+  const parked = new Map(); // page name -> parked page
   let loads = 0;
   let busy = false;
 
@@ -57,7 +59,7 @@ const SinnersNav = (() => {
   function park(page) {
     page.main.classList.add("page-parked");
     page.main.setAttribute("aria-hidden", "true");
-    parked = page;
+    parked.set(page.name, page);
   }
 
   async function loadScript(page) {
@@ -95,10 +97,10 @@ const SinnersNav = (() => {
       let next;
       let returning = false;
 
-      if (parked && parked.name === name) {
-        // Back to the page that's playing in the mini player
-        next = parked;
-        parked = null;
+      if (parked.has(name)) {
+        // Back to a page that's playing in the mini player
+        next = parked.get(name);
+        parked.delete(name);
         returning = true;
       } else {
         const res = await fetch(cleanPath(target.pathname) + target.search, { cache: "no-cache" });
@@ -111,8 +113,12 @@ const SinnersNav = (() => {
       }
 
       // Leave the current page: park it if its player is floating, otherwise close it
+      leaving.before.forEach((fn) => {
+        try {
+          fn(target);
+        } catch (e) {}
+      });
       if (hasMini(leaving)) {
-        if (parked) destroy(parked);
         park(leaving);
       } else {
         destroy(leaving);
@@ -178,12 +184,13 @@ const SinnersNav = (() => {
 
   window.addEventListener("popstate", () => go(location.href, { push: false }));
 
-  // The mini player was closed while its page was parked: that page can go now
+  // A mini player was closed while its page was parked: that page can go now
   document.addEventListener("sinners:mini-closed", () => {
-    if (parked && !hasMini(parked)) {
-      destroy(parked);
-      parked = null;
-    }
+    parked.forEach((page, name) => {
+      if (hasMini(page)) return;
+      destroy(page);
+      parked.delete(name);
+    });
   });
 
   // Start the first page's script
@@ -191,8 +198,12 @@ const SinnersNav = (() => {
 
   return {
     go,
+    beforeLeave: (fn) => current.before.push(fn),
     onLeave: (fn) => current.leave.push(fn),
     onReturn: (fn) => current.returns.push(fn),
-    goToParked: () => parked && go(parked.url),
+    // Open the parked page that holds this element (its mini player's "back to the page" button)
+    goToParked: (node) => {
+      for (const page of parked.values()) if (!node || page.main.contains(node)) return go(page.url);
+    },
   };
 })();

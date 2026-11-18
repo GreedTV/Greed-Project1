@@ -83,6 +83,18 @@ function makeMinimizable(box, { title = () => "", onClose = () => {} } = {}) {
     } catch (e) {}
     if (saved && Number.isFinite(saved.left)) place(saved.left, saved.top);
     else place(window.innerWidth, window.innerHeight);
+    // Another mini player already there (a video and a stream at once): stack this one above it
+    const others = [...document.querySelectorAll(".player-box.mini")].filter((b) => b !== box);
+    for (let tries = 0; tries < others.length; tries++) {
+      const me = box.getBoundingClientRect();
+      const hit = others.find((b) => {
+        const r = b.getBoundingClientRect();
+        return me.left < r.right && r.left < me.right && me.top < r.bottom && r.top < me.bottom;
+      });
+      if (!hit) break;
+      const [left] = pos();
+      place(left, hit.getBoundingClientRect().top - box.offsetHeight - 12);
+    }
   }
 
   function restore() {
@@ -122,7 +134,7 @@ function makeMinimizable(box, { title = () => "", onClose = () => {} } = {}) {
   window.addEventListener("resize", () => box.classList.contains("mini") && place(...pos()));
   // On another section of the site, "back to the page" means going back to that page
   restoreBtn.addEventListener("click", () => {
-    if (box.closest(".page-parked") && typeof SinnersNav !== "undefined") SinnersNav.goToParked();
+    if (box.closest(".page-parked") && typeof SinnersNav !== "undefined") SinnersNav.goToParked(box);
     else restore();
   });
   closeBtn.addEventListener("click", () => {

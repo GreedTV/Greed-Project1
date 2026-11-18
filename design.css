@@ -2818,3 +2818,12 @@ body:has(.legal) .page-hero .container {
 @keyframes gear-ember {
   50% { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 7px rgba(239, 68, 68, 0.75)); }
 }
+
+/* Content: the mini player button says what it does */
+.icon-action.mini-action {
+  width: auto;
+  padding: 0 12px;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}

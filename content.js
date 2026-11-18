@@ -140,10 +140,15 @@ function step(delta) {
 document.getElementById("prev").addEventListener("click", () => step(-1));
 document.getElementById("next").addEventListener("click", () => step(1));
 
-// Mini player: keep watching in a small floating window while scrolling the page
+// Mini player: keep watching in a small floating window while scrolling the page or watching streams
 const mini = makeMinimizable(playerBox, {
   title: () => (queue[current] ? queue[current].title : "Sinners"),
   onClose: () => player && player.pauseVideo(),
+});
+// Leaving the page while a video plays: it carries on in the mini player (like YouTube)
+SinnersNav.beforeLeave(() => {
+  const playing = player && typeof player.getPlayerState === "function" && [1, 3].includes(player.getPlayerState());
+  if (playing && !mini.isMini()) mini.minimize();
 });
 document.getElementById("mini").addEventListener("click", () => {
   if (!queue[current]) return;
