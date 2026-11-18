@@ -3723,12 +3723,12 @@ const BOT_COMMANDS = [
         name: "add",
         description: "Add a streamer (or change one you added)",
         options: [
-          { type: 3, name: "streamer", description: "Their name or channel link (kick.com/…, twitch.tv/…, youtube.com/@…)", required: true, max_length: 200 },
+          { type: 3, name: "streamer", description: "Their stream's channel link: kick.com/…, twitch.tv/… or youtube.com/@… (or just their name)", required: true, max_length: 300 },
           { type: 7, name: "channel", description: "Where to post (this channel if empty)", channel_types: [0, 5] },
           {
             type: 3,
             name: "platform",
-            description: "Kick, Twitch or YouTube (not needed with a link)",
+            description: "Only if you typed just a name: where they stream (not needed with a link)",
             choices: [{ name: "Kick", value: "kick" }, { name: "Twitch", value: "twitch" }, { name: "YouTube", value: "youtube" }],
           },
           { type: 3, name: "message", description: "Your text. Use {streamer} {title} {game} {link} {platform}", max_length: 500 },
@@ -3737,7 +3737,7 @@ const BOT_COMMANDS = [
           { type: 8, name: "ping", description: "A role to ping when they go live" },
           { type: 3, name: "tiktok", description: "Their TikTok (@name or link) as an extra button; none to remove", max_length: 200 },
           { type: 3, name: "instagram", description: "Their Instagram (@name or link) as an extra button; none to remove", max_length: 200 },
-          { type: 3, name: "youtube", description: "Their YouTube channel (@name or link) as an extra button; none to remove", max_length: 200 },
+          { type: 3, name: "youtube", description: "Extra button to their YouTube videos channel (@name or link); none to remove", max_length: 200 },
         ],
       },
       { type: 1, name: "list", description: "This server's live alerts" },
@@ -4558,13 +4558,32 @@ function socialLink(kind, text) {
   return site.url(handle);
 }
 
-// "kick.com/name", "twitch.tv/name", "youtube.com/@name" (or /channel/UC…), or a plain name
+// What was typed: a channel link (Kick, Twitch, any YouTube channel or video link) or a plain name
+// -> { platform, name, link?, lookup? }  (lookup: a YouTube page that shows whose channel it is)
 function liveTarget(text, platform) {
-  text = String(text || "").trim();
-  const link = text.match(/(kick\.com|twitch\.tv|youtube\.com)\/(@[\w.-]+|channel\/UC[\w-]{22}|[\w.-]+)/i);
-  if (link) {
-    platform = { "kick.com": "kick", "twitch.tv": "twitch", "youtube.com": "youtube" }[link[1].toLowerCase()];
-    text = link[2].replace(/^channel\//, "");
+  text = String(text || "").trim().replace(/^<|>$/g, "");
+  let url = null;
+  if (/^(https?:\/\/)?([\w-]+\.)*(kick\.com|twitch\.tv|youtube\.com|youtu\.be)\//i.test(text)) {
+    try {
+      url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    } catch (e) {}
+  }
+  if (url) {
+    const host = url.hostname.replace(/^(www|m|music)\./, "");
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (host === "kick.com" || host === "twitch.tv") {
+      const name = (parts[0] || "").toLowerCase();
+      return /^[\w.-]{2,40}$/.test(name) ? { platform: host === "kick.com" ? "kick" : "twitch", name, link: true } : null;
+    }
+    if (host === "youtu.be" && parts[0]) return { platform: "youtube", lookup: `/watch?v=${encodeURIComponent(parts[0])}`, link: true };
+    if (host === "youtube.com") {
+      if (parts[0] === "watch" && url.searchParams.get("v")) return { platform: "youtube", lookup: `/watch?v=${encodeURIComponent(url.searchParams.get("v"))}`, link: true };
+      if ((parts[0] === "live" || parts[0] === "shorts") && parts[1]) return { platform: "youtube", lookup: `/watch?v=${encodeURIComponent(parts[1])}`, link: true };
+      if (parts[0] === "channel" && UC_ID.test(parts[1] || "")) return { platform: "youtube", name: parts[1], link: true };
+      if ((parts[0] === "c" || parts[0] === "user") && parts[1]) return { platform: "youtube", lookup: `/${parts[0]}/${encodeURIComponent(parts[1])}`, link: true };
+      if (parts[0] && /^@?[\w.-]{2,40}$/.test(parts[0])) return { platform: "youtube", name: parts[0].startsWith("@") ? parts[0] : `@${parts[0]}`, link: true };
+    }
+    return null;
   }
   if (platform === "youtube" && !text.startsWith("@") && !UC_ID.test(text)) text = `@${text.replace(/\s+/g, "")}`;
   if (platform && platform !== "youtube") text = text.replace(/^@/, "").toLowerCase();
@@ -4572,32 +4591,48 @@ function liveTarget(text, platform) {
   return { platform: platform || null, name: platform ? text : text.replace(/^@/, "") };
 }
 
-// Does this channel exist? Returns { platform, name, label } (tries Twitch, Kick, then YouTube without a platform)
+// Finds the channel: { platform, name, label } or null. Without a platform it tries Twitch, Kick, then YouTube.
+// A Kick or Twitch link is accepted even when the site can't be asked right now (only a clear "no such
+// channel" turns it down).
 async function findStreamer(env, target) {
   const tries = target.platform ? [target.platform] : ["twitch", "kick", "youtube"];
   for (const platform of tries) {
-    const name = platform === "youtube" ? (target.name.startsWith("@") || UC_ID.test(target.name) ? target.name : `@${target.name}`) : target.name.replace(/^@/, "").toLowerCase();
+    let missing = false;
+    const name =
+      platform === "youtube"
+        ? target.name && (target.name.startsWith("@") || UC_ID.test(target.name)) ? target.name : `@${target.name || ""}`
+        : String(target.name || "").replace(/^@/, "").toLowerCase();
     try {
       if (platform === "kick") {
-        const res = await fetch(`https://kick.com/api/v2/channels/${name}`, { headers: BROWSER_HEADERS });
+        const res = await fetch(`https://kick.com/api/v2/channels/${encodeURIComponent(name)}`, { headers: BROWSER_HEADERS });
         if (res.ok) {
           const ch = await res.json();
           return { platform, name, label: (ch.user && ch.user.username) || name };
         }
+        missing = res.status === 404;
       } else if (platform === "twitch") {
         const token = await twitchAppToken(env);
-        if (!token) continue;
-        const res = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(name)}`, {
-          headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}` },
-        });
-        const user = res.ok ? ((await res.json()).data || [])[0] : null;
-        if (user) return { platform, name, label: user.display_name || name };
+        if (token) {
+          const res = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(name)}`, {
+            headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}` },
+          });
+          const data = res.ok ? (await res.json()).data || [] : null;
+          if (data && data[0]) return { platform, name, label: data[0].display_name || name };
+          missing = !!data;
+        }
       } else {
-        const html = await youtubePage(UC_ID.test(name) ? `/channel/${name}` : `/${encodeURIComponent(name).replace("%40", "@")}`);
-        const found = channelFromPage(html);
-        if (found) return { platform, name, label: found.name || name.replace(/^@/, "") };
+        let page = target.lookup || (UC_ID.test(name) ? `/channel/${name}` : `/${encodeURIComponent(name).replace("%40", "@")}`);
+        // A video link: find whose video it is, then open their channel
+        if (page.startsWith("/watch")) {
+          const owner = ((await youtubePage(page)) || "").match(/"(?:channelId|externalChannelId)":"(UC[\w-]{22})"/);
+          page = owner ? `/channel/${owner[1]}` : "";
+        }
+        const found = page ? channelFromPage(await youtubePage(page)) : null;
+        if (found) return { platform, name: target.lookup ? found.id : name, label: found.name || name.replace(/^@/, "") };
+        missing = true;
       }
     } catch (e) {}
+    if (target.link && !missing && platform !== "youtube") return { platform, name, label: name };
   }
   return null;
 }
@@ -4799,9 +4834,9 @@ async function liveCommand(interaction, env, origin) {
 
   // add
   const target = liveTarget(opt("streamer"), opt("platform"));
-  if (!target) return botReply("Give me a streamer name or a channel link (kick.com/…, twitch.tv/…, youtube.com/@…).", { ephemeral: true });
+  if (!target) return botReply("Give me their stream's channel link (kick.com/…, twitch.tv/…, youtube.com/@…) or just their name.", { ephemeral: true });
   const found = await findStreamer(env, target);
-  if (!found) return botReply(`I couldn't find **${opt("streamer")}**${target.platform ? ` on ${PLATFORM_INFO[target.platform].label}` : " on Twitch, Kick or YouTube"}. Try their channel link.`, { ephemeral: true });
+  if (!found) return botReply(`I couldn't find **${opt("streamer")}**${target.platform ? ` on ${PLATFORM_INFO[target.platform].label}` : " on Twitch, Kick or YouTube"}. Check the spelling, or paste their channel link (like kick.com/name).`, { ephemeral: true });
   const channel = opt("channel") || interaction.channel_id || (interaction.channel || {}).id;
   const existing = await env.DB.prepare("SELECT * FROM live_alerts WHERE guild_id = ? AND channel_id = ? AND platform = ? AND name = ?")
     .bind(guild, channel, found.platform, found.name)
