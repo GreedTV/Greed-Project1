@@ -2142,7 +2142,8 @@ async function collectDungeon(env, user) {
     await endRun(env, user.id);
   } else {
     pouch.wait = true;
-    await env.DB.prepare("UPDATE heroes SET exp_pouch = ? WHERE user_id = ?").bind(JSON.stringify(pouch), user.id).run();
+    // (runs started before floors existed have floor 0 saved: store the real floor)
+    await env.DB.prepare("UPDATE heroes SET exp_pouch = ?, exp_floor = ? WHERE user_id = ?").bind(JSON.stringify(pouch), floor, user.id).run();
   }
   return {
     bossDealt,
@@ -2179,7 +2180,7 @@ async function goDeeper(env, user) {
   const end = now + floorMinutes(dungeon) * 60000;
   pouch.wait = false;
   const res = await env.DB.prepare("UPDATE heroes SET exp_floor = ?, exp_start = ?, exp_end = ?, exp_stats = ?, exp_pouch = ? WHERE user_id = ? AND exp_floor = ?")
-    .bind(floor, now, end, JSON.stringify(snap), JSON.stringify(pouch), user.id, hero.expFloor || 1)
+    .bind(floor, now, end, JSON.stringify(snap), JSON.stringify(pouch), user.id, hero.expFloor || 0)
     .run();
   if (!res.meta || res.meta.changes !== 1) fail("Already on the way down.", 409);
   return { dungeon, floor, floors: floorsOf(dungeon), end, chance: Math.round(winChance(snap, floorMonster(dungeon, floor)) * 100) };
