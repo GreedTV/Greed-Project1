@@ -3,4 +3,4 @@
 const WORKER_URL = "https://sinners-kick.baterdene03253016.workers.dev";
 
 // Our Discord server (Shadow Station): the About page, the Home guide and the footer link to it
-const DISCORD_INVITE = "https://discord.gg/HytDztnGfa";
+const DISCORD_INVITE = "https://discord.gg/e5aBjwpVdP";
