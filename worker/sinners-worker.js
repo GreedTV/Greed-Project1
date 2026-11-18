@@ -917,7 +917,7 @@ async function backfillIdentities(env) {
 // Bump SCHEMA_VERSION whenever tables or columns change. The database remembers the version it has,
 // so the full setup below runs once per change instead of on every cold start (which was slow
 // enough to miss Discord's 3-second limit).
-const SCHEMA_VERSION = 19;
+const SCHEMA_VERSION = 20;
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -1069,6 +1069,7 @@ async function ensureSchema(env) {
     "ALTER TABLE heroes ADD COLUMN exp_floor INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE heroes ADD COLUMN exp_pouch TEXT",
     "ALTER TABLE hero_items ADD COLUMN plus INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE live_alerts ADD COLUMN socials TEXT NOT NULL DEFAULT '{}'",
   ]) {
     try {
       await env.DB.prepare(sql).run();
@@ -3734,6 +3735,9 @@ const BOT_COMMANDS = [
           { type: 11, name: "image", description: "A picture for the alert (the stream preview if empty)" },
           { type: 3, name: "image_link", description: "…or a link to a picture (https://)", max_length: 400 },
           { type: 8, name: "ping", description: "A role to ping when they go live" },
+          { type: 3, name: "tiktok", description: "Their TikTok (@name or link) as an extra button; none to remove", max_length: 200 },
+          { type: 3, name: "instagram", description: "Their Instagram (@name or link) as an extra button; none to remove", max_length: 200 },
+          { type: 3, name: "youtube", description: "Their YouTube channel (@name or link) as an extra button; none to remove", max_length: 200 },
         ],
       },
       { type: 1, name: "list", description: "This server's live alerts" },
@@ -4272,7 +4276,7 @@ const HELP_TOPICS = {
       { name: "`/notify-here`", value: "Posts new shop purchases (to hand out) and gallery links waiting for review in this channel. `/notify-off` stops it." },
       {
         name: "`/live add streamer:` (Manage Server)",
-        value: "Live alerts like Pingcord: give a name or channel link (Kick, Twitch, YouTube), pick a channel, your own text (`{streamer} {title} {game} {link}`), a picture and a role to ping. `/live list`, `/live test`, `/live remove`.",
+        value: "Live alerts like Pingcord: give a name or channel link (Kick, Twitch, YouTube), pick a channel, your own text (`{streamer} {title} {game} {link}`), a picture, a role to ping and their TikTok / Instagram / YouTube as extra buttons. `/live list`, `/live test`, `/live remove`.",
       },
       { name: "Admin page", value: `${SITE_URL}/admin (password): gallery review, chat moderation, leaderboards and points resets, shop rewards, and **Register commands** after a bot update.` },
     ],
@@ -4528,6 +4532,31 @@ const PLATFORM_INFO = {
   youtube: { label: "YouTube", color: 0xff0033, url: (n) => (UC_ID.test(n) ? `https://www.youtube.com/channel/${n}` : `https://www.youtube.com/${n}`) },
 };
 const LIVE_DEFAULT_MESSAGE = "🔴 **{streamer}** is live on {platform}!";
+// Their other channels, shown as extra buttons on the alert
+const SOCIALS = {
+  tiktok: { label: "TikTok", emoji: "🎵", host: /(^|\.)tiktok\.com$/, url: (h) => `https://www.tiktok.com/@${h}` },
+  instagram: { label: "Instagram", emoji: "📸", host: /(^|\.)instagram\.com$/, url: (h) => `https://www.instagram.com/${h}` },
+  youtube: { label: "YouTube", emoji: "▶️", host: /(^|\.)(youtube\.com|youtu\.be)$/, url: (h) => `https://www.youtube.com/@${h}` },
+};
+function socialLink(kind, text) {
+  text = String(text || "").trim();
+  if (/^(none|off|remove|-)$/i.test(text)) return "";
+  const site = SOCIALS[kind];
+  if (/^https?:\/\//i.test(text) || /\.(com|be)\//i.test(text)) {
+    let url;
+    try {
+      url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    } catch (e) {
+      fail(`That ${site.label} link doesn't look right.`);
+    }
+    if (!site.host.test(url.hostname)) fail(`That isn't ${/^[aeiou]/i.test(site.label) ? "an" : "a"} ${site.label} link.`);
+    url.protocol = "https:";
+    return url.href;
+  }
+  const handle = text.replace(/^@/, "");
+  if (!/^[\w.-]{2,40}$/.test(handle)) fail(`Give their ${site.label} @name or a link.`);
+  return site.url(handle);
+}
 
 // "kick.com/name", "twitch.tv/name", "youtube.com/@name" (or /channel/UC…), or a plain name
 function liveTarget(text, platform) {
@@ -4615,8 +4644,11 @@ function liveMessage(alert, info) {
       {
         type: 1,
         components: [
+          { type: 2, style: 5, label: `Watch on ${p.label}`, url: link },
           { type: 2, style: 5, label: "Watch on Sinners", url: `${SITE_URL}/watch?platform=${alert.platform}&add=${encodeURIComponent(alert.name)}` },
-          { type: 2, style: 5, label: `Open on ${p.label}`, url: link },
+          ...Object.entries(JSON.parse(alert.socials || "{}"))
+            .filter(([kind, url]) => SOCIALS[kind] && url)
+            .map(([kind, url]) => ({ type: 2, style: 5, label: SOCIALS[kind].label, emoji: { name: SOCIALS[kind].emoji }, url })),
         ],
       },
     ],
@@ -4697,7 +4729,8 @@ async function dropLiveImage(env, image) {
 }
 
 const describeAlert = (a) =>
-  `${PLATFORM_INFO[a.platform].label} **${a.label}** → <#${a.channel_id}>${a.role_id ? ` · pings <@&${a.role_id}>` : ""}${a.image ? " · 🖼️ own picture" : ""}${a.live ? " · 🔴 live now" : ""}`;
+  `${PLATFORM_INFO[a.platform].label} **${a.label}** → <#${a.channel_id}>${a.role_id ? ` · pings <@&${a.role_id}>` : ""}${a.image ? " · 🖼️ own picture" : ""}` +
+  `${Object.keys(JSON.parse(a.socials || "{}")).map((k) => ` · ${SOCIALS[k] ? SOCIALS[k].emoji : ""}`).join("")}${a.live ? " · 🔴 live now" : ""}`;
 
 // Autocomplete for /live remove and /live test: this server's streamers
 async function liveAutocomplete(interaction, env) {
@@ -4788,6 +4821,17 @@ async function liveCommand(interaction, env, origin) {
   if (existing && image !== existing.image) await dropLiveImage(env, existing.image);
   const message = opt("message") != null ? String(opt("message")).slice(0, 500) : existing ? existing.message : null;
   const role = opt("ping") != null ? String(opt("ping")) : existing ? existing.role_id : null;
+  const socials = JSON.parse((existing && existing.socials) || "{}");
+  try {
+    for (const kind of Object.keys(SOCIALS)) {
+      if (opt(kind) == null) continue;
+      const url = socialLink(kind, opt(kind));
+      if (url) socials[kind] = url;
+      else delete socials[kind];
+    }
+  } catch (err) {
+    return botReply(`⚠️ ${err.message}`, { ephemeral: true });
+  }
   // Already live right now: remember this stream, so the alert starts with the next one
   let current = null;
   try {
@@ -4795,11 +4839,11 @@ async function liveCommand(interaction, env, origin) {
   } catch (e) {}
   const liveId = current && current.live ? String(current.id || current.title || "live") : existing ? existing.live_id : "";
   await env.DB.prepare(
-    "INSERT INTO live_alerts (guild_id, channel_id, platform, name, label, message, image, role_id, live, live_id, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+    "INSERT INTO live_alerts (guild_id, channel_id, platform, name, label, message, image, role_id, live, live_id, created, socials) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
       "ON CONFLICT(guild_id, channel_id, platform, name) DO UPDATE SET label = excluded.label, message = excluded.message, image = excluded.image, " +
-      "role_id = excluded.role_id, last_error = NULL"
+      "role_id = excluded.role_id, socials = excluded.socials, last_error = NULL"
   )
-    .bind(guild, channel, found.platform, found.name, found.label, message, image, role, current && current.live ? 1 : 0, liveId, Date.now())
+    .bind(guild, channel, found.platform, found.name, found.label, message, image, role, current && current.live ? 1 : 0, liveId, Date.now(), JSON.stringify(socials))
     .run();
   const alert = { platform: found.platform, name: found.name, label: found.label, message, channel_id: channel };
   return botReply(null, {
@@ -4810,9 +4854,10 @@ async function liveCommand(interaction, env, origin) {
         description:
           `When **${found.label}** goes live I'll post in <#${channel}>${role ? ` and ping <@&${role}>` : ""}.\n\n` +
           `**Message:** ${fillMessage(message, alert, { title: "Their stream title", game: "Their game" })}\n` +
-          `**Picture:** ${image ? "your own" : "the stream preview"}\n\n` +
+          `**Picture:** ${image ? "your own" : "the stream preview"}\n` +
+          `**Buttons:** Watch on ${PLATFORM_INFO[found.platform].label} · Watch on Sinners${Object.keys(socials).map((k) => ` · ${SOCIALS[k].label}`).join("")}\n\n` +
           (current && current.live ? "They're live right now, so the first alert comes with their next stream. " : "") +
-          "`/live test` sends a sample now. Run `/live add` again for the same streamer to change the text, picture or ping.",
+          "`/live test` sends a sample now. Run `/live add` again for the same streamer to change the text, picture, ping or links.",
         image: image ? { url: image } : undefined,
       }),
     ],
