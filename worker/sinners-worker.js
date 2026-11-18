@@ -36,7 +36,9 @@
 //
 // Adventure (Profile page): an adventurer with gear, a bag and dungeon runs
 //   GET  /hero                         -> your adventurer, items, regions and the current run   (logged in)
-//   POST /hero                         -> { action: "dungeon", dungeon } | { action: "collect" } | { action: "equip" | "sell", item }
+//   POST /hero                         -> { action: "dungeon", dungeon } | { action: "collect" | "deeper" | "retreat" } | { action: "equip" | "sell", item }
+//                                         | { action: "class", cls } | { action: "skill", skill } | { action: "upgrade" | "salvage", item }
+//                                         | { action: "craft", slot, tier }
 //                                         | { action: "unequip", slot } | { action: "look" } | { action: "duel", opponent? }
 //                                         | { action: "watch" }  once a minute while watching streams: a little XP   (logged in)
 //   GET  /profile                      -> your profile numbers   (logged in)
@@ -915,7 +917,7 @@ async function backfillIdentities(env) {
 // Bump SCHEMA_VERSION whenever tables or columns change. The database remembers the version it has,
 // so the full setup below runs once per change instead of on every cold start (which was slow
 // enough to miss Discord's 3-second limit).
-const SCHEMA_VERSION = 18;
+const SCHEMA_VERSION = 19;
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -1061,6 +1063,12 @@ async function ensureSchema(env) {
     "ALTER TABLE messages ADD COLUMN badge TEXT",
     "ALTER TABLE messages ADD COLUMN color TEXT",
     "ALTER TABLE daily ADD COLUMN chats INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE heroes ADD COLUMN cls TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE heroes ADD COLUMN skills TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE heroes ADD COLUMN mats TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE heroes ADD COLUMN exp_floor INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE heroes ADD COLUMN exp_pouch TEXT",
+    "ALTER TABLE hero_items ADD COLUMN plus INTEGER NOT NULL DEFAULT 0",
   ]) {
     try {
       await env.DB.prepare(sql).run();
@@ -1377,10 +1385,11 @@ async function shopAdminAction(request, env, cors) {
 // Every player gets an adventurer the first time they open their profile: a small pixel character
 // with a random look, a level, Attack / Defense / HP, 8 equipment slots and a bag. Levels raise the
 // base stats; gear adds more (rarer gear adds more). Adventurers are sent to a region of the world map
-// for real time and fight its monster when they arrive; the Arena pits them against other players'
-// adventurers. Win chances come from a power score (attack + 0.8 x defense + 0.25 x HP): being a bit
-// stronger gives a good chance, being much stronger an almost sure win. The fight shown to the player
-// is played out to match the result.
+// floor by floor through a region's dungeon (real time per floor) and fight a monster on each, with
+// the region's boss on the last floor; the Arena pits them against other players' adventurers. Win
+// chances come from a power score (attack + 0.8 x defense + 0.25 x HP, with class and skills): being a
+// bit stronger gives a good chance, being much stronger an almost sure win. The fight shown to the
+// player is played out blow by blow (with skills) to match the result.
 
 const TIER_LEVELS = [1, 5, 10, 20, 30]; // adventurer level that unlocks tier 1-5 (shop gear and regions)
 const MAX_LEVEL = 50;
@@ -1476,14 +1485,18 @@ function itemStats(slot, tier, rarity, roll = 1) {
 
 const HERO_COLUMNS =
   "user_id AS userId, name, look, level, xp, runs, wins, buffs, rating, duel_wins AS duelWins, duel_losses AS duelLosses, " +
-  "duel_day AS duelDay, duel_count AS duelCount, exp_dungeon AS expDungeon, exp_start AS expStart, exp_end AS expEnd, exp_stats AS expStats, style";
-const ITEM_COLUMNS = "id, slot, name, rarity, power, atk, def, hp, tier, source, icon, sell, equipped, created";
+  "duel_day AS duelDay, duel_count AS duelCount, exp_dungeon AS expDungeon, exp_start AS expStart, exp_end AS expEnd, exp_stats AS expStats, style, " +
+  "cls, skills, mats, exp_floor AS expFloor, exp_pouch AS expPouch";
+const ITEM_COLUMNS = "id, slot, name, rarity, power, atk, def, hp, tier, source, icon, sell, equipped, created, plus";
 
 function parseHero(hero) {
   if (!hero) return hero;
   hero.look = JSON.parse(hero.look || "{}");
   hero.buffs = JSON.parse(hero.buffs || "{}");
   hero.style = JSON.parse(hero.style || "{}");
+  hero.skills = JSON.parse(hero.skills || "{}");
+  hero.mats = JSON.parse(hero.mats || "{}");
+  hero.cls = CLASSES[hero.cls] ? hero.cls : "";
   return hero;
 }
 
@@ -1517,13 +1530,20 @@ async function heroItems(env, userId) {
       .bind(item.atk, item.def, item.hp, item.power, item.id)
       .run();
   }
+  for (const item of results.filter((i) => i.plus > 0)) {
+    const k = 1 + PLUS_STEP * item.plus;
+    ["atk", "def", "hp"].forEach((stat) => (item[stat] = Math.round(item[stat] * k)));
+    item.power = powerOf(item);
+    item.sell = Math.round(item.sell * (1 + 0.15 * item.plus));
+  }
   return results;
 }
 
-// Level + equipped gear; with buffs = the stats used in a fight (potions active)
+// Level + equipped gear, shaped by class and skills; with buffs = the stats used in a fight (potions active)
 function heroStats(hero, items, withBuffs = false) {
-  const s = baseStats(hero.level);
+  let s = baseStats(hero.level);
   items.filter((i) => i.equipped).forEach((i) => ["atk", "def", "hp"].forEach((k) => (s[k] += i[k])));
+  s = withClass(s, hero.cls, hero.skills);
   if (withBuffs) ["atk", "def", "hp"].forEach((k) => hero.buffs[k] > 0 && (s[k] = Math.round(s[k] * (1 + BUFF_EFFECT[k]))));
   return s;
 }
@@ -1541,33 +1561,338 @@ async function useBuffs(env, hero, kinds) {
   if (changed) await env.DB.prepare("UPDATE heroes SET buffs = ? WHERE user_id = ?").bind(JSON.stringify(hero.buffs), hero.userId).run();
 }
 
-// A blow-by-blow fight that ends the way `aWins` says (the result is decided by winChance first)
+// ---------- Classes and skills ----------
+// From level 5 an adventurer picks a class. Each class shapes the stats a little and has 3 skills
+// (unlocked at levels 5, 10 and 15) that players rank up with skill points (one per level from 5).
+// Skills show up in fights (Fireball, Cleave, poison, dodges...) and add to fight power, which is what
+// the win chance is worked out from.
+
+const CLASS_LEVEL = 5;
+const SKILL_LEVELS = [5, 10, 15];
+const SKILL_MAX = 5;
+const RESPEC_PRICE = 500;
+const pct = (v) => `${Math.round(v * 100)}%`;
+const CLASSES = {
+  warrior: {
+    name: "Warrior",
+    emoji: "🛡️",
+    text: "Tough and steady: +15% HP and +10% Defense.",
+    mult: { atk: 1, def: 1.1, hp: 1.15 },
+    crit: 0.08,
+    dodge: 0.04,
+    skills: [
+      { id: "cleave", name: "Cleave", text: (r) => `${pct(0.12 + 0.05 * r)} chance each turn to strike again`, power: { atk: 0.03 } },
+      { id: "bulwark", name: "Bulwark", text: (r) => `Blocks ${pct(0.08 + 0.04 * r)} of every hit`, power: { def: 0.05 } },
+      { id: "laststand", name: "Last Stand", text: (r) => `Once a fight, below 30% HP: heal ${pct(0.15 + 0.06 * r)}`, power: { hp: 0.05 } },
+    ],
+  },
+  rogue: {
+    name: "Rogue",
+    emoji: "🗡️",
+    text: "Fast and deadly: +15% Attack, more critical hits and dodges.",
+    mult: { atk: 1.15, def: 1, hp: 1 },
+    crit: 0.15,
+    dodge: 0.1,
+    skills: [
+      { id: "backstab", name: "Backstab", text: (r) => `+${pct(0.04 * r)} critical chance, crits hit ${(2 + 0.1 * r).toFixed(1)}x`, power: { atk: 0.04 } },
+      { id: "evasion", name: "Evasion", text: (r) => `+${pct(0.03 * r)} chance to dodge`, power: { def: 0.03, hp: 0.02 } },
+      { id: "poison", name: "Poison Blade", text: (r) => `Hits poison for ${pct(0.025 + 0.01 * r)} of max HP, 3 turns`, power: { atk: 0.03 } },
+    ],
+  },
+  mage: {
+    name: "Mage",
+    emoji: "🔮",
+    text: "Glass cannon: +25% Attack, a little less Defense and HP.",
+    mult: { atk: 1.25, def: 0.92, hp: 0.92 },
+    crit: 0.1,
+    dodge: 0.05,
+    skills: [
+      { id: "fireball", name: "Fireball", text: (r) => `Opens every fight with a ${(1.3 + 0.3 * r).toFixed(1)}x fireball`, power: { atk: 0.03 } },
+      { id: "frostarmor", name: "Frost Armor", text: (r) => `The first 3 hits taken are ${pct(0.2 + 0.07 * r)} weaker`, power: { def: 0.05 } },
+      { id: "arcane", name: "Arcane Surge", text: (r) => `Every 3rd turn: a ${(1.3 + 0.2 * r).toFixed(1)}x blast through armor`, power: { atk: 0.04 } },
+    ],
+  },
+};
+const skillPointsAt = (level) => Math.min(SKILL_MAX * 3, Math.max(0, level - CLASS_LEVEL + 1));
+const skillRank = (f, id) => (f.skills && f.skills[id]) || 0;
+
+// What the page shows about classes and skills
+const classCatalog = () =>
+  Object.entries(CLASSES).map(([id, c]) => ({
+    id,
+    name: c.name,
+    emoji: c.emoji,
+    text: c.text,
+    skills: c.skills.map((s, i) => ({ id: s.id, name: s.name, level: SKILL_LEVELS[i], ranks: Array.from({ length: SKILL_MAX }, (_, r) => s.text(r + 1)) })),
+  }));
+
+// Class shape and skill ranks applied to level + gear stats
+function withClass(stats, cls, skills) {
+  const c = CLASSES[cls];
+  if (!c) return stats;
+  const s = { atk: stats.atk * c.mult.atk, def: stats.def * c.mult.def, hp: stats.hp * c.mult.hp };
+  c.skills.forEach((sk) => {
+    const r = (skills || {})[sk.id] || 0;
+    Object.entries(sk.power).forEach(([k, v]) => (s[k] *= 1 + v * r));
+  });
+  return { atk: Math.round(s.atk), def: Math.round(s.def), hp: Math.round(s.hp) };
+}
+
+// ---------- Fights ----------
+// The result is decided by winChance first; this plays the fight out blow by blow, with each side's
+// class and skills, and keeps trying (tilting the blows a little more each time) until it ends that way.
+// Events: { by: "a" | "b", kind: "hit" | "crit" | "dodge" | "heal" | "poison", dmg, skill?, hpA, hpB }
+
 function fightLog(a, b, aWins) {
-  const hit = (atk, def, boost) => {
-    if (Math.random() < 0.1) return { dmg: 0, miss: true };
-    const crit = Math.random() < 0.15;
-    return { dmg: Math.max(1, Math.round(((atk * atk) / (atk + def)) * (0.5 + Math.random()) * (crit ? 2 : 1) * boost)), crit };
-  };
-  for (let attempt = 0; attempt < 60; attempt++) {
-    // After a few tries, tilt the blows toward the decided winner
-    const tilt = attempt < 20 ? 1 : 1 + (attempt - 19) * 0.08;
-    const boostA = aWins ? tilt : 1 / tilt;
-    const boostB = aWins ? 1 / tilt : tilt;
-    let hpA = a.hp;
-    let hpB = b.hp;
+  const val = (f, id, fn) => (skillRank(f, id) ? fn(skillRank(f, id)) : 0);
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const tilt = attempt < 15 ? 1 : 1 + (attempt - 14) * 0.08;
+    const boost = { a: aWins ? tilt : 1 / tilt, b: aWins ? 1 / tilt : tilt };
+    const mk = (f, side) => ({
+      ...f,
+      side,
+      left: f.hp,
+      max: f.hp,
+      turns: 0,
+      frost: 3,
+      stood: false,
+      poison: null,
+      crit: f.crit != null ? f.crit : 0.08,
+      dodge: f.dodge != null ? f.dodge : 0.05,
+    });
+    const A = mk(a, "a");
+    const B = mk(b, "b");
     const log = [];
-    for (let turn = 0; turn < 40 && hpA > 0 && hpB > 0; turn++) {
-      const aTurn = turn % 2 === 0;
-      const h = aTurn ? hit(a.atk, b.def, boostA) : hit(b.atk, a.def, boostB);
-      if (aTurn) hpB = Math.max(0, hpB - h.dmg);
-      else hpA = Math.max(0, hpA - h.dmg);
-      log.push({ by: aTurn ? "a" : "b", dmg: h.dmg, crit: !!h.crit, miss: !!h.miss, hpA, hpB });
+    const push = (by, kind, dmg, skill) => log.push({ by, kind, dmg, ...(skill ? { skill } : {}), hpA: Math.max(0, Math.round(A.left)), hpB: Math.max(0, Math.round(B.left)) });
+    const strike = (att, dfd, mult, skill, pierce) => {
+      const dodge = dfd.dodge + (dfd.cls === "rogue" ? val(dfd, "evasion", (r) => 0.03 * r) : 0);
+      if (Math.random() < dodge) return push(att.side, "dodge", 0, skill);
+      const crit = Math.random() < att.crit + (att.cls === "rogue" ? val(att, "backstab", (r) => 0.04 * r) : 0);
+      let dmg = ((att.atk * att.atk) / (att.atk + (pierce ? 0 : dfd.def))) * (0.6 + Math.random() * 0.8) * mult * boost[att.side];
+      if (crit) dmg *= att.cls === "rogue" ? 2 + 0.1 * skillRank(att, "backstab") : 1.8;
+      if (dfd.cls === "warrior") dmg *= 1 - val(dfd, "bulwark", (r) => 0.08 + 0.04 * r);
+      if (dfd.cls === "mage" && dfd.frost > 0 && skillRank(dfd, "frostarmor")) {
+        dmg *= 1 - val(dfd, "frostarmor", (r) => 0.2 + 0.07 * r);
+        dfd.frost -= 1;
+      }
+      dmg = Math.max(1, Math.round(dmg));
+      dfd.left = Math.max(0, dfd.left - dmg);
+      push(att.side, crit ? "crit" : "hit", dmg, skill);
+      if (att.cls === "rogue" && skillRank(att, "poison") && dfd.left > 0) {
+        dfd.poison = { turns: 3, dmg: Math.max(1, Math.round(dfd.max * val(att, "poison", (r) => 0.025 + 0.01 * r))) };
+      }
+      if (dfd.cls === "warrior" && skillRank(dfd, "laststand") && !dfd.stood && dfd.left > 0 && dfd.left < dfd.max * 0.3) {
+        dfd.stood = true;
+        const heal = Math.round(dfd.max * val(dfd, "laststand", (r) => 0.15 + 0.06 * r));
+        dfd.left = Math.min(dfd.max, dfd.left + heal);
+        push(dfd.side, "heal", heal, "Last Stand");
+      }
+    };
+    for (let turn = 0; turn < 50 && A.left > 0 && B.left > 0; turn++) {
+      const att = turn % 2 === 0 ? A : B;
+      const dfd = att === A ? B : A;
+      att.turns += 1;
+      if (att.poison) {
+        att.left = Math.max(0, att.left - att.poison.dmg);
+        push(dfd.side, "poison", att.poison.dmg, "Poison");
+        att.poison.turns -= 1;
+        if (!att.poison.turns) att.poison = null;
+        if (!att.left) break;
+      }
+      if (att.cls === "mage" && att.turns === 1 && skillRank(att, "fireball")) strike(att, dfd, 1.3 + 0.3 * skillRank(att, "fireball"), "Fireball");
+      else if (att.cls === "mage" && att.turns % 3 === 0 && skillRank(att, "arcane")) strike(att, dfd, 1.3 + 0.2 * skillRank(att, "arcane"), "Arcane Surge", true);
+      else strike(att, dfd, 1);
+      if (dfd.left > 0 && att.cls === "warrior" && skillRank(att, "cleave") && Math.random() < 0.12 + 0.05 * skillRank(att, "cleave")) strike(att, dfd, 0.7, "Cleave");
     }
-    if (hpA > 0 && hpB > 0) continue;
-    if (hpB <= 0 === aWins) return log.length > 24 ? log.slice(-24) : log;
+    if (A.left > 0 && B.left > 0) continue;
+    if ((B.left <= 0 && A.left > 0) === aWins) return log.length > 60 ? log.slice(-60) : log;
   }
   // Fallback: one decisive blow
-  return [{ by: aWins ? "a" : "b", dmg: aWins ? b.hp : a.hp, crit: true, miss: false, hpA: aWins ? a.hp : 0, hpB: aWins ? 0 : b.hp }];
+  return [{ by: aWins ? "a" : "b", kind: "crit", dmg: aWins ? b.hp : a.hp, hpA: aWins ? a.hp : 0, hpB: aWins ? 0 : b.hp }];
+}
+
+// A fighter for fightLog: stats plus class, skills and their crit / dodge chances
+function fighterOf(name, stats, cls, skills) {
+  const c = CLASSES[cls];
+  return { name, atk: stats.atk, def: stats.def, hp: stats.hp, cls: c ? cls : "", skills: c ? skills || {} : {}, crit: c ? c.crit : 0.08, dodge: c ? c.dodge : 0.05 };
+}
+
+// ---------- Dungeon floors ----------
+// Each region is a dungeon with 3 to 7 floors and its boss on the last one. A floor takes real time;
+// when it's done the player sees the fight. After a won floor they choose: go deeper (harder, better
+// loot) or retreat with everything found so far. Losing a floor ends the run: XP is kept, but the
+// items and materials found on the way are lost and half the coins with them.
+
+const FLOOR_NAMES = {
+  forest: ["Wolf Pup", "Wolf Pack", "Dire Wolf"],
+  caves: ["Goblin Scout", "Goblin Raider", "Goblin Shaman", "Goblin Chief"],
+  swamp: ["Bog Imp", "Swamp Hag", "Mire Witch", "Coven Witch", "Bog Witch"],
+  mountains: ["Ice Troll", "Frost Brute", "Rime Giant", "Glacier Giant", "Storm Giant", "Frost Giant"],
+  abyss: ["Lesser Demon", "Hellhound", "Sin Fiend", "Pit Lord", "Abyss Knight", "Demon Prince", "Sin Demon"],
+};
+const floorsOf = (d) => FLOOR_NAMES[d.id].length;
+const floorMinutes = (d) => Math.max(2, Math.round(d.minutes / floorsOf(d)));
+// How strong floor n is (the boss on the last floor is the region's monster)
+function floorMonster(d, n) {
+  const floors = floorsOf(d);
+  const boss = n >= floors;
+  const k = boss ? 1 : 0.5 + (0.38 * (n - 1)) / Math.max(1, floors - 2);
+  const m = d.monster;
+  return {
+    name: FLOOR_NAMES[d.id][Math.min(floors, n) - 1],
+    emoji: m.emoji,
+    atk: Math.round(m.atk * k),
+    def: Math.round(m.def * k),
+    hp: Math.round(m.hp * k),
+    boss,
+    crit: boss ? 0.12 : 0.08,
+    dodge: 0.05,
+  };
+}
+// Rewards per won floor: deeper floors pay more, the boss most; a full clear pays about 1.6x the old single trip
+function floorRewards(d, n) {
+  const floors = floorsOf(d);
+  const w = (n >= floors ? 1.6 : 0.7 + (0.6 * (n - 1)) / Math.max(1, floors - 2)) * (1.6 / floors);
+  return {
+    xp: Math.round(between(...d.xp) * w),
+    coins: Math.round(between(...d.coins) * w),
+    loot: Math.min(0.95, n >= floors ? d.loot * 2 : d.loot * (0.5 + (0.5 * (n - 1)) / Math.max(1, floors - 2))),
+    mats: n >= floors ? between(3, 5) : between(1, 2) + (n > floors / 2 ? 1 : 0),
+  };
+}
+
+// ---------- Materials, upgrades and the forge ----------
+// Won floors drop the region's material. Materials upgrade gear (+1 to +10, each +8% stats; from +6 an
+// upgrade can fail and use up its cost), forge new rare-or-better items, and come back from salvaging.
+
+const MATS = [
+  { id: "pelt", name: "Wolf Pelt", emoji: "🐾" },
+  { id: "ore", name: "Goblin Ore", emoji: "⛏️" },
+  { id: "resin", name: "Bog Resin", emoji: "🍯" },
+  { id: "shard", name: "Frost Shard", emoji: "💎" },
+  { id: "ember", name: "Demon Ember", emoji: "🌋" },
+];
+const MAX_PLUS = 10;
+const PLUS_STEP = 0.08;
+const UPGRADE_CHANCE = [1, 1, 1, 1, 1, 0.85, 0.7, 0.55, 0.4, 0.3]; // to reach +1 ... +10
+const SALVAGE = { common: 1, uncommon: 2, rare: 4, epic: 7, legendary: 12 };
+const matOf = (tier) => MATS[Math.min(5, Math.max(1, tier || 1)) - 1];
+const upgradeCost = (item) => {
+  const plus = item.plus || 0;
+  if (plus >= MAX_PLUS) return null;
+  return { to: plus + 1, mat: matOf(item.tier).id, n: 2 * (plus + 1), coins: Math.round(GEAR_PRICES[(item.tier || 1) - 1] * 0.15 * (plus + 1)), chance: UPGRADE_CHANCE[plus] };
+};
+const craftCost = (tier) => ({
+  coins: GEAR_PRICES[tier - 1],
+  mats: [{ id: matOf(tier).id, n: 8 }, ...(tier > 1 ? [{ id: matOf(tier - 1).id, n: 4 }] : [])],
+});
+const CRAFT_RARITY = [
+  { id: "rare", chance: 65 },
+  { id: "epic", chance: 28 },
+  { id: "legendary", chance: 7 },
+];
+
+async function changeMats(env, userId, add) {
+  const row = await env.DB.prepare("SELECT mats FROM heroes WHERE user_id = ?").bind(userId).first();
+  const mats = JSON.parse((row && row.mats) || "{}");
+  for (const [id, n] of Object.entries(add)) {
+    mats[id] = (mats[id] || 0) + n;
+    if (mats[id] < 0) fail(`Not enough ${MATS.find((m) => m.id === id).name}.`, 409);
+    if (!mats[id]) delete mats[id];
+  }
+  await env.DB.prepare("UPDATE heroes SET mats = ? WHERE user_id = ?").bind(JSON.stringify(mats), userId).run();
+  return mats;
+}
+
+async function spendPoints(env, user, coins) {
+  if (!coins) return;
+  await wallet(env, user);
+  const res = await env.DB.prepare("UPDATE wallets SET points = points - ? WHERE user_id = ? AND points >= ?").bind(coins, user.id, coins).run();
+  if (!res.meta || res.meta.changes !== 1) fail(`You need 🪙 ${coins} for that.`, 409);
+}
+
+async function ownItem(env, user, id) {
+  const item = await env.DB.prepare(`SELECT ${ITEM_COLUMNS} FROM hero_items WHERE id = ? AND user_id = ?`).bind(Math.floor(Number(id)) || 0, user.id).first();
+  if (!item) fail("That item isn't yours.", 404);
+  return item;
+}
+
+async function upgradeItem(env, user, id) {
+  const item = await ownItem(env, user, id);
+  const cost = upgradeCost(item);
+  if (!cost) fail("That item is already +10.", 409);
+  await changeMats(env, user.id, { [cost.mat]: -cost.n });
+  try {
+    await spendPoints(env, user, cost.coins);
+  } catch (err) {
+    await changeMats(env, user.id, { [cost.mat]: cost.n });
+    throw err;
+  }
+  const ok = Math.random() < cost.chance;
+  if (ok) await env.DB.prepare("UPDATE hero_items SET plus = ? WHERE id = ?").bind(cost.to, item.id).run();
+  return { upgraded: ok, plus: ok ? cost.to : item.plus || 0, item: item.name };
+}
+
+async function craftItem(env, user, slot, tier) {
+  if (!SLOTS.includes(slot)) fail("Pick a slot.", 400);
+  tier = Math.floor(Number(tier)) || 1;
+  if (tier < 1 || tier > 5) fail("Unknown tier.", 400);
+  if (!tierOpen(await heroLevel(env, user.id), tier)) fail(`Tier ${tier} unlocks at adventurer level ${TIER_LEVELS[tier - 1]}.`, 409);
+  if ((await bagCount(env, user.id)) >= BAG_SIZE) fail("Your bag is full. Make room first.", 409);
+  const cost = craftCost(tier);
+  await changeMats(env, user.id, Object.fromEntries(cost.mats.map((m) => [m.id, -m.n])));
+  try {
+    await spendPoints(env, user, cost.coins);
+  } catch (err) {
+    await changeMats(env, user.id, Object.fromEntries(cost.mats.map((m) => [m.id, m.n])));
+    throw err;
+  }
+  let roll = Math.random() * 100;
+  const rarity = (CRAFT_RARITY.find((r) => (roll -= r.chance) < 0) || CRAFT_RARITY[0]).id;
+  const r = rarityOf(rarity);
+  const item = { slot, tier, rarity, ...itemStats(slot, tier, rarity, 0.95 + Math.random() * 0.2), name: `Forged ${r.word}${MATERIALS[tier - 1]} ${pick(SLOT_NOUNS[slot])}`.replace("  ", " "), sell: r.sell * tier };
+  await env.DB.prepare(
+    "INSERT INTO hero_items (user_id, slot, name, rarity, power, atk, def, hp, tier, source, sell, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'forge', ?, ?)"
+  )
+    .bind(user.id, item.slot, item.name, item.rarity, item.power, item.atk, item.def, item.hp, item.tier, item.sell, Date.now())
+    .run();
+  return { crafted: item };
+}
+
+async function salvageItem(env, user, id) {
+  const item = await ownItem(env, user, id);
+  if (item.equipped) fail("Take it off before salvaging it.", 409);
+  const n = (SALVAGE[item.rarity] || 1) + (item.plus || 0);
+  const del = await env.DB.prepare("DELETE FROM hero_items WHERE id = ? AND user_id = ? AND equipped = 0").bind(item.id, user.id).run();
+  if (!del.meta || del.meta.changes !== 1) fail("That item isn't in your bag.", 404);
+  const mat = matOf(item.tier);
+  await changeMats(env, user.id, { [mat.id]: n });
+  return { salvaged: { name: item.name, mat: mat.name, emoji: mat.emoji, n } };
+}
+
+async function pickClass(env, user, cls) {
+  const hero = await heroOf(env, user);
+  if (!CLASSES[cls]) fail("Unknown class.", 400);
+  if (hero.level < CLASS_LEVEL) fail(`Classes unlock at adventurer level ${CLASS_LEVEL}.`, 409);
+  if (hero.cls === cls) fail(`You're already a ${CLASSES[cls].name}.`, 409);
+  if (hero.cls) await spendPoints(env, user, RESPEC_PRICE);
+  await env.DB.prepare("UPDATE heroes SET cls = ?, skills = '{}' WHERE user_id = ?").bind(cls, user.id).run();
+  return { classPicked: cls };
+}
+
+async function rankSkill(env, user, id) {
+  const hero = await heroOf(env, user);
+  const c = CLASSES[hero.cls];
+  if (!c) fail("Pick a class first.", 409);
+  const index = c.skills.findIndex((s) => s.id === id);
+  if (index < 0) fail("Unknown skill.", 400);
+  if (hero.level < SKILL_LEVELS[index]) fail(`${c.skills[index].name} unlocks at level ${SKILL_LEVELS[index]}.`, 409);
+  const spent = Object.values(hero.skills).reduce((s, n) => s + n, 0);
+  if (spent >= skillPointsAt(hero.level)) fail("No skill points left. You get one each level.", 409);
+  if ((hero.skills[id] || 0) >= SKILL_MAX) fail("That skill is maxed out.", 409);
+  hero.skills[id] = (hero.skills[id] || 0) + 1;
+  await env.DB.prepare("UPDATE heroes SET skills = ? WHERE user_id = ?").bind(JSON.stringify(hero.skills), user.id).run();
+  return { skill: id, rank: hero.skills[id] };
 }
 
 async function heroState(env, user) {
@@ -1596,22 +1921,62 @@ async function heroState(env, user) {
       duelWins: hero.duelWins,
       duelLosses: hero.duelLosses,
       duelsLeft: DUELS_PER_DAY - (hero.duelDay === day ? hero.duelCount : 0),
+      cls: hero.cls,
+      skills: hero.skills,
+      skillPoints: skillPointsAt(hero.level) - Object.values(hero.skills).reduce((s, n) => s + n, 0),
     },
-    items,
+    items: items.map((i) => ({ ...i, upgrade: upgradeCost(i), salvage: (SALVAGE[i.rarity] || 1) + (i.plus || 0), mat: matOf(i.tier).id })),
+    run: runState(hero, fighting, now),
     expedition: hero.expDungeon ? { dungeon: hero.expDungeon, start: hero.expStart, end: hero.expEnd, done: now >= hero.expEnd } : null,
     dungeons: DUNGEONS.map((d) => ({
       ...d,
       level: TIER_LEVELS[d.tier - 1],
       open: tierOpen(hero.level, d.tier),
-      chance: Math.round(winChance(fighting, d.monster) * 100),
+      floors: Array.from({ length: floorsOf(d) }, (_, i) => floorMonster(d, i + 1)),
+      floorMinutes: floorMinutes(d),
+      chance: Math.round(winChance(fighting, floorMonster(d, 1)) * 100),
+      bossChance: Math.round(winChance(fighting, d.monster) * 100),
       monsterPower: powerOf(d.monster),
+      mat: matOf(d.tier),
     })),
+    classes: classCatalog(),
+    classLevel: CLASS_LEVEL,
+    respecPrice: RESPEC_PRICE,
+    materials: MATS.map((m, i) => ({ ...m, tier: i + 1, n: hero.mats[m.id] || 0 })),
+    forge: {
+      craft: [1, 2, 3, 4, 5].map((t) => ({ tier: t, open: tierOpen(hero.level, t), ...craftCost(t) })),
+      craftRarity: CRAFT_RARITY,
+      maxPlus: MAX_PLUS,
+      plusStep: PLUS_STEP,
+    },
     extras: extrasFor(hero.level),
     buffEffect: BUFF_EFFECT,
     tiers: TIER_LEVELS,
     bagSize: BAG_SIZE,
     maxLevel: MAX_LEVEL,
     now,
+  };
+}
+
+// The dungeon run in progress: which floor, the loot so far, and (between floors) what's next
+function runState(hero, fighting, now) {
+  if (!hero.expDungeon) return null;
+  const d = DUNGEONS.find((x) => x.id === hero.expDungeon) || DUNGEONS[0];
+  const pouch = pouchOf(hero);
+  const floors = floorsOf(d);
+  const floor = Math.min(floors, Math.max(1, hero.expFloor || 1));
+  const next = pouch.wait ? floorMonster(d, floor + 1) : null;
+  return {
+    dungeon: d.id,
+    floor,
+    floors,
+    start: hero.expStart,
+    end: hero.expEnd,
+    wait: !!pouch.wait,
+    done: !pouch.wait && now >= hero.expEnd,
+    monster: floorMonster(d, floor),
+    next: next ? { ...next, chance: Math.round(winChance(fighting, next) * 100), minutes: floorMinutes(d) } : null,
+    pouch: { coins: pouch.coins, items: pouch.items, mats: matsList(pouch.mats) },
   };
 }
 
@@ -1653,85 +2018,182 @@ async function bagCount(env, userId) {
   return (await env.DB.prepare("SELECT COUNT(*) AS n FROM hero_items WHERE user_id = ? AND equipped = 0").bind(userId).first()).n;
 }
 
+const emptyPouch = () => ({ coins: 0, xp: 0, items: [], mats: {}, boosts: {}, wait: false });
+const pouchOf = (hero) => ({ ...emptyPouch(), ...(JSON.parse(hero.expPouch || "null") || {}) });
+const matsList = (mats) => MATS.map((m, i) => ({ ...m, tier: i + 1, n: (mats || {})[m.id] || 0 })).filter((m) => m.n);
+
+// The stats a floor is fought with: level, gear, class and skills now, plus the boosts the run started with
+async function floorSnapshot(env, hero, user, boosts) {
+  const s = heroStats(hero, await heroItems(env, user.id));
+  ["atk", "def", "hp"].forEach((k) => boosts[k] && (s[k] = Math.round(s[k] * (1 + BUFF_EFFECT[k]))));
+  return { ...s, cls: hero.cls || "", skills: hero.skills || {}, xp: boosts.xp ? BUFF_EFFECT.xp : 0, luck: boosts.luck ? BUFF_EFFECT.luck : 0 };
+}
+
 async function startDungeon(env, user, dungeonId) {
   const dungeon = DUNGEONS.find((d) => d.id === dungeonId);
   if (!dungeon) fail("Unknown place.", 400);
   const hero = await heroOf(env, user);
-  if (hero.expDungeon) fail("Your adventurer is already away. Collect the rewards first.", 409);
+  if (hero.expDungeon) fail("Your adventurer is already in a dungeon. Finish that run first.", 409);
   if (!tierOpen(hero.level, dungeon.tier)) fail(`${dungeon.name} unlocks at adventurer level ${TIER_LEVELS[dungeon.tier - 1]}.`, 409);
-  const items = await heroItems(env, user.id);
-  // Stats and boosts are fixed when they set off
-  const snap = { ...heroStats(hero, items, true), xp: hero.buffs.xp > 0 ? BUFF_EFFECT.xp : 0, luck: hero.buffs.luck > 0 ? BUFF_EFFECT.luck : 0 };
+  // Potions and scrolls active now last the whole run (one use each)
+  const boosts = Object.fromEntries(["atk", "def", "hp", "xp", "luck"].filter((k) => hero.buffs[k] > 0).map((k) => [k, 1]));
+  const snap = await floorSnapshot(env, hero, user, boosts);
   const now = Date.now();
-  const end = now + dungeon.minutes * 60000;
+  const end = now + floorMinutes(dungeon) * 60000;
   const res = await env.DB.prepare(
-    "UPDATE heroes SET exp_dungeon = ?, exp_start = ?, exp_end = ?, exp_stats = ? WHERE user_id = ? AND exp_dungeon IS NULL"
+    "UPDATE heroes SET exp_dungeon = ?, exp_start = ?, exp_end = ?, exp_stats = ?, exp_floor = 1, exp_pouch = ? WHERE user_id = ? AND exp_dungeon IS NULL"
   )
-    .bind(dungeon.id, now, end, JSON.stringify(snap), user.id)
+    .bind(dungeon.id, now, end, JSON.stringify(snap), JSON.stringify({ ...emptyPouch(), boosts }), user.id)
     .run();
-  if (!res.meta || res.meta.changes !== 1) fail("Your adventurer is already away.", 409);
-  await useBuffs(env, hero, ["atk", "def", "hp", "xp", "luck"]);
-  return { dungeon, end, chance: Math.round(winChance(snap, dungeon.monster) * 100) };
+  if (!res.meta || res.meta.changes !== 1) fail("Your adventurer is already in a dungeon.", 409);
+  await useBuffs(env, hero, Object.keys(boosts));
+  return { dungeon, end, floor: 1, floors: floorsOf(dungeon), chance: Math.round(winChance(snap, floorMonster(dungeon, 1)) * 100) };
 }
 
+// Everything found on the way goes home: coins, materials, items (a full bag sells the rest)
+async function claimPouch(env, user, pouch, share = 1) {
+  const coins = Math.floor(pouch.coins * share);
+  let soldFor = 0;
+  const kept = [];
+  if (share === 1) {
+    let room = BAG_SIZE - (await bagCount(env, user.id));
+    for (const item of pouch.items) {
+      if (room <= 0) {
+        soldFor += item.sell;
+        continue;
+      }
+      room -= 1;
+      kept.push(item);
+      await env.DB.prepare(
+        "INSERT INTO hero_items (user_id, slot, name, rarity, power, atk, def, hp, tier, source, sell, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'dungeon', ?, ?)"
+      )
+        .bind(user.id, item.slot, item.name, item.rarity, item.power, item.atk, item.def, item.hp, item.tier, item.sell, Date.now())
+        .run();
+    }
+    if (Object.keys(pouch.mats).length) await changeMats(env, user.id, pouch.mats);
+  }
+  if (coins + soldFor) await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(coins + soldFor, user.id).run();
+  return { coins, soldFor, items: kept, mats: share === 1 ? matsList(pouch.mats) : [], lostItems: share === 1 ? 0 : pouch.items.length };
+}
+
+const endRun = (env, userId) =>
+  env.DB.prepare("UPDATE heroes SET exp_dungeon = NULL, exp_end = NULL, exp_floor = 0, exp_pouch = NULL WHERE user_id = ?").bind(userId).run();
+
+// A floor's time is up: fight its monster
 async function collectDungeon(env, user) {
   const hero = await heroOf(env, user);
-  if (!hero.expDungeon) fail("Your adventurer isn't on an adventure.", 409);
+  if (!hero.expDungeon) fail("Your adventurer isn't in a dungeon.", 409);
+  const pouch = pouchOf(hero);
+  if (pouch.wait) fail("Choose first: go deeper, or retreat with your loot.", 409);
   const now = Date.now();
-  if (now < hero.expEnd) fail(`Still exploring. Back in ${Math.ceil((hero.expEnd - now) / 60000)} min.`, 409);
+  if (now < hero.expEnd) fail(`Still on this floor. Done in ${Math.ceil((hero.expEnd - now) / 60000)} min.`, 409);
   // Claim it once, even if two requests arrive together
-  const claim = await env.DB.prepare("UPDATE heroes SET exp_dungeon = NULL WHERE user_id = ? AND exp_dungeon = ? AND exp_end = ?")
+  const claim = await env.DB.prepare("UPDATE heroes SET exp_end = 0 WHERE user_id = ? AND exp_dungeon = ? AND exp_end = ?")
     .bind(user.id, hero.expDungeon, hero.expEnd)
     .run();
   if (!claim.meta || claim.meta.changes !== 1) fail("Already collected.", 409);
 
   const dungeon = DUNGEONS.find((d) => d.id === hero.expDungeon) || DUNGEONS[0];
-  const snap = JSON.parse(hero.expStats || "null") || baseStats(hero.level);
-  const won = Math.random() < winChance(snap, dungeon.monster);
-  const log = fightLog(snap, dungeon.monster, won);
-  const xp = Math.round((won ? between(...dungeon.xp) : between(...dungeon.xp) * 0.4) * (1 + (snap.xp || 0)));
+  const floors = floorsOf(dungeon);
+  const floor = Math.min(floors, Math.max(1, hero.expFloor || 1));
+  const monster = floorMonster(dungeon, floor);
+  const snap = JSON.parse(hero.expStats || "null") || heroStats(hero, []);
+  const won = Math.random() < winChance(snap, monster);
+  const me = fighterOf(hero.name, snap, snap.cls, snap.skills);
+  const log = fightLog(me, monster, won);
+  const rewards = floorRewards(dungeon, floor);
+  const xp = Math.round((won ? rewards.xp : rewards.xp * 0.4) * (1 + (snap.xp || 0)));
   await wallet(env, user);
-  let item = null;
-  let soldFor = 0;
-  if (won && Math.random() < dungeon.loot + (snap.luck || 0)) {
-    item = lootItem(dungeon.tier);
-    if ((await bagCount(env, user.id)) >= BAG_SIZE) {
-      soldFor = item.sell; // bag full: sold on the spot
-      await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(soldFor, user.id).run();
-    } else {
-      await env.DB.prepare(
-        "INSERT INTO hero_items (user_id, slot, name, rarity, power, atk, def, hp, tier, source, sell, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'dungeon', ?, ?)"
-      )
-        .bind(user.id, item.slot, item.name, item.rarity, item.power, item.atk, item.def, item.hp, item.tier, item.sell, now)
-        .run();
+
+  const found = { coins: 0, mats: 0, item: null };
+  if (won) {
+    found.coins = rewards.coins;
+    found.mats = rewards.mats;
+    pouch.coins += rewards.coins;
+    const mat = matOf(dungeon.tier).id;
+    pouch.mats[mat] = (pouch.mats[mat] || 0) + rewards.mats;
+    if (Math.random() < rewards.loot + (snap.luck || 0)) {
+      let item = lootItem(dungeon.tier);
+      // The boss's loot rolls twice and keeps the rarer one
+      if (monster.boss) {
+        const again = lootItem(dungeon.tier);
+        if (RARITIES.findIndex((r) => r.id === again.rarity) > RARITIES.findIndex((r) => r.id === item.rarity)) item = again;
+      }
+      found.item = item;
+      pouch.items.push(item);
     }
   }
-  // Remember which regions they've beaten (for achievements)
-  if (won) await env.DB.prepare("UPDATE heroes SET cleared = cleared || ',' || ? WHERE user_id = ? AND instr(cleared, ?) = 0").bind(dungeon.id, user.id, dungeon.id).run();
-  // A win also pays coins; longer, harder regions pay more per hour
-  const coins = won ? between(...dungeon.coins) : 0;
-  await env.DB.batch([
-    env.DB.prepare("UPDATE heroes SET runs = runs + 1, wins = wins + ? WHERE user_id = ?").bind(won ? 1 : 0, user.id),
-    env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(coins, user.id),
-  ]);
+  await env.DB.prepare("UPDATE heroes SET runs = runs + 1, wins = wins + ? WHERE user_id = ?").bind(won ? 1 : 0, user.id).run();
   const gained = await addHeroXp(env, user.id, xp);
   await bumpDaily(env, user.id, { dungeons: 1, dungeon_wins: won ? 1 : 0 });
-  // Every adventure also hits the weekly boss (harder regions hit harder; a loss does half)
-  const bossDealt = await bossDamage(env, user, (60 + powerOf(snap)) * dungeon.tier * (won ? 1 : 0.5));
+  const bossDealt = await bossDamage(env, user, (60 + powerOf(snap)) * dungeon.tier * 0.4 * (won ? 1 : 0.5) * (monster.boss ? 2 : 1));
+
+  let claimed = null;
+  let ended = null;
+  if (!won) {
+    ended = "defeat";
+    claimed = await claimPouch(env, user, pouch, 0.5);
+    await endRun(env, user.id);
+  } else if (monster.boss) {
+    ended = "cleared";
+    claimed = await claimPouch(env, user, pouch);
+    await env.DB.prepare("UPDATE heroes SET cleared = cleared || ',' || ? WHERE user_id = ? AND instr(cleared, ?) = 0").bind(dungeon.id, user.id, dungeon.id).run();
+    await endRun(env, user.id);
+  } else {
+    pouch.wait = true;
+    await env.DB.prepare("UPDATE heroes SET exp_pouch = ? WHERE user_id = ?").bind(JSON.stringify(pouch), user.id).run();
+  }
   return {
     bossDealt,
-    dungeon: { id: dungeon.id, name: dungeon.name, emoji: dungeon.emoji, monster: dungeon.monster },
-    me: { name: hero.name, ...snap },
+    dungeon: { id: dungeon.id, name: dungeon.name, emoji: dungeon.emoji, tier: dungeon.tier, monster },
+    floor,
+    floors,
+    monster,
+    me: { ...me, name: hero.name },
     log,
     won,
     xp,
-    coins,
-    item,
-    soldFor,
+    found,
+    pouch: { coins: pouch.coins, items: pouch.items, mats: matsList(pouch.mats) },
+    ended,
+    claimed,
     levels: gained.levels,
     level: gained.level,
     reward: gained.reward,
+    // kept for the Discord bot's older wording
+    coins: claimed ? claimed.coins : 0,
+    item: found.item,
+    soldFor: claimed ? claimed.soldFor : 0,
   };
+}
+
+async function goDeeper(env, user) {
+  const hero = await heroOf(env, user);
+  const pouch = pouchOf(hero);
+  if (!hero.expDungeon || !pouch.wait) fail("There's no floor to go down to right now.", 409);
+  const dungeon = DUNGEONS.find((d) => d.id === hero.expDungeon) || DUNGEONS[0];
+  const floor = Math.min(floorsOf(dungeon), (hero.expFloor || 1) + 1);
+  const snap = await floorSnapshot(env, hero, user, pouch.boosts || {});
+  const now = Date.now();
+  const end = now + floorMinutes(dungeon) * 60000;
+  pouch.wait = false;
+  const res = await env.DB.prepare("UPDATE heroes SET exp_floor = ?, exp_start = ?, exp_end = ?, exp_stats = ?, exp_pouch = ? WHERE user_id = ? AND exp_floor = ?")
+    .bind(floor, now, end, JSON.stringify(snap), JSON.stringify(pouch), user.id, hero.expFloor || 1)
+    .run();
+  if (!res.meta || res.meta.changes !== 1) fail("Already on the way down.", 409);
+  return { dungeon, floor, floors: floorsOf(dungeon), end, chance: Math.round(winChance(snap, floorMonster(dungeon, floor)) * 100) };
+}
+
+async function retreat(env, user) {
+  const hero = await heroOf(env, user);
+  const pouch = pouchOf(hero);
+  if (!hero.expDungeon || !pouch.wait) fail("You can retreat after winning a floor.", 409);
+  const res = await env.DB.prepare("UPDATE heroes SET exp_dungeon = NULL, exp_end = NULL, exp_floor = 0, exp_pouch = NULL WHERE user_id = ? AND exp_dungeon = ?")
+    .bind(user.id, hero.expDungeon)
+    .run();
+  if (!res.meta || res.meta.changes !== 1) fail("Already back home.", 409);
+  const dungeon = DUNGEONS.find((d) => d.id === hero.expDungeon) || DUNGEONS[0];
+  return { retreated: { dungeon: { id: dungeon.id, name: dungeon.name, emoji: dungeon.emoji }, floor: hero.expFloor || 1, ...(await claimPouch(env, user, pouch)) } };
 }
 
 // ---------- Arena ----------
@@ -1764,7 +2226,7 @@ async function duel(env, user, opponentId) {
   const mine = heroStats(hero, await heroItems(env, user.id), true);
   const theirs = heroStats(foe, await heroItems(env, foe.userId));
   const won = Math.random() < winChance(mine, theirs, 0.05, 0.95);
-  const log = fightLog(mine, theirs, won);
+  const log = fightLog(fighterOf(hero.name, mine, hero.cls, hero.skills), fighterOf(foe.name, theirs, foe.cls, foe.skills), won);
   const expected = 1 / (1 + Math.pow(10, (foe.rating - hero.rating) / 400));
   const change = Math.max(1, Math.round(24 * Math.abs((won ? 1 : 0) - expected)));
   const delta = won ? change : -change;
@@ -1785,8 +2247,8 @@ async function duel(env, user, opponentId) {
   const earned = won ? await awardPoints(env, user, 10) : { pointsEarned: 0 };
   const gained = await addHeroXp(env, user.id, won ? 25 : 8);
   return {
-    me: { name: hero.name, look: hero.look, style: hero.style, level: hero.level, ...mine },
-    foe: { userId: foe.userId, name: foe.name, look: foe.look, style: foe.style, level: foe.level, rating: foe.rating - delta, ...theirs },
+    me: { name: hero.name, look: hero.look, style: hero.style, level: hero.level, cls: hero.cls, ...mine },
+    foe: { userId: foe.userId, name: foe.name, look: foe.look, style: foe.style, level: foe.level, cls: foe.cls, rating: foe.rating - delta, ...theirs },
     won,
     log,
     rating: hero.rating + delta,
@@ -1911,6 +2373,13 @@ async function heroAction(request, env, cors) {
 
   if (action === "dungeon") result = await startDungeon(env, user, body.dungeon);
   else if (action === "collect") result = await collectDungeon(env, user);
+  else if (action === "deeper") result = await goDeeper(env, user);
+  else if (action === "retreat") result = await retreat(env, user);
+  else if (action === "class") result = await pickClass(env, user, body.cls);
+  else if (action === "skill") result = await rankSkill(env, user, body.skill);
+  else if (action === "upgrade") result = await upgradeItem(env, user, body.item);
+  else if (action === "craft") result = await craftItem(env, user, body.slot, body.tier);
+  else if (action === "salvage") result = await salvageItem(env, user, body.item);
   else if (action === "duel") result = await duel(env, user, body.opponent);
   else if (action === "watch") {
     await wallet(env, user);
@@ -1943,7 +2412,7 @@ async function heroAction(request, env, cors) {
     await env.DB.prepare("UPDATE hero_items SET equipped = 0 WHERE user_id = ? AND slot = ?").bind(user.id, body.slot).run();
   } else fail("Unknown action", 400);
 
-  const achievements = ["collect", "duel", "equip"].includes(action) ? await checkAchievements(env, user.id) : [];
+  const achievements = ["collect", "retreat", "duel", "equip", "upgrade", "craft"].includes(action) ? await checkAchievements(env, user.id) : [];
   const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
   return json({ ...result, achievements, points: w ? w.points : 0, state: await heroState(env, user) }, 200, cors);
 }
@@ -3204,10 +3673,12 @@ const BOT_COMMANDS = [
       {
         type: 1,
         name: "go",
-        description: "Send your adventurer to a region",
+        description: "Send your adventurer into a region's dungeon",
         options: [{ type: 3, name: "place", description: "Where to go", required: true, choices: DUNGEON_CHOICES }],
       },
-      { type: 1, name: "collect", description: "Collect the rewards from a finished adventure" },
+      { type: 1, name: "collect", description: "Fight the floor's monster when its time is up" },
+      { type: 1, name: "deeper", description: "After a won floor: go down to the next, harder one" },
+      { type: 1, name: "retreat", description: "After a won floor: go home with everything found so far" },
     ],
   },
   {
@@ -3383,26 +3854,45 @@ async function botCommand(interaction, env, origin) {
         const r = await startDungeon(env, user, place);
         return botReply(null, {
           embeds: [embed({
-            title: `${r.dungeon.emoji} ${user.name} set off for ${r.dungeon.name}`,
-            description: `Back <t:${Math.floor(r.end / 1000)}:R> · ${r.chance}% chance to win.\nUse \`/dungeon collect\` when they're back.`,
+            title: `${r.dungeon.emoji} ${user.name} enters ${r.dungeon.name}`,
+            description: `Floor 1 of ${r.floors}, done <t:${Math.floor(r.end / 1000)}:R> · ${r.chance}% chance to win it.\nUse \`/dungeon collect\` when it's done.`,
             url: `${SITE_URL}/profile`,
           })],
         });
       }
+      if (sub.name === "deeper") {
+        const r = await goDeeper(env, user);
+        return botReply(null, {
+          embeds: [embed({
+            title: `${r.dungeon.emoji} ${user.name} goes down to floor ${r.floor} of ${r.floors}`,
+            description: `Done <t:${Math.floor(r.end / 1000)}:R> · ${r.chance}% chance to win it.`,
+            url: `${SITE_URL}/profile`,
+          })],
+        });
+      }
+      const matText = (mats) => mats.map((m) => `${m.emoji} ${m.n} ${m.name}`).join(", ");
+      const haul = (c) =>
+        [c.coins ? `🪙 ${c.coins}` : "", matText(c.mats || []), ...(c.items || []).map((i) => `${RARITY_DOT[i.rarity]} **${i.name}**`), c.soldFor ? `(bag full: sold for 🪙 ${c.soldFor})` : ""]
+          .filter(Boolean)
+          .join(" · ") || "nothing";
+      if (sub.name === "retreat") {
+        const { retreated: r } = await retreat(env, user);
+        return botReply(null, { embeds: [embed({ title: `${r.dungeon.emoji} ${user.name} retreats from ${r.dungeon.name} with the loot`, description: `Brought home: ${haul(r)}`, url: `${SITE_URL}/profile` })] });
+      }
       if (sub.name === "collect") {
         const r = await collectDungeon(env, user);
+        const m = r.monster;
         const lines = [
-          r.won ? `🏆 **Beat the ${r.dungeon.monster.name}!** +${r.xp} XP · +${r.coins} 🪙` : `💀 **The ${r.dungeon.monster.name} won…** but they learned something: +${r.xp} XP`,
+          r.won
+            ? `🏆 **Floor ${r.floor}/${r.floors}: beat the ${m.name}!** +${r.xp} XP${r.found.coins ? ` · +${r.found.coins} 🪙` : ""}${r.found.mats ? ` · +${r.found.mats} ${matOf(r.dungeon.tier).emoji}` : ""}`
+            : `💀 **Floor ${r.floor}/${r.floors}: the ${m.name} won…** +${r.xp} XP`,
         ];
-        if (r.item)
-          lines.push(
-            r.soldFor
-              ? `Found ${RARITY_DOT[r.item.rarity]} **${r.item.name}**, but the bag was full, so it was sold for ${r.soldFor} 🪙`
-              : `Found ${RARITY_DOT[r.item.rarity]} **${r.item.name}** (${r.item.rarity} ${r.item.slot}: ${statText(r.item)})`
-          );
-        else if (r.won) lines.push("No loot this time.");
+        if (r.found.item) lines.push(`Found ${RARITY_DOT[r.found.item.rarity]} **${r.found.item.name}** (${r.found.item.rarity} ${r.found.item.slot}: ${statText(r.found.item)})`);
+        if (r.ended === "cleared") lines.push(`👑 **Dungeon cleared!** Brought home: ${haul(r.claimed)}`);
+        else if (r.ended === "defeat") lines.push(`The run is over. Kept half the coins (🪙 ${r.claimed.coins}); the items and materials found were lost.`);
+        else lines.push(`Loot so far: ${haul(r.pouch)}\n\`/dungeon deeper\` for floor ${r.floor + 1} (harder, better loot) or \`/dungeon retreat\` to keep it.`);
         if (r.levels.length) lines.push(`⬆️ **Level ${r.level}!** +${r.reward} 🪙`);
-        return botReply(null, { embeds: [embed({ title: `${r.dungeon.emoji} ${user.name} is back from ${r.dungeon.name}`, description: lines.join("\n"), url: `${SITE_URL}/profile` })] });
+        return botReply(null, { embeds: [embed({ title: `${r.dungeon.emoji} ${user.name} in ${r.dungeon.name}`, description: lines.join("\n"), url: `${SITE_URL}/profile` })] });
       }
     } catch (err) {
       return botReply(`⚠️ ${err.message}`, { ephemeral: true });
@@ -3411,7 +3901,7 @@ async function botCommand(interaction, env, origin) {
     const h = s.hero;
     const worn = s.items.filter((i) => i.equipped);
     const buffs = Object.entries(h.buffs).map(([k, n]) => `${(s.extras.find((e) => e.buff === k) || {}).emoji || "✨"}×${n}`).join(" ");
-    const away = s.expedition && DUNGEONS.find((d) => d.id === s.expedition.dungeon);
+    const away = s.run && DUNGEONS.find((d) => d.id === s.run.dungeon);
     const bar = h.next ? "▰".repeat(Math.round((h.xp / h.next) * 10)).padEnd(10, "▱") : "MAX";
     return botReply(null, {
       embeds: [embed({
@@ -3420,11 +3910,14 @@ async function botCommand(interaction, env, origin) {
         description:
           `${bar} ${h.next ? `${h.xp} / ${h.next} XP` : ""}\n⚔️ **${h.stats.atk}** ATK · 🛡️ **${h.stats.def}** DEF · ❤️ **${h.stats.hp}** HP · 💪 power ${h.power}\n` +
           `🏆 ${h.wins}/${h.runs} adventures won · 🏟️ arena ${h.rating} (${h.duelWins}W ${h.duelLosses}L)${buffs ? `\nActive boosts: ${buffs}` : ""}\n` +
+          (h.cls ? `${CLASSES[h.cls].emoji} ${CLASSES[h.cls].name}${h.skillPoints ? ` · ${h.skillPoints} skill point${h.skillPoints === 1 ? "" : "s"} to spend on the website` : ""}\n` : "") +
           (away
-            ? s.expedition.done
-              ? `${away.emoji} Back from ${away.name}! Use \`/dungeon collect\`.`
-              : `${away.emoji} Exploring ${away.name}, back <t:${Math.floor(s.expedition.end / 1000)}:R>`
-            : "🏕️ Resting. Send them out with `/dungeon go`."),
+            ? s.run.wait
+              ? `${away.emoji} Won floor ${s.run.floor}/${s.run.floors} of ${away.name}! \`/dungeon deeper\` or \`/dungeon retreat\`.`
+              : s.run.done
+                ? `${away.emoji} Floor ${s.run.floor}/${s.run.floors} of ${away.name} is ready: \`/dungeon collect\`.`
+                : `${away.emoji} On floor ${s.run.floor}/${s.run.floors} of ${away.name}, done <t:${Math.floor(s.run.end / 1000)}:R>`
+            : "🏕️ Resting. Send them into a dungeon with `/dungeon go`."),
         fields: [
           { name: "Gear", value: worn.length ? worn.map((i) => `${RARITY_DOT[i.rarity] || "⚪"} ${i.name}`).join("\n") : "Nothing equipped yet", inline: true },
           { name: "Regions", value: s.dungeons.map((d) => `${d.open ? d.emoji : "🔒"} ${d.name}${d.open ? ` · ${d.chance}%` : ` · level ${d.level}`}`).join("\n"), inline: true },
@@ -3699,19 +4192,19 @@ const HELP_TOPICS = {
     label: "Adventure",
     emoji: "⚔️",
     title: "⚔️ Adventure",
-    description: "Send your adventurer to a region. They come back after real time with XP, coins and sometimes loot.",
+    description: "Every region is a dungeon of 3 to 7 floors with its boss at the bottom. Each floor takes real time, then your adventurer fights its monster.",
     fields: [
       {
         name: "Commands",
-        value: "`/dungeon status` level, stats, gear, regions\n`/dungeon go place:` send them out\n`/dungeon collect` get the rewards when they're back",
+        value: "`/dungeon status` level, class, gear, where you are\n`/dungeon go place:` enter a dungeon\n`/dungeon collect` fight the floor when its time is up\n`/dungeon deeper` or `/dungeon retreat` after a won floor",
       },
       {
-        name: "Regions",
-        value: DUNGEONS.map((d) => `${d.emoji} **${d.name}** · level ${TIER_LEVELS[d.tier - 1]} · ${d.minutes >= 60 ? `${d.minutes / 60} h` : `${d.minutes} min`} · 🪙 ${d.coins[0]}–${d.coins[1]}`).join("\n"),
+        name: "Dungeons",
+        value: DUNGEONS.map((d) => `${d.emoji} **${d.name}** · level ${TIER_LEVELS[d.tier - 1]} · ${floorsOf(d)} floors, ${floorMinutes(d)} min each`).join("\n"),
       },
-      { name: "Winning", value: "Each region has a boss. Your **Attack, Defense and HP** decide the chance to win (shown before you go). A loss still gives some XP." },
-      { name: "Getting stronger", value: "Level up (base stats grow), wear better gear (8 slots, rarer = stronger), and drink potions for +25% on the next 3 fights." },
-      { name: "On the website", value: `${SITE_URL}/profile has the world map, your bag and a live replay of every fight.` },
+      { name: "Deeper or retreat", value: "Won floors drop coins, materials and gear into your loot bag. Go deeper for more (the boss drops the best), or retreat to keep it. Lose a floor and you keep the XP and half the coins, nothing else." },
+      { name: "Classes & skills", value: "At level 5 pick **Warrior**, **Rogue** or **Mage** on the website. Each has 3 skills (Cleave, Backstab, Fireball…) you rank up with a skill point every level." },
+      { name: "Forge", value: "Materials from the dungeons upgrade gear from +1 to +10 (+8% stats each) and forge new rare, epic or legendary items. Salvage old gear for materials." },
       {
         name: "👹 Weekly world boss",
         value: "A new boss every Monday for everyone. Every adventure and duel hits it, and `/boss strike` (every 4 hours) hits hard. When it falls, everyone who fought gets a chest; the top 3 also get gear.",

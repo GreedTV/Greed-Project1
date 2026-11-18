@@ -1,6 +1,7 @@
 // Profile page: your stats, your pixel adventurer (Attack / Defense / HP, 8 gear slots, a bag, potion
-// boosts), a world map to send them on timed adventures, and the Arena for duels with other players.
-// Everything is decided by the Worker (/hero, /profile, /arena); fights are replayed here blow by blow.
+// boosts, a class with skills), a world map of dungeons fought floor by floor, the forge (materials,
+// crafting, +1 to +10 upgrades) and the Arena for duels with other players. Everything is decided by the
+// Worker (/hero, /profile, /arena); fights are played out here in a battle scene, blow by blow.
 
 const API = WORKER_URL.replace(/\/$/, "");
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -33,6 +34,7 @@ const MAP_SPOTS = {
 };
 
 const $ = (id) => document.getElementById(id);
+const itemName = (i) => `${i.name}${i.plus ? ` +${i.plus}` : ""}`;
 const statText = (s) => [s.atk && `⚔️ +${s.atk}`, s.def && `🛡️ +${s.def}`, s.hp && `❤️ +${s.hp}`].filter(Boolean).join("  ");
 let state = null;
 let selectedItem = null;
@@ -93,6 +95,7 @@ function itemIcon(item, big) {
     box.append(img);
   } else box.append(SinnersArt.gearIcon(item));
   box.classList.add(`tier-${item.tier || 1}`);
+  if (item.plus) box.append(el("span", "plus-badge", `+${item.plus}`));
   return box;
 }
 
@@ -101,13 +104,16 @@ function renderHero() {
   const worn = wornMap();
   $("hero-name").textContent = h.name;
   $("hero-level").textContent = `Level ${h.level}`;
+  const cls = state.classes.find((c) => c.id === h.cls);
+  $("hero-class").hidden = !cls;
+  if (cls) $("hero-class").textContent = `${cls.emoji} ${cls.name}`;
   $("xp-fill").style.width = h.next ? `${Math.min(100, (h.xp / h.next) * 100)}%` : "100%";
   $("xp-text").textContent = h.next ? `${h.xp} / ${h.next} XP to level ${h.level + 1}` : "Max level reached!";
   const figure = $("hero-figure");
   figure.replaceChildren(heroSvg(h.look, worn, h.style || {}));
   const pet = petEmoji(h.style);
   if (pet) figure.append(el("span", "hero-pet", pet));
-  figure.classList.toggle("away", !!state.expedition && !state.expedition.done);
+  figure.classList.toggle("away", !!state.run);
   const stat = (icon, label, key) => {
     const box = el("div", "hero-stat");
     const boosted = h.fighting[key] > h.stats[key];
@@ -139,7 +145,7 @@ function renderHero() {
     const item = worn[name];
     const b = el("button", "gear-slot" + (item ? " filled" : ""));
     b.type = "button";
-    b.title = item ? `${item.name}: ${statText(item)}` : `${SLOT_INFO[name][1]}: empty`;
+    b.title = item ? `${itemName(item)}: ${statText(item)}` : `${SLOT_INFO[name][1]}: empty`;
     if (item) {
       b.append(itemIcon(item));
       b.addEventListener("click", () => selectItem(item));
@@ -160,7 +166,7 @@ function renderBag() {
   const cells = bagItems.map((item) => {
     const b = el("button", "bag-cell" + (selectedItem && selectedItem.id === item.id ? " selected" : ""));
     b.type = "button";
-    b.title = `${item.name}: ${statText(item)}`;
+    b.title = `${itemName(item)}: ${statText(item)}`;
     b.append(itemIcon(item), el("span", "bag-power", `⚡${item.power}`));
     b.addEventListener("click", () => selectItem(item));
     return b;
@@ -175,10 +181,10 @@ function selectItem(item) {
   const panel = $("item-panel");
   const [label, color] = RARITY[item.rarity] || RARITY.common;
   const head = el("div", "item-head");
-  const name = el("strong", null, item.name);
+  const name = el("strong", null, itemName(item));
   name.style.color = color;
   const info = el("div");
-  info.append(name, el("span", "hint", `${label} ${SLOT_INFO[item.slot][1].toLowerCase()} · tier ${item.tier} · ${item.source === "shop" ? "bought in the shop" : "found on an adventure"}`));
+  info.append(name, el("span", "hint", `${label} ${SLOT_INFO[item.slot][1].toLowerCase()} · tier ${item.tier} · ${{ shop: "bought in the shop", forge: "made in the forge" }[item.source] || "found in a dungeon"}`));
   head.append(itemIcon(item, true), info);
 
   const worn = wornMap()[item.slot];
@@ -207,7 +213,7 @@ function selectItem(item) {
         state = res.state;
         selectedItem = state.items.find((i) => i.id === item.id) || null;
         renderAll();
-        if (res.soldFor) showResult(`🪙 Sold ${item.name} for ${res.soldFor} points.`);
+        if (res.soldFor) showResult(`🪙 Sold ${itemName(item)} for ${res.soldFor} points.`);
         if (selectedItem) selectItem(selectedItem);
         else $("item-panel").replaceChildren(el("p", "hint", "Click an item in your bag or a gear slot to see it."));
       } catch (err) {
@@ -221,9 +227,44 @@ function selectItem(item) {
   if (item.equipped) act("Take off", "button ghost", { action: "unequip", slot: item.slot });
   else {
     act("Equip", "button", { action: "equip", item: item.id });
-    act(`Sell for ${item.sell} 🪙`, "button ghost", { action: "sell", item: item.id }, `You get 🪙 ${item.sell} points for ${item.name}.`);
+    act(`Sell for ${item.sell} 🪙`, "button ghost", { action: "sell", item: item.id }, `You get 🪙 ${item.sell} points for ${itemName(item)}.`);
   }
-  panel.replaceChildren(head, compare, actions, msg);
+
+  // The forge: upgrade (+1 to +10) and salvage into materials
+  const forge = el("div", "item-forge");
+  const mat = state.materials.find((m) => m.id === item.mat) || state.materials[0];
+  const up = item.upgrade;
+  if (up) {
+    const ok = mat.n >= up.n;
+    const row = el("div", "upgrade-row");
+    const cost = el("span", "craft-cost");
+    const chip = matIcon(mat, null);
+    chip.querySelector("strong").textContent = `${mat.n} / ${up.n}`;
+    chip.classList.toggle("short", !ok);
+    cost.append(chip, el("span", "pouch-coins", `🪙 ${up.coins}`));
+    const b = el("button", "button upgrade-btn", `🔨 Upgrade to +${up.to}`);
+    b.type = "button";
+    b.disabled = !ok;
+    b.addEventListener("click", async () => {
+      const r = await heroDo({ action: "upgrade", item: item.id }, { quiet: true });
+      if (!r) return;
+      showResult(r.upgraded ? `✨ ${r.item} is now +${r.plus}!` : `💥 The upgrade failed. ${r.item} stays at +${r.plus}; the materials and coins are gone.`);
+      $("adv-result").classList.toggle("win", r.upgraded);
+    });
+    row.append(cost, b);
+    forge.append(el("span", "forge-label", `Upgrade: +${state.forge.plusStep * 100}% stats per level · ${Math.round(up.chance * 100)}% chance${up.chance < 1 ? " (a failure uses up the cost)" : ""}`), row);
+  } else forge.append(el("span", "forge-label", "✨ Fully upgraded (+10)"));
+  if (!item.equipped) {
+    const salvage = el("button", "link-btn", `♻️ Salvage for ${mat.emoji} ${item.salvage} ${mat.name}`);
+    salvage.type = "button";
+    salvage.addEventListener("click", async () => {
+      if (!(await SinnersDialog.confirm(`Break ${itemName(item)} down into ${item.salvage} ${mat.name}? The item is gone for good.`, { title: "Salvage this item?", yes: "Salvage", icon: "♻️" }))) return;
+      const r = await heroDo({ action: "salvage", item: item.id }, { quiet: true });
+      if (r) showResult(`♻️ Salvaged ${r.salvaged.name} into ${r.salvaged.emoji} ${r.salvaged.n} ${r.salvaged.mat}.`);
+    });
+    forge.append(salvage);
+  }
+  panel.replaceChildren(head, compare, actions, forge, msg);
 }
 
 // ---------- World map ----------
@@ -246,7 +287,7 @@ function renderMap() {
   root.append(svg("path", { d: road, class: "map-road-edge" }));
   root.append(svg("path", { d: road, class: "map-road" }));
 
-  const trip = state.expedition;
+  const trip = state.run;
   state.dungeons.forEach((d) => {
     const { x, y } = MAP_SPOTS[d.id];
     const g = svg("g", { class: `map-spot${d.open ? "" : " locked"}${selectedPlace === d.id ? " selected" : ""}${trip && trip.dungeon === d.id ? " active" : ""}`, tabindex: 0, role: "button" });
@@ -276,7 +317,7 @@ function renderMap() {
   // The adventurer's marker while away
   if (trip) {
     const { x, y } = MAP_SPOTS[trip.dungeon];
-    const flag = mapIcon(trip.done ? "🎁" : "🚩", x + 28, y - 34, 22);
+    const flag = mapIcon(trip.wait || trip.done ? "🎁" : "🚩", x + 28, y - 34, 22);
     flag.classList.add("trip-flag");
     root.append(flag);
   }
@@ -407,46 +448,112 @@ const fmtTime = (ms) => {
 };
 
 let clockSkew = 0;
+
+// ---------- Dungeon panel (under the map) ----------
+// No run: the picked region's floors, odds and rewards. During a run: the floors so far, the timer
+// and the loot. After a won floor: go deeper or retreat.
+
+const minutesText = (m) => (m >= 60 ? `${Math.round((m / 60) * 10) / 10} h` : `${m} min`);
+const matIcon = (m, n) => {
+  const chip = el("span", "mat-chip" + (n === 0 ? " none" : ""));
+  chip.title = m.name;
+  chip.append(el("span", "mat-emoji", m.emoji), el("strong", null, n != null ? String(n) : ""));
+  return chip;
+};
+
+function floorTrack(d, run) {
+  const track = el("ol", "floor-track");
+  d.floors.forEach((f, i) => {
+    const n = i + 1;
+    let cls = "floor-node";
+    if (run) {
+      if (n < run.floor || (n === run.floor && run.wait)) cls += " cleared";
+      else if (n === run.floor) cls += " current";
+    }
+    if (f.boss) cls += " boss";
+    const li = el("li", cls);
+    li.title = `Floor ${n}: ${f.name} (⚔️ ${f.atk} · 🛡️ ${f.def} · ❤️ ${f.hp})`;
+    li.append(el("span", "floor-icon", f.boss ? "👑" : f.emoji), el("small", null, f.boss ? "Boss" : `F${n}`));
+    track.append(li);
+  });
+  return track;
+}
+
+function pouchLine(pouch) {
+  const line = el("div", "pouch");
+  line.append(el("span", "hint", "Loot so far:"), el("span", "pouch-coins", `🪙 ${pouch.coins}`));
+  pouch.mats.forEach((m) => line.append(matIcon(m, m.n)));
+  pouch.items.forEach((item) => {
+    const chip = el("span", "pouch-item");
+    chip.title = `${item.name} (${RARITY[item.rarity][0]})`;
+    chip.append(itemIcon(item));
+    line.append(chip);
+  });
+  return line;
+}
+
 function renderTrip() {
   const box = $("trip");
-  const trip = state.expedition;
-  if (trip) {
-    const d = state.dungeons.find((x) => x.id === trip.dungeon);
-    const now = Date.now() + clockSkew;
-    const done = now >= trip.end;
-    const pct = Math.min(100, ((now - trip.start) / (trip.end - trip.start)) * 100);
-    const bar = el("div", "xp-bar trip-bar");
-    const fill = el("span");
-    fill.style.width = `${pct}%`;
-    bar.append(fill);
-    const title = el("strong", null, done ? `${d.emoji} Back from ${d.name}!` : `${d.emoji} Exploring ${d.name}…`);
-    const parts = [title, bar];
-    if (done) {
-      const b = el("button", "button", "🎁 Collect rewards");
-      b.type = "button";
-      b.addEventListener("click", collect);
-      parts.push(b);
-    } else parts.push(el("span", "hint", `Back in ${fmtTime(trip.end - now)}. You can close the page; they'll keep going.`));
+  const run = state.run;
+  if (run) {
+    const d = state.dungeons.find((x) => x.id === run.dungeon);
+    const parts = [el("strong", "trip-title", `${d.emoji} ${d.name} · floor ${run.floor} of ${run.floors}`), floorTrack(d, run)];
+    if (run.wait) {
+      const n = run.next;
+      const nextBox = el("div", "next-floor");
+      nextBox.append(
+        el("span", "floor-icon big", n.boss ? "👑" : n.emoji),
+        el("div", null),
+      );
+      nextBox.lastChild.append(
+        el("strong", null, `Next: floor ${run.floor + 1}${n.boss ? " · the BOSS" : ""} · ${n.name}`),
+        el("span", "hint", `⚔️ ${n.atk} · 🛡️ ${n.def} · ❤️ ${n.hp} · ${n.chance}% chance to win · ${minutesText(n.minutes)}`)
+      );
+      const actions = el("div", "trip-actions");
+      const deeper = el("button", "button", n.boss ? "⚔️ Face the boss" : "⬇️ Go deeper");
+      deeper.type = "button";
+      deeper.addEventListener("click", goDeeper);
+      const back = el("button", "button ghost", "🏃 Retreat with the loot");
+      back.type = "button";
+      back.addEventListener("click", retreat);
+      actions.append(deeper, back);
+      parts.push(el("p", "trip-win", `🏆 Floor ${run.floor} cleared!`), pouchLine(run.pouch), nextBox, actions, el("span", "hint", "Losing a floor ends the run: you keep the XP and half the coins, but the items and materials found are lost."));
+    } else {
+      const now = Date.now() + clockSkew;
+      const done = now >= run.end;
+      const pct = Math.min(100, ((now - run.start) / (run.end - run.start)) * 100);
+      const bar = el("div", "xp-bar trip-bar");
+      const fill = el("span");
+      fill.style.width = `${pct}%`;
+      bar.append(fill);
+      const m = run.monster;
+      parts.push(el("span", "hint", `${m.boss ? "👑 Boss: " : "Monster: "}${m.name} (⚔️ ${m.atk} · 🛡️ ${m.def} · ❤️ ${m.hp})`), bar);
+      if (run.pouch.coins || run.pouch.items.length || run.pouch.mats.length) parts.push(pouchLine(run.pouch));
+      if (done) {
+        const b = el("button", "button fight-btn", `⚔️ Fight the ${m.name}`);
+        b.type = "button";
+        b.addEventListener("click", collect);
+        parts.push(b);
+      } else parts.push(el("span", "hint", `Reaching the ${m.name} in ${fmtTime(run.end - now)}. You can close the page; they'll keep going.`));
+    }
     box.replaceChildren(...parts);
     return;
   }
   const d = state.dungeons.find((x) => x.id === selectedPlace) || state.dungeons.find((x) => x.open);
   if (!d) return box.replaceChildren();
-  const m = d.monster;
   const facts = el("ul", "trip-facts");
   [
-    [m.emoji, `Boss: ${m.name} (⚔️ ${m.atk} · 🛡️ ${m.def} · ❤️ ${m.hp})`],
-    ["🎯", `${d.chance}% chance to win (your power ${powerOf(state.hero.fighting)} vs. ${d.monsterPower})`],
-    ["⏱️", `${d.minutes >= 60 ? `${d.minutes / 60} h` : `${d.minutes} min`} · ✨ ${d.xp[0]}–${d.xp[1]} XP`],
-    ["🎁", `Win: 🪙 ${d.coins[0]}–${d.coins[1]} coins and a ${Math.round(d.loot * 100)}% chance of loot`],
+    ["🏰", `${d.floors.length} floors, ${minutesText(d.floorMinutes)} each · boss: ${d.monster.name}`],
+    ["🎯", `${d.chance}% to win floor 1 · ${d.bossChance}% against the boss (your power ${powerOf(state.hero.fighting)})`],
+    ["🎁", `Coins, XP, ${d.mat.emoji} ${d.mat.name} and gear on every won floor; the boss drops the best`],
   ].forEach(([i, t]) => {
     const li = el("li");
     li.append(el("span", null, i), document.createTextNode(` ${t}`));
     facts.append(li);
   });
-  const parts = [el("strong", null, `${d.open ? d.emoji : "🔒"} ${d.name}`), facts];
+  const parts = [el("strong", "trip-title", `${d.open ? d.emoji : "🔒"} ${d.name}`), floorTrack(d, null), facts];
   if (d.open) {
-    const go = el("button", "button", `Send ${state.hero.name} here`);
+    const go = el("button", "button", `Enter ${d.name}`);
     go.type = "button";
     go.addEventListener("click", () => send(d));
     parts.push(go);
@@ -459,6 +566,12 @@ function renderAll() {
   renderBag();
   renderMap();
   renderTrip();
+  renderSkills();
+  renderForge();
+  if (selectedItem) {
+    selectedItem = state.items.find((i) => i.id === selectedItem.id) || null;
+    if (selectedItem) selectItem(selectedItem);
+  }
 }
 
 function showResult(html) {
@@ -467,47 +580,81 @@ function showResult(html) {
   box.hidden = false;
 }
 
-async function send(d) {
-  if (busy) return;
+// Runs an adventure action; returns the Worker's answer (and refreshes everything)
+async function heroDo(body, { quiet } = {}) {
+  if (busy) return null;
   busy = true;
   try {
-    await api("/hero", { action: "dungeon", dungeon: d.id });
-    await loadHero();
-    $("adv-result").hidden = true;
+    const r = await api("/hero", body);
+    state = r.state;
+    clockSkew = state.now - Date.now();
+    if (!quiet) $("adv-result").hidden = true;
+    renderAll();
+    return r;
   } catch (err) {
     showResult(`⚠️ ${err.message}`);
+    $("adv-result").classList.remove("win");
+    return null;
   } finally {
     busy = false;
   }
+}
+
+const send = (d) => heroDo({ action: "dungeon", dungeon: d.id });
+const goDeeper = () => heroDo({ action: "deeper" });
+
+const matsText = (mats) => mats.map((m) => `${m.emoji} ${m.n} ${m.name}`).join(", ");
+function haulLines(c) {
+  const lines = [];
+  if (c.coins) lines.push(`🪙 ${c.coins} coins`);
+  if (c.mats && c.mats.length) lines.push(matsText(c.mats));
+  (c.items || []).forEach((i) => lines.push(`🎁 ${i.name} (${RARITY[i.rarity][0]})`));
+  if (c.soldFor) lines.push(`Your bag was full, so some items were sold for 🪙 ${c.soldFor}.`);
+  return lines;
+}
+
+async function retreat() {
+  const r = await heroDo({ action: "retreat" }, { quiet: true });
+  if (!r) return;
+  const t = r.retreated;
+  showResult([`🏃 Back from ${t.dungeon.name} after floor ${t.floor}, with:`, ...(haulLines(t).length ? haulLines(t) : ["nothing this time"])]);
+  $("adv-result").classList.add("win");
+  loadProfile();
 }
 
 async function collect() {
   if (busy) return;
   busy = true;
   try {
-    const r = await api("/hero", { action: "collect" });
     const before = state;
+    const r = await api("/hero", { action: "collect" });
     state = r.state;
     clockSkew = state.now - Date.now();
-    const m = r.dungeon.monster;
-    const lines = [
-      r.won ? `🏆 Beat the ${m.name} in ${r.dungeon.name}! +${r.xp} XP · +${r.coins} 🪙` : `💀 The ${m.name} won this time… but you still learned something: +${r.xp} XP`,
-    ];
-    if (r.item) {
-      const [label] = RARITY[r.item.rarity];
-      lines.push(r.soldFor ? `Found a ${label} ${r.item.name}, but your bag was full, so it was sold for ${r.soldFor} 🪙.` : `🎁 Found: ${r.item.name} (${label}, ${statText(r.item)}). It's in your bag.`);
-    } else if (r.won) lines.push("No loot this time.");
+    const m = r.monster;
+    const lines = [r.won ? `Beat the ${m.name} on floor ${r.floor}! +${r.xp} XP` : `The ${m.name} won this time… +${r.xp} XP`];
+    const loot = [];
+    if (r.found.coins) loot.push({ icon: "🪙", text: `+${r.found.coins}` });
+    if (r.found.mats) {
+      const mat = state.materials[r.dungeon.tier - 1];
+      loot.push({ icon: mat.emoji, text: `+${r.found.mats} ${mat.name}` });
+    }
+    if (r.found.item) loot.push({ item: r.found.item });
+    if (r.ended === "cleared") lines.push("👑 Dungeon cleared! Everything you found is yours:", ...haulLines(r.claimed));
+    else if (r.ended === "defeat") lines.push(`The run is over. You keep the XP and half the coins (🪙 ${r.claimed.coins}); the items and materials found are lost.`);
     if (r.levels.length) lines.push(`⬆️ Level up! You're level ${r.level} now (+${r.reward} 🪙).`);
     if (r.bossDealt) lines.push(`👹 It also hit the world boss for ${r.bossDealt.toLocaleString()}.`);
     await playFight({
-      title: `${r.dungeon.emoji} ${r.dungeon.name}`,
+      title: `${r.dungeon.emoji} ${r.dungeon.name} · floor ${r.floor} of ${r.floors}`,
+      region: r.dungeon.id,
       a: { name: before.hero.name, look: before.hero.look, style: before.hero.style, worn: wornFrom(before), ...r.me },
-      b: { name: m.name, emoji: m.emoji, ...m },
+      b: { ...m },
       log: r.log,
       won: r.won,
       result: lines,
+      loot,
+      next: !r.ended && state.run && state.run.wait ? state.run : null,
     });
-    showResult(lines);
+    showResult([r.won ? `🏆 ${lines[0]}` : `💀 ${lines[0]}`, ...lines.slice(1)]);
     $("adv-result").classList.toggle("win", r.won);
     renderAll();
     loadProfile();
@@ -530,85 +677,356 @@ $("hero-reroll").addEventListener("click", async () => {
   }
 });
 
-// ---------- Fight replay ----------
+// ---------- Battle scene ----------
+// Plays a fight log from the Worker turn by turn: lunges, hits, criticals, dodges, skills with their
+// own effects (Fireball, Arcane Surge, Cleave, poison, Last Stand), then victory with the loot or defeat.
 
 const wornFrom = (s) => Object.fromEntries(s.items.filter((i) => i.equipped).map((i) => [i.slot, i]));
+const CLASS_EMOJI = { warrior: "🛡️", rogue: "🗡️", mage: "🔮" };
+const SKILL_FX = {
+  Fireball: { cls: "fx-fireball", banner: "🔥 Fireball!", projectile: true },
+  "Arcane Surge": { cls: "fx-arcane", banner: "✨ Arcane Surge!" },
+  Cleave: { cls: "fx-cleave", banner: "⚔️ Cleave!" },
+  Poison: { cls: "fx-poison" },
+  "Last Stand": { cls: "fx-heal", banner: "❤️ Last Stand!" },
+};
 let fightDone = null;
 
-function fighterBox(box, f) {
+function fighterBox(box, f, side) {
+  const head = el("div", "fighter-head");
+  const name = el("strong", null, f.name);
+  if (f.cls && CLASS_EMOJI[f.cls]) name.prepend(el("span", "fighter-cls", CLASS_EMOJI[f.cls]));
+  if (f.boss) name.append(el("span", "boss-tag", "BOSS"));
+  const bar = el("div", "hp-bar");
+  const fill = el("span");
+  const lag = el("i");
+  bar.append(lag, fill);
+  const hp = el("span", "hp-text", `${f.hp} / ${f.hp}`);
+  head.append(name, bar, hp);
   const pic = el("div", "fighter-pic");
   if (f.look) pic.append(heroSvg(f.look, f.worn || {}, f.style || {}));
   else pic.append(el("span", "fighter-emoji", f.emoji || "👾"));
-  const bar = el("div", "hp-bar");
-  const fill = el("span");
-  bar.append(fill);
-  const hp = el("span", "hp-text", `${f.hp} / ${f.hp}`);
-  box.replaceChildren(pic, el("strong", null, f.name), el("span", "hint", `⚔️ ${f.atk} · 🛡️ ${f.def} · ❤️ ${f.hp}`), bar, hp);
+  const fx = el("div", "fighter-fx");
+  pic.append(fx);
+  box.className = `fighter side-${side}${f.boss ? " is-boss" : ""}`;
+  box.replaceChildren(head, pic, el("span", "fighter-stats hint", `⚔️ ${f.atk} · 🛡️ ${f.def} · ❤️ ${f.hp}`));
+  const restart = (node, cls) => {
+    node.classList.remove(cls);
+    void node.offsetWidth;
+    node.classList.add(cls);
+  };
+  const pop = (text, kind) => {
+    const p = el("span", `dmg-pop ${kind || ""}`, text);
+    p.style.setProperty("--x", `${Math.round(Math.random() * 40 - 20)}px`);
+    fx.append(p);
+    setTimeout(() => p.remove(), 1100);
+  };
+  const effect = (cls) => {
+    const e = el("span", `skill-fx ${cls}`);
+    fx.append(e);
+    setTimeout(() => e.remove(), 900);
+  };
   return {
+    pic,
     set(value) {
-      fill.style.width = `${Math.max(0, (value / f.hp) * 100)}%`;
+      const pct = `${Math.max(0, (value / f.hp) * 100)}%`;
+      fill.style.width = pct;
+      setTimeout(() => (lag.style.width = pct), 350);
       fill.classList.toggle("low", value / f.hp < 0.3);
       hp.textContent = `${value} / ${f.hp}`;
     },
-    hit(text, crit) {
-      pic.classList.remove("hurt");
-      void pic.offsetWidth; // restart the shake
-      pic.classList.add("hurt");
-      const pop = el("span", "dmg-pop" + (crit ? " crit" : ""), text);
-      pic.append(pop);
-      setTimeout(() => pop.remove(), 900);
-    },
+    lunge: () => restart(pic, "lunge"),
+    hurt: (crit) => restart(pic, crit ? "hurt-big" : "hurt"),
+    dodge: () => restart(pic, "dodging"),
+    glow: () => restart(pic, "healing"),
+    fall: () => pic.classList.add("fallen"),
+    pop,
+    effect,
   };
 }
 
-// Plays a fight log (from the Worker) blow by blow; resolves when the player closes it
-function playFight({ title, a, b, log, won, result }) {
+function playFight({ title, region, a, b, log, won, result, loot = [], next = null }) {
   const overlay = $("fight");
+  const stage = $("battle-stage");
+  stage.className = `battle-stage bg-${region || "arena"}`;
   $("fight-title").textContent = title;
-  const A = fighterBox($("fighter-a"), a);
-  const B = fighterBox($("fighter-b"), b);
+  const A = fighterBox($("fighter-a"), a, "a");
+  const B = fighterBox($("fighter-b"), b, "b");
   A.set(a.hp);
   B.set(b.hp);
+  const banner = $("battle-banner");
+  banner.textContent = "";
   $("fight-result").replaceChildren();
-  $("fight-line").textContent = "";
+  $("fight-result").className = "fight-result";
+  $("fight-line").textContent = "Fight!";
   $("fight-skip").hidden = false;
   $("fight-close").hidden = true;
+  $("fight-next").replaceChildren();
   overlay.hidden = false;
+  const fast = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const showBanner = (text) => {
+    if (!text) return;
+    banner.textContent = text;
+    banner.classList.remove("show");
+    void banner.offsetWidth;
+    banner.classList.add("show");
+  };
   let i = 0;
   let timer = null;
   const finish = () => {
-    clearInterval(timer);
+    clearTimeout(timer);
     const last = log[log.length - 1] || { hpA: a.hp, hpB: b.hp };
     A.set(last.hpA);
     B.set(last.hpB);
-    $("fight-result").replaceChildren(el("strong", won ? "win" : "lose", won ? "🏆 Victory!" : "💀 Defeat"), ...result.map((line) => el("p", null, line)));
+    (won ? B : A).fall();
+    showBanner(won ? "🏆 VICTORY" : "💀 DEFEAT");
+    stage.classList.add(won ? "won" : "lost");
+    const res = $("fight-result");
+    res.classList.add(won ? "win" : "lose");
+    const lootRow = el("div", "loot-row");
+    loot.forEach((l, n) => {
+      const card = el("div", "loot-card");
+      card.style.animationDelay = `${0.15 + n * 0.18}s`;
+      if (l.item) {
+        card.append(itemIcon(l.item, true), el("strong", null, l.item.name), el("small", null, RARITY[l.item.rarity][0]));
+        card.style.setProperty("--rarity", RARITY[l.item.rarity][1]);
+        card.classList.add("item", l.item.rarity);
+      } else card.append(el("span", "loot-icon", l.icon), el("strong", null, l.text));
+      lootRow.append(card);
+    });
+    res.replaceChildren(...(loot.length ? [lootRow] : []), ...result.map((line) => el("p", null, line)));
     $("fight-skip").hidden = true;
     $("fight-close").hidden = false;
+    $("fight-close").textContent = next ? "Decide later" : "Continue";
+    if (next) {
+      const deeper = el("button", "button", next.next.boss ? "⚔️ Face the boss" : `⬇️ Go deeper (${next.next.chance}%)`);
+      deeper.type = "button";
+      // After the fight's own wrap-up (which runs as the window closes)
+      deeper.addEventListener("click", () => {
+        fightDone();
+        setTimeout(goDeeper);
+      });
+      const back = el("button", "button ghost", "🏃 Retreat with the loot");
+      back.type = "button";
+      back.addEventListener("click", () => {
+        fightDone();
+        setTimeout(retreat);
+      });
+      $("fight-next").replaceChildren(deeper, back);
+    }
     $("fight-close").focus();
   };
   const step = () => {
     if (i >= log.length) return finish();
     const s = log[i++];
-    const attacker = s.by === "a" ? a : b;
+    const attacker = s.by === "a" ? A : B;
     const target = s.by === "a" ? B : A;
-    if (s.miss) $("fight-line").textContent = `${attacker.name} misses!`;
-    else {
-      target.hit(s.crit ? `${s.dmg}!` : String(s.dmg), s.crit);
-      $("fight-line").textContent = `${attacker.name} hits for ${s.dmg}${s.crit ? " (critical!)" : ""}`;
+    const who = s.by === "a" ? a : b;
+    const foe = s.by === "a" ? b : a;
+    const fx = s.skill && SKILL_FX[s.skill];
+    let delay = fast ? 120 : 700;
+    if (s.kind === "heal") {
+      attacker.glow();
+      attacker.effect("fx-heal");
+      attacker.pop(`+${s.dmg}`, "heal");
+      showBanner(fx && fx.banner);
+      $("fight-line").textContent = `${who.name} refuses to fall and heals ${s.dmg}!`;
+    } else if (s.kind === "poison") {
+      target.effect("fx-poison");
+      target.pop(`☠ ${s.dmg}`, "poison");
+      target.hurt(false);
+      $("fight-line").textContent = `Poison eats at ${foe.name} for ${s.dmg}.`;
+      delay = fast ? 100 : 520;
+    } else {
+      attacker.lunge();
+      if (fx) {
+        showBanner(fx.banner);
+        if (fx.projectile) {
+          const ball = el("span", `projectile from-${s.by}`);
+          stage.append(ball);
+          setTimeout(() => ball.remove(), 600);
+        }
+        setTimeout(() => target.effect(fx.cls), fx.projectile ? 280 : 60);
+      }
+      const land = () => {
+        if (s.kind === "dodge") {
+          target.dodge();
+          target.pop("MISS", "miss");
+          $("fight-line").textContent = `${foe.name} dodges${s.skill ? ` the ${s.skill}` : ""}!`;
+          return;
+        }
+        target.hurt(s.kind === "crit");
+        if (s.kind === "crit" && !fast) {
+          stage.classList.remove("shake");
+          void stage.offsetWidth;
+          stage.classList.add("shake");
+        }
+        target.pop(s.kind === "crit" ? `${s.dmg}!` : String(s.dmg), s.kind === "crit" ? "crit" : "");
+        $("fight-line").textContent = `${who.name}${s.skill ? `'s ${s.skill}` : ""} hits for ${s.dmg}${s.kind === "crit" ? " (critical!)" : ""}`;
+      };
+      setTimeout(land, fx && fx.projectile && !fast ? 300 : fast ? 0 : 160);
+      if (fx && fx.projectile && !fast) delay += 250;
     }
     A.set(s.hpA);
     B.set(s.hpB);
+    timer = setTimeout(step, delay);
   };
-  timer = setInterval(step, matchMedia("(prefers-reduced-motion: reduce)").matches ? 150 : 550);
+  timer = setTimeout(step, fast ? 100 : 700);
   $("fight-skip").onclick = finish;
   return new Promise((resolve) => {
     fightDone = () => {
-      clearInterval(timer);
+      clearTimeout(timer);
       overlay.hidden = true;
+      stage.classList.remove("won", "lost", "shake");
+      fightDone = null;
       resolve();
     };
     $("fight-close").onclick = fightDone;
   });
+}
+
+// ---------- Class and skills ----------
+
+const SKILL_ICON = { cleave: "⚔️", bulwark: "🛡️", laststand: "❤️", backstab: "🗡️", evasion: "💨", poison: "☠️", fireball: "🔥", frostarmor: "❄️", arcane: "✨" };
+
+function renderSkills() {
+  const h = state.hero;
+  const body = $("skills-body");
+  $("skill-points").textContent = h.cls ? (h.skillPoints ? `${h.skillPoints} skill point${h.skillPoints === 1 ? "" : "s"} to spend` : "No points left · one more each level") : "";
+  const classCard = (c, canPick) => {
+    const card = el("div", "class-card" + (h.cls === c.id ? " current" : ""));
+    card.dataset.cls = c.id;
+    card.append(el("span", "class-emoji", c.emoji), el("strong", null, c.name), el("p", "hint", c.text));
+    const list = el("ul", "class-skills");
+    c.skills.forEach((s) => list.append(el("li", null, `${SKILL_ICON[s.id]} ${s.name} · Lv ${s.level}`)));
+    card.append(list);
+    if (canPick) {
+      const b = el("button", "button", h.cls ? `Switch · 🪙 ${state.respecPrice}` : `Become a ${c.name}`);
+      b.type = "button";
+      b.addEventListener("click", async () => {
+        if (h.cls && !(await SinnersDialog.confirm(`Become a ${c.name}? It costs 🪙 ${state.respecPrice} and your skill points come back to spend again.`, { title: "Switch class?", yes: "Switch", icon: c.emoji }))) return;
+        const r = await heroDo({ action: "class", cls: c.id });
+        if (r) showResult(`${c.emoji} You're a ${c.name} now! Spend your skill points below.`);
+      });
+      card.append(b);
+    }
+    return card;
+  };
+  if (h.level < state.classLevel) {
+    const grid = el("div", "class-grid locked");
+    state.classes.forEach((c) => grid.append(classCard(c, false)));
+    return body.replaceChildren(el("p", "hint", `At level ${state.classLevel} your adventurer picks a class. ${state.classLevel - h.level} level${state.classLevel - h.level === 1 ? "" : "s"} to go!`), grid);
+  }
+  if (!h.cls) {
+    const grid = el("div", "class-grid");
+    state.classes.forEach((c) => grid.append(classCard(c, true)));
+    return body.replaceChildren(el("p", "hint", "Pick a class. It shapes your stats and gives you 3 skills (free the first time)."), grid);
+  }
+  const c = state.classes.find((x) => x.id === h.cls);
+  const head = el("div", "class-head");
+  head.append(el("span", "class-emoji", c.emoji), el("div"));
+  head.lastChild.append(el("strong", null, c.name), el("span", "hint", c.text));
+  const rows = c.skills.map((s) => {
+    const rank = (h.skills || {})[s.id] || 0;
+    const locked = h.level < s.level;
+    const row = el("div", "skill-row" + (locked ? " locked" : "") + (rank ? " learned" : ""));
+    const pips = el("span", "skill-pips");
+    for (let n = 1; n <= s.ranks.length; n++) pips.append(el("i", n <= rank ? "on" : null));
+    const info = el("div", "skill-info");
+    info.append(el("strong", null, `${s.name}`), pips, el("span", "hint", locked ? `Unlocks at level ${s.level}` : rank ? s.ranks[rank - 1] : `Rank 1: ${s.ranks[0]}`));
+    if (!locked && rank && rank < s.ranks.length) info.append(el("small", "skill-next", `Next: ${s.ranks[rank]}`));
+    const plus = el("button", "skill-plus", "+");
+    plus.type = "button";
+    plus.title = `Rank up ${s.name}`;
+    plus.disabled = locked || rank >= s.ranks.length || h.skillPoints <= 0;
+    plus.addEventListener("click", () => heroDo({ action: "skill", skill: s.id }));
+    row.append(el("span", "skill-icon", SKILL_ICON[s.id]), info, plus);
+    return row;
+  });
+  const others = el("details", "class-switch");
+  others.append(el("summary", null, "Switch class"));
+  const grid = el("div", "class-grid small");
+  state.classes.filter((x) => x.id !== h.cls).forEach((x) => grid.append(classCard(x, true)));
+  others.append(grid);
+  body.replaceChildren(head, ...rows, others);
+}
+
+// ---------- Forge: materials, crafting ----------
+
+let craftSlot = "weapon";
+let craftTier = 1;
+
+function renderForge() {
+  $("mats").replaceChildren(
+    ...state.materials.map((m) => {
+      const chip = matIcon(m, m.n);
+      const d = state.dungeons[m.tier - 1];
+      chip.title = `${m.name}: ${m.n} · drops in ${d.name}`;
+      return chip;
+    })
+  );
+  const open = state.forge.craft.filter((c) => c.open);
+  if (!open.some((c) => c.tier === craftTier)) craftTier = open.length ? open[open.length - 1].tier : 1;
+  const cost = state.forge.craft.find((c) => c.tier === craftTier);
+  const have = Object.fromEntries(state.materials.map((m) => [m.id, m.n]));
+  const slots = el("div", "craft-slots");
+  Object.entries(SLOT_INFO).forEach(([id, [icon, label]]) => {
+    const b = el("button", "craft-slot" + (id === craftSlot ? " on" : ""));
+    b.type = "button";
+    b.title = label;
+    b.append(el("span", null, icon), el("small", null, label));
+    b.addEventListener("click", () => {
+      craftSlot = id;
+      renderForge();
+    });
+    slots.append(b);
+  });
+  const tiers = el("div", "craft-tiers");
+  state.forge.craft.forEach((c) => {
+    const b = el("button", "craft-tier" + (c.tier === craftTier ? " on" : ""), `T${c.tier}`);
+    b.type = "button";
+    b.disabled = !c.open;
+    b.title = c.open ? `Tier ${c.tier}` : `Tier ${c.tier} unlocks at level ${state.tiers[c.tier - 1]}`;
+    b.addEventListener("click", () => {
+      craftTier = c.tier;
+      renderForge();
+    });
+    tiers.append(b);
+  });
+  const needs = el("div", "craft-cost");
+  let enough = true;
+  cost.mats.forEach((m) => {
+    const mat = state.materials.find((x) => x.id === m.id);
+    const ok = (have[m.id] || 0) >= m.n;
+    enough = enough && ok;
+    const chip = matIcon(mat, null);
+    chip.querySelector("strong").textContent = `${have[m.id] || 0} / ${m.n}`;
+    chip.classList.toggle("short", !ok);
+    needs.append(chip);
+  });
+  needs.append(el("span", "pouch-coins", `🪙 ${cost.coins}`));
+  const odds = state.forge.craftRarity.map((r) => `${RARITY[r.id][0]} ${r.chance}%`).join(" · ");
+  const forge = el("button", "button forge-btn", `🔨 Forge a ${SLOT_INFO[craftSlot][1].toLowerCase()}`);
+  forge.type = "button";
+  forge.disabled = !enough;
+  forge.addEventListener("click", async () => {
+    const r = await heroDo({ action: "craft", slot: craftSlot, tier: craftTier }, { quiet: true });
+    if (r) {
+      showResult(`🔨 The forge roars… ${r.crafted.name} (${RARITY[r.crafted.rarity][0]}, ${statText(r.crafted)}). It's in your bag.`);
+      $("adv-result").classList.add("win");
+      const item = state.items.filter((i) => i.source === "forge").sort((x, y) => y.id - x.id)[0];
+      if (item) selectItem(item);
+    }
+  });
+  $("forge-body").replaceChildren(
+    el("p", "forge-label", "Forge new gear"),
+    slots,
+    tiers,
+    needs,
+    el("span", "hint", `Always rare or better: ${odds}`),
+    forge,
+    el("p", "hint forge-tip", "Upgrade (+1 to +10) and salvage items from your bag: click an item below.")
+  );
 }
 
 // ---------- Arena ----------
@@ -1113,7 +1531,7 @@ async function loadProfile() {
 async function loadHero() {
   state = await api("/hero");
   clockSkew = state.now - Date.now();
-  if (!selectedPlace) selectedPlace = state.expedition ? state.expedition.dungeon : (state.dungeons.filter((d) => d.open).pop() || {}).id;
+  if (!selectedPlace) selectedPlace = state.run ? state.run.dungeon : (state.dungeons.filter((d) => d.open).pop() || {}).id;
   renderAll();
 }
 
@@ -1141,18 +1559,17 @@ async function start() {
 $("profile-login-btn").addEventListener("click", SinnersAuth.login);
 start();
 const stopAuthWatch = SinnersAuth.onChange(start);
-// Count down while away; when the adventurer is back, show the Collect button
+// Count down a dungeon floor; when its time is up, show the Fight button
 const ticker = setInterval(() => {
   if (!document.hidden && Date.now() % 30000 < 1000) {
     renderReset();
     renderBoss(); // strike cooldown and time left
   }
-  if (!state || !state.expedition || document.hidden) return;
+  if (!state || !state.run || state.run.wait || document.hidden) return;
   renderTrip();
-  const done = Date.now() + clockSkew >= state.expedition.end;
-  if (done && !state.expedition.done) {
-    state.expedition.done = true;
-    renderHero();
+  const done = Date.now() + clockSkew >= state.run.end;
+  if (done && !state.run.done) {
+    state.run.done = true;
     renderMap();
   }
 }, 1000);

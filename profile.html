@@ -23,9 +23,9 @@
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://sinnerstv.com/og-image.png">
-  <link rel="stylesheet" href="styles.css?v=202611181215">
-  <link rel="stylesheet" href="design.css?v=202611181215">
-  <script src="theme.js?v=202611181215"></script>
+  <link rel="stylesheet" href="styles.css?v=202611181500">
+  <link rel="stylesheet" href="design.css?v=202611181500">
+  <script src="theme.js?v=202611181500"></script>
 </head>
 <body>
   <header class="site-header">
@@ -99,6 +99,7 @@
                 <div>
                   <h2 id="hero-name">Adventurer</h2>
                   <span class="hero-level" id="hero-level"></span>
+                  <span class="hero-class" id="hero-class" hidden></span>
                 </div>
                 <button class="link-btn" id="hero-reroll" type="button" title="Pick a new random look">🎲 New look</button>
               </div>
@@ -117,7 +118,7 @@
             <div class="side-box map-panel">
               <div class="side-head">
                 <h3>World map</h3>
-                <span class="hint">Pick where to send your adventurer</span>
+                <span class="hint">Pick a dungeon, fight floor by floor down to its boss</span>
               </div>
               <div class="world-map" id="world-map"></div>
               <div class="trip" id="trip" role="status"></div>
@@ -125,6 +126,24 @@
           </div>
 
           <div class="adv-result" id="adv-result" role="status" hidden></div>
+
+          <div class="adv-row">
+            <div class="side-box skills-panel" id="skills">
+              <div class="side-head">
+                <h3>Class &amp; skills</h3>
+                <span class="hint" id="skill-points"></span>
+              </div>
+              <div id="skills-body"></div>
+            </div>
+            <div class="side-box forge-panel" id="forge">
+              <div class="side-head">
+                <h3>Forge</h3>
+                <span class="hint">Materials drop on won dungeon floors</span>
+              </div>
+              <div class="mats" id="mats"></div>
+              <div id="forge-body"></div>
+            </div>
+          </div>
 
           <div class="extras-row">
             <div class="side-box ach-panel" id="achievements">
@@ -174,17 +193,18 @@
     </section>
 
     <div class="fight" id="fight" hidden>
-      <div class="fight-box" role="dialog" aria-modal="true" aria-labelledby="fight-title">
+      <div class="fight-box battle" role="dialog" aria-modal="true" aria-labelledby="fight-title">
         <h2 id="fight-title">Fight!</h2>
-        <div class="fight-arena">
+        <div class="battle-stage" id="battle-stage">
           <div class="fighter" id="fighter-a"></div>
-          <span class="fight-vs">VS</span>
           <div class="fighter" id="fighter-b"></div>
+          <div class="battle-banner" id="battle-banner" aria-hidden="true"></div>
         </div>
         <p class="fight-line" id="fight-line" role="status"></p>
         <div class="fight-result" id="fight-result"></div>
         <div class="fight-actions">
           <button class="button ghost" id="fight-skip" type="button">Skip ⏭</button>
+          <div class="fight-next" id="fight-next"></div>
           <button class="button" id="fight-close" type="button" hidden>Continue</button>
         </div>
       </div>
@@ -218,18 +238,18 @@
     </div>
   </footer>
 
-  <script src="script.js?v=202611181215"></script>
-  <script src="gear-art.js?v=202611181215"></script>
-  <script src="icons.js?v=202611181215"></script>
-  <script src="config.js?v=202611181215"></script>
-  <script src="presence.js?v=202611181215"></script>
-  <script src="auth.js?v=202611181215"></script>
-  <script src="streak.js?v=202611181215"></script>
-  <script src="alerts.js?v=202611181215"></script>
-  <script src="chat.js?v=202611181215"></script>
-  <script src="twitch-chat.js?v=202611181215"></script>
-  <script src="kick-chat.js?v=202611181215"></script>
-  <script src="mini.js?v=202611181215"></script>
-  <script src="nav.js?v=202611181215"></script>
+  <script src="script.js?v=202611181500"></script>
+  <script src="gear-art.js?v=202611181500"></script>
+  <script src="icons.js?v=202611181500"></script>
+  <script src="config.js?v=202611181500"></script>
+  <script src="presence.js?v=202611181500"></script>
+  <script src="auth.js?v=202611181500"></script>
+  <script src="streak.js?v=202611181500"></script>
+  <script src="alerts.js?v=202611181500"></script>
+  <script src="chat.js?v=202611181500"></script>
+  <script src="twitch-chat.js?v=202611181500"></script>
+  <script src="kick-chat.js?v=202611181500"></script>
+  <script src="mini.js?v=202611181500"></script>
+  <script src="nav.js?v=202611181500"></script>
 </body>
 </html>
