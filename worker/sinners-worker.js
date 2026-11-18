@@ -60,8 +60,9 @@
 //
 // Discord bot (slash commands arrive here from Discord; set this as the app's Interactions Endpoint URL)
 //   POST /discord/interactions         -> /dungeon, /duel, /stats, /stats-live, /stats-live-off, /points, /top, /shop, /sinners,
-//                                         /notify-here, /notify-off
-//   (scheduled)                        -> keeps the /stats-live board up to date (needs a Cron Trigger, see Setup)
+//                                         /notify-here, /notify-off, /live add|list|remove|test (live alerts, Manage Server)
+//   GET  /discord/live-image/<id>      -> a picture uploaded with /live add (shown in the alerts)
+//   (scheduled)                        -> posts /live alerts and keeps the /stats-live board up to date (needs a Cron Trigger, see Setup)
 //   GET  /discord-admin                -> bot setup status and invite link   (admin)
 //   POST /discord-admin                -> { action: "register" }  (re)creates the slash commands   (admin)
 //
@@ -94,7 +95,7 @@
 //      with the redirect URL <this Worker>/auth/kick/callback.
 //   5. Discord bot (optional): add DISCORD_BOT_TOKEN as Secret and DISCORD_PUBLIC_KEY as Text, then in the
 //      Discord Developer Portal set Interactions Endpoint URL to <this Worker>/discord/interactions.
-//   6. Live stats board (optional): Settings -> Trigger events -> Add -> Cron Triggers -> every 5 minutes (*/5 * * * *).
+//   6. Live alerts and the live stats board: Settings -> Trigger events -> Add -> Cron Triggers -> every 2 minutes (*/2 * * * *).
 
 // Websites allowed to use this Worker. Add your own domain here if you get one.
 const ALLOWED_ORIGINS = [
@@ -144,6 +145,9 @@ export default {
       if (kickChat && request.method === "GET") return await kickChatInfo(kickChat[1].toLowerCase(), cors);
       const kickMsgs = path.match(/^\/kick\/messages\/(\d{1,12})$/);
       if (kickMsgs && request.method === "GET") return await kickMessages(kickMsgs[1], cors, url.searchParams.has("fresh"));
+
+      const liveImage = path.match(/^\/discord\/live-image\/([a-z0-9]{6,24})$/);
+      if (liveImage && request.method === "GET") return await liveImageGet(liveImage[1], env);
 
       // Discord calls this directly (no browser, no Origin)
       if (path === "/discord/interactions" && request.method === "POST") return await discordInteraction(request, env, ctx);
@@ -253,9 +257,10 @@ export default {
     }
   },
 
-  // Cron Trigger (every 5 minutes): refresh the live stats board in Discord when it's due
+  // Cron Trigger (every few minutes): post live alerts, and refresh the live stats board in Discord when it's due
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(updateStatsBoard(env).catch(() => {}));
+    ctx.waitUntil(checkLiveAlerts(env).catch(() => {}));
   },
 };
 
@@ -440,11 +445,21 @@ async function kickChannel(slug) {
 const LIVE_CHECKS = {
   async kick(slug) {
     const res = await fetch(`https://kick.com/api/v2/channels/${slug.toLowerCase()}`, { headers: BROWSER_HEADERS });
-    if (!res.ok) return { live: false };
+    if (res.status === 404) return { live: false };
+    if (!res.ok) throw new Error(`Kick ${res.status}`);
     const ch = await res.json();
     const ls = ch.livestream;
     const avatar = (ch.user && ch.user.profile_pic) || "";
-    return ls ? { live: true, viewers: ls.viewer_count || 0, title: clean(ls.session_title, 120), avatar } : { live: false, avatar };
+    if (!ls) return { live: false, avatar };
+    return {
+      live: true,
+      id: String(ls.id || ls.created_at || ""),
+      viewers: ls.viewer_count || 0,
+      title: clean(ls.session_title, 120),
+      game: clean(((ls.categories || [])[0] || {}).name, 80),
+      thumbnail: (ls.thumbnail && ls.thumbnail.url) || "",
+      avatar,
+    };
   },
   async twitch(login, env) {
     const token = await twitchAppToken(env);
@@ -459,7 +474,16 @@ const LIVE_CHECKS = {
       }),
     ]);
     const stream = (streams.data || [])[0];
-    return stream ? { live: true, viewers: stream.viewer_count || 0, title: clean(stream.title, 120), avatar } : { live: false, avatar };
+    if (!stream) return { live: false, avatar };
+    return {
+      live: true,
+      id: stream.id,
+      viewers: stream.viewer_count || 0,
+      title: clean(stream.title, 120),
+      game: clean(stream.game_name, 80),
+      thumbnail: String(stream.thumbnail_url || "").replace("{width}x{height}", "1280x720"),
+      avatar,
+    };
   },
   async youtube(handle) {
     const channel = await cached(`yt:${handle.toLowerCase()}`, 86400000, async () => {
@@ -470,7 +494,10 @@ const LIVE_CHECKS = {
     });
     if (!channel) return { live: false };
     const info = await youtubeLiveInfo(channel.id);
-    return info && info.live ? { live: true, title: info.title, avatar: channel.avatar } : { live: false, avatar: channel.avatar };
+    if (!info) throw new Error("YouTube didn't answer");
+    return info.live
+      ? { live: true, id: info.videoId, title: info.title, thumbnail: `https://i.ytimg.com/vi/${info.videoId}/maxresdefault_live.jpg`, avatar: channel.avatar }
+      : { live: false, avatar: channel.avatar };
   },
 };
 
@@ -888,7 +915,7 @@ async function backfillIdentities(env) {
 // Bump SCHEMA_VERSION whenever tables or columns change. The database remembers the version it has,
 // so the full setup below runs once per change instead of on every cold start (which was slow
 // enough to miss Discord's 3-second limit).
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -959,6 +986,11 @@ async function ensureSchema(env) {
         "equipped INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)"
     ),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS hero_items_user ON hero_items (user_id, equipped)"),
+    env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS live_alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL, " +
+        "platform TEXT NOT NULL, name TEXT NOT NULL, label TEXT NOT NULL, message TEXT, image TEXT, role_id TEXT, live INTEGER NOT NULL DEFAULT 0, " +
+        "live_id TEXT NOT NULL DEFAULT '', last_post INTEGER, last_error TEXT, created INTEGER NOT NULL, UNIQUE (guild_id, channel_id, platform, name))"
+    ),
     env.DB.prepare(
       "CREATE TABLE IF NOT EXISTS daily (user_id TEXT NOT NULL, day TEXT NOT NULL, games INTEGER NOT NULL DEFAULT 0, dungeons INTEGER NOT NULL DEFAULT 0, " +
         "dungeon_wins INTEGER NOT NULL DEFAULT 0, duels INTEGER NOT NULL DEFAULT 0, duel_wins INTEGER NOT NULL DEFAULT 0, claimed TEXT NOT NULL DEFAULT '', " +
@@ -3131,6 +3163,7 @@ const SITE_URL = "https://sinnerstv.com";
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_COLOR = 0xe11d48;
 const ADMINISTRATOR = 0x8; // admin-only commands need Discord's Administrator permission
+const MANAGE_GUILD_PERMISSION = 0x20; // /live needs Manage Server
 const isAdmin = (interaction) => !!interaction.guild_id && (BigInt((interaction.member && interaction.member.permissions) || 0) & BigInt(ADMINISTRATOR)) !== 0n;
 const DUNGEON_CHOICES = [
   { name: "🌲 Whispering Forest (level 1, 10 min)", value: "forest" },
@@ -3207,6 +3240,46 @@ const BOT_COMMANDS = [
     ],
   },
   { name: "stats-live-off", description: "Stop the self-updating site report", default_member_permissions: String(ADMINISTRATOR), dm_permission: false },
+  {
+    name: "live",
+    description: "Live alerts: post in a channel when a Kick, Twitch or YouTube streamer goes live",
+    default_member_permissions: String(MANAGE_GUILD_PERMISSION),
+    dm_permission: false,
+    options: [
+      {
+        type: 1,
+        name: "add",
+        description: "Add a streamer (or change one you added)",
+        options: [
+          { type: 3, name: "streamer", description: "Their name or channel link (kick.com/…, twitch.tv/…, youtube.com/@…)", required: true, max_length: 200 },
+          { type: 7, name: "channel", description: "Where to post (this channel if empty)", channel_types: [0, 5] },
+          {
+            type: 3,
+            name: "platform",
+            description: "Kick, Twitch or YouTube (not needed with a link)",
+            choices: [{ name: "Kick", value: "kick" }, { name: "Twitch", value: "twitch" }, { name: "YouTube", value: "youtube" }],
+          },
+          { type: 3, name: "message", description: "Your text. Use {streamer} {title} {game} {link} {platform}", max_length: 500 },
+          { type: 11, name: "image", description: "A picture for the alert (the stream preview if empty)" },
+          { type: 3, name: "image_link", description: "…or a link to a picture (https://)", max_length: 400 },
+          { type: 8, name: "ping", description: "A role to ping when they go live" },
+        ],
+      },
+      { type: 1, name: "list", description: "This server's live alerts" },
+      {
+        type: 1,
+        name: "remove",
+        description: "Stop alerts for a streamer",
+        options: [{ type: 3, name: "streamer", description: "Which streamer", required: true, autocomplete: true }],
+      },
+      {
+        type: 1,
+        name: "test",
+        description: "Send a sample alert for a streamer now",
+        options: [{ type: 3, name: "streamer", description: "Which streamer", required: true, autocomplete: true }],
+      },
+    ],
+  },
   { name: "notify-here", description: "Post shop purchases and new gallery links in this channel", default_member_permissions: String(ADMINISTRATOR), dm_permission: false },
   { name: "notify-off", description: "Stop posting site notifications", default_member_permissions: String(ADMINISTRATOR), dm_permission: false },
 ];
@@ -3259,6 +3332,11 @@ async function discordInteraction(request, env, ctx) {
   if (interaction.type === 3 && String((interaction.data || {}).custom_id).startsWith("help:")) {
     return json({ type: 7, data: helpMessage(interaction.data.custom_id.slice(5), isAdmin(interaction)) }, 200, {});
   }
+  // Typing a streamer in /live remove or /live test: suggest this server's streamers
+  if (interaction.type === 4 && interaction.data.name === "live") {
+    if (!env.DB || !interaction.guild_id) return json({ type: 8, data: { choices: [] } }, 200, {});
+    return await liveAutocomplete(interaction, env);
+  }
   if (interaction.type !== 2) return botReply("Unknown interaction.", { ephemeral: true });
   const name = interaction.data.name;
   if (name === "help") return json({ type: 4, data: helpMessage("home", isAdmin(interaction)) }, 200, {});
@@ -3274,13 +3352,18 @@ async function discordInteraction(request, env, ctx) {
     editOriginal(env, interaction, async () => {
       await ensureSchema(env);
       if (name === "stats") return statsReport(env, interaction);
-      const res = name === "stats-live" || name === "stats-live-off" ? await statsLiveCommand(interaction, env, ctx) : await botCommand(interaction, env, origin);
+      const res =
+        name === "stats-live" || name === "stats-live-off"
+          ? await statsLiveCommand(interaction, env, ctx)
+          : name === "live"
+            ? await liveCommand(interaction, env, origin)
+            : await botCommand(interaction, env, origin);
       const { data } = await res.json();
       delete data.flags; // a follow-up can't change who sees the message
       return data;
     })
   );
-  return json({ type: 5, data: adminOnly ? { flags: 64 } : {} }, 200, {});
+  return json({ type: 5, data: adminOnly || name === "live" ? { flags: 64 } : {} }, 200, {});
 }
 
 async function botCommand(interaction, env, origin) {
@@ -3694,6 +3777,10 @@ const HELP_TOPICS = {
       { name: "`/stats`", value: "Full site report: who's online, visitors, players, betting, chat, shop and this server." },
       { name: "`/stats-live [every] [mode]`", value: "Keeps the report in this channel, updated every 5 min to once a day (or posts a new one each time). `/stats-live-off` stops it." },
       { name: "`/notify-here`", value: "Posts new shop purchases (to hand out) and gallery links waiting for review in this channel. `/notify-off` stops it." },
+      {
+        name: "`/live add streamer:` (Manage Server)",
+        value: "Live alerts like Pingcord: give a name or channel link (Kick, Twitch, YouTube), pick a channel, your own text (`{streamer} {title} {game} {link}`), a picture and a role to ping. `/live list`, `/live test`, `/live remove`.",
+      },
       { name: "Admin page", value: `${SITE_URL}/admin (password): gallery review, chat moderation, leaderboards and points resets, shop rewards, and **Register commands** after a bot update.` },
     ],
   },
@@ -3932,6 +4019,313 @@ async function statsLiveCommand(interaction, env, ctx) {
   );
 }
 
+// ---------- Live alerts (/live, like Pingcord) ----------
+// A server picks streamers (a name or a channel link) and a channel; when one of them goes live the bot posts
+// there with the server's own text, picture and role ping. The Cron Trigger checks every streamer on its
+// round (a faster trigger, e.g. every 2 minutes, means quicker alerts); each stream is announced once.
+
+const LIVE_ALERTS_PER_SERVER = 25;
+const LIVE_IMAGE_MAX = 4000000; // bytes
+const LIVE_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const canManage = (interaction) =>
+  !!interaction.guild_id && (BigInt((interaction.member && interaction.member.permissions) || 0) & BigInt(MANAGE_GUILD_PERMISSION | ADMINISTRATOR)) !== 0n;
+const PLATFORM_INFO = {
+  kick: { label: "Kick", color: 0x53fc18, url: (n) => `https://kick.com/${n}` },
+  twitch: { label: "Twitch", color: 0x9146ff, url: (n) => `https://www.twitch.tv/${n}` },
+  youtube: { label: "YouTube", color: 0xff0033, url: (n) => (UC_ID.test(n) ? `https://www.youtube.com/channel/${n}` : `https://www.youtube.com/${n}`) },
+};
+const LIVE_DEFAULT_MESSAGE = "🔴 **{streamer}** is live on {platform}!";
+
+// "kick.com/name", "twitch.tv/name", "youtube.com/@name" (or /channel/UC…), or a plain name
+function liveTarget(text, platform) {
+  text = String(text || "").trim();
+  const link = text.match(/(kick\.com|twitch\.tv|youtube\.com)\/(@[\w.-]+|channel\/UC[\w-]{22}|[\w.-]+)/i);
+  if (link) {
+    platform = { "kick.com": "kick", "twitch.tv": "twitch", "youtube.com": "youtube" }[link[1].toLowerCase()];
+    text = link[2].replace(/^channel\//, "");
+  }
+  if (platform === "youtube" && !text.startsWith("@") && !UC_ID.test(text)) text = `@${text.replace(/\s+/g, "")}`;
+  if (platform && platform !== "youtube") text = text.replace(/^@/, "").toLowerCase();
+  if (!/^@?[\w.-]{2,40}$/.test(text)) return null;
+  return { platform: platform || null, name: platform ? text : text.replace(/^@/, "") };
+}
+
+// Does this channel exist? Returns { platform, name, label } (tries Twitch, Kick, then YouTube without a platform)
+async function findStreamer(env, target) {
+  const tries = target.platform ? [target.platform] : ["twitch", "kick", "youtube"];
+  for (const platform of tries) {
+    const name = platform === "youtube" ? (target.name.startsWith("@") || UC_ID.test(target.name) ? target.name : `@${target.name}`) : target.name.replace(/^@/, "").toLowerCase();
+    try {
+      if (platform === "kick") {
+        const res = await fetch(`https://kick.com/api/v2/channels/${name}`, { headers: BROWSER_HEADERS });
+        if (res.ok) {
+          const ch = await res.json();
+          return { platform, name, label: (ch.user && ch.user.username) || name };
+        }
+      } else if (platform === "twitch") {
+        const token = await twitchAppToken(env);
+        if (!token) continue;
+        const res = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(name)}`, {
+          headers: { "Client-Id": env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}` },
+        });
+        const user = res.ok ? ((await res.json()).data || [])[0] : null;
+        if (user) return { platform, name, label: user.display_name || name };
+      } else {
+        const html = await youtubePage(UC_ID.test(name) ? `/channel/${name}` : `/${encodeURIComponent(name).replace("%40", "@")}`);
+        const found = channelFromPage(html);
+        if (found) return { platform, name, label: found.name || name.replace(/^@/, "") };
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function fillMessage(text, alert, info) {
+  const p = PLATFORM_INFO[alert.platform];
+  const values = {
+    streamer: alert.label,
+    platform: p.label,
+    title: (info && info.title) || "",
+    game: (info && info.game) || "",
+    viewers: info && info.viewers != null ? String(info.viewers) : "",
+    link: p.url(alert.name),
+    sinners: `${SITE_URL}/watch?platform=${alert.platform}&add=${encodeURIComponent(alert.name)}`,
+  };
+  return String(text || LIVE_DEFAULT_MESSAGE).replace(/\{(streamer|platform|title|game|viewers|link|sinners)\}/gi, (_, k) => values[k.toLowerCase()]);
+}
+
+// The alert message: the server's text (and role ping), an embed with the stream, and two link buttons
+function liveMessage(alert, info) {
+  const p = PLATFORM_INFO[alert.platform];
+  const link = p.url(alert.name);
+  const image = alert.image ? alert.image : info.thumbnail ? `${info.thumbnail}${info.thumbnail.includes("?") ? "&" : "?"}t=${Date.now()}` : null;
+  const content = [alert.role_id ? `<@&${alert.role_id}>` : "", fillMessage(alert.message, alert, info)].filter(Boolean).join(" ");
+  const fields = [];
+  if (info.game) fields.push({ name: "Playing", value: String(info.game).slice(0, 100), inline: true });
+  if (info.viewers) fields.push({ name: "Viewers", value: Number(info.viewers).toLocaleString("en-US"), inline: true });
+  return {
+    content: content.slice(0, 2000),
+    embeds: [
+      {
+        color: p.color,
+        author: { name: `${alert.label} is live on ${p.label}`, url: link, icon_url: info.avatar || undefined },
+        title: (info.title || `${alert.label} is live`).slice(0, 256),
+        url: link,
+        fields,
+        thumbnail: info.avatar ? { url: info.avatar } : undefined,
+        image: image ? { url: image } : undefined,
+        footer: { text: "Sinners live alerts · sinnerstv.com" },
+        timestamp: new Date().toISOString(),
+      },
+    ],
+    components: [
+      {
+        type: 1,
+        components: [
+          { type: 2, style: 5, label: "Watch on Sinners", url: `${SITE_URL}/watch?platform=${alert.platform}&add=${encodeURIComponent(alert.name)}` },
+          { type: 2, style: 5, label: `Open on ${p.label}`, url: link },
+        ],
+      },
+    ],
+    allowed_mentions: {
+      roles: alert.role_id ? [alert.role_id] : [],
+      parse: /@(everyone|here)/.test(alert.message || "") ? ["everyone"] : [],
+    },
+  };
+}
+
+async function postLiveAlert(env, alert, info) {
+  const res = await fetch(`${DISCORD_API}/channels/${alert.channel_id}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(liveMessage(alert, info)),
+  });
+  if (res.ok) return null;
+  return res.status === 403 || res.status === 404
+    ? "I can't post in that channel. Give me View Channel, Send Messages and Embed Links there."
+    : `Discord said ${res.status}`;
+}
+
+// Cron: check every streamer once, post for streams that started since the last check
+async function checkLiveAlerts(env) {
+  if (!env.DB || !env.DISCORD_BOT_TOKEN) return;
+  await ensureSchema(env);
+  const { results: alerts } = await env.DB.prepare("SELECT * FROM live_alerts ORDER BY id LIMIT 1000").all();
+  if (!alerts.length) return;
+  const status = {};
+  await Promise.all(
+    [...new Set(alerts.map((a) => `${a.platform}:${a.name}`))].map(async (key) => {
+      const [platform, ...rest] = key.split(":");
+      try {
+        status[key] = await cached(`live:${key.toLowerCase()}`, 60000, () => LIVE_CHECKS[platform](rest.join(":"), env));
+      } catch (e) {
+        status[key] = null; // couldn't tell: leave the alert as it is
+      }
+    })
+  );
+  for (const alert of alerts) {
+    const info = status[`${alert.platform}:${alert.name}`];
+    if (!info) continue;
+    const streamId = info.live ? String(info.id || info.title || "live") : "";
+    if (info.live && streamId !== alert.live_id) {
+      const error = await postLiveAlert(env, alert, info);
+      await env.DB.prepare("UPDATE live_alerts SET live = 1, live_id = ?, last_post = ?, last_error = ? WHERE id = ?")
+        .bind(streamId, error ? alert.last_post : Date.now(), error, alert.id)
+        .run();
+    } else if (!info.live && alert.live) {
+      await env.DB.prepare("UPDATE live_alerts SET live = 0 WHERE id = ?").bind(alert.id).run();
+    }
+  }
+}
+
+// A picture attached to /live add: kept in KV, so the link Discord gave us expiring doesn't matter
+async function storeLiveImage(env, attachment, origin) {
+  if (!env.GALLERY) throw new Error("Picture storage isn't set up (GALLERY binding missing). Use image_link instead.");
+  const type = String(attachment.content_type || "").split(";")[0];
+  if (!LIVE_IMAGE_TYPES.includes(type)) throw new Error("The picture must be a PNG, JPG, WebP or GIF.");
+  if (attachment.size > LIVE_IMAGE_MAX) throw new Error("The picture is too big (4 MB at most).");
+  const res = await fetch(attachment.url);
+  if (!res.ok) throw new Error("Couldn't download the picture from Discord.");
+  const key = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  await env.GALLERY.put(`liveimg:${key}`, await res.arrayBuffer(), { metadata: { type } });
+  return `${origin}/discord/live-image/${key}`;
+}
+
+async function liveImageGet(key, env) {
+  if (!env.GALLERY || !/^[a-z0-9]{6,24}$/.test(key)) return text("Not found", 404, {});
+  const { value, metadata } = await env.GALLERY.getWithMetadata(`liveimg:${key}`, "arrayBuffer");
+  if (!value) return text("Not found", 404, {});
+  return new Response(value, { headers: { "Content-Type": (metadata && metadata.type) || "image/png", "Cache-Control": "public, max-age=86400" } });
+}
+
+async function dropLiveImage(env, image) {
+  const key = (String(image || "").match(/\/discord\/live-image\/([a-z0-9]+)$/) || [])[1];
+  if (env.GALLERY && key) await env.GALLERY.delete(`liveimg:${key}`).catch(() => {});
+}
+
+const describeAlert = (a) =>
+  `${PLATFORM_INFO[a.platform].label} **${a.label}** → <#${a.channel_id}>${a.role_id ? ` · pings <@&${a.role_id}>` : ""}${a.image ? " · 🖼️ own picture" : ""}${a.live ? " · 🔴 live now" : ""}`;
+
+// Autocomplete for /live remove and /live test: this server's streamers
+async function liveAutocomplete(interaction, env) {
+  await ensureSchema(env);
+  const focused = (((interaction.data.options || [])[0] || {}).options || []).find((o) => o.focused);
+  const typed = String((focused && focused.value) || "").toLowerCase();
+  const { results } = await env.DB.prepare("SELECT id, platform, label, channel_id FROM live_alerts WHERE guild_id = ? ORDER BY label").bind(interaction.guild_id).all();
+  const choices = results
+    .filter((a) => a.label.toLowerCase().includes(typed))
+    .slice(0, 25)
+    .map((a) => ({ name: `${a.label} (${PLATFORM_INFO[a.platform].label})`.slice(0, 100), value: String(a.id) }));
+  return json({ type: 8, data: { choices } }, 200, {});
+}
+
+async function liveCommand(interaction, env, origin) {
+  if (!canManage(interaction)) return botReply("🔒 You need the Manage Server permission to set up live alerts.", { ephemeral: true });
+  const sub = (interaction.data.options || [])[0] || { name: "list" };
+  const opts = sub.options || [];
+  const opt = (k) => (opts.find((o) => o.name === k) || {}).value;
+  const guild = interaction.guild_id;
+  const findAlert = async (value) => {
+    const row = /^\d+$/.test(String(value))
+      ? await env.DB.prepare("SELECT * FROM live_alerts WHERE guild_id = ? AND id = ?").bind(guild, Number(value)).first()
+      : await env.DB.prepare("SELECT * FROM live_alerts WHERE guild_id = ? AND (LOWER(label) = ? OR LOWER(name) = ? OR LOWER(name) = ?)")
+          .bind(guild, String(value).toLowerCase(), String(value).toLowerCase(), `@${String(value).toLowerCase()}`)
+          .first();
+    return row;
+  };
+
+  if (sub.name === "list") {
+    const { results } = await env.DB.prepare("SELECT * FROM live_alerts WHERE guild_id = ? ORDER BY label").bind(guild).all();
+    const problems = results.filter((a) => a.last_error);
+    return botReply(null, {
+      ephemeral: true,
+      embeds: [
+        embed({
+          title: `🔔 Live alerts in this server (${results.length}/${LIVE_ALERTS_PER_SERVER})`,
+          description: results.length
+            ? results.map(describeAlert).join("\n")
+            : "None yet. Add one with `/live add streamer:` and a name or channel link.",
+          fields: problems.length ? [{ name: "⚠️ Problems", value: problems.map((a) => `**${a.label}**: ${a.last_error}`).join("\n").slice(0, 1024) }] : [],
+        }),
+      ],
+    });
+  }
+
+  if (sub.name === "remove") {
+    const alert = await findAlert(opt("streamer"));
+    if (!alert) return botReply("I couldn't find that streamer in this server's alerts. `/live list` shows them.", { ephemeral: true });
+    await env.DB.prepare("DELETE FROM live_alerts WHERE id = ?").bind(alert.id).run();
+    await dropLiveImage(env, alert.image);
+    return botReply(`🗑️ No more alerts for **${alert.label}** in <#${alert.channel_id}>.`, { ephemeral: true });
+  }
+
+  if (sub.name === "test") {
+    const alert = await findAlert(opt("streamer"));
+    if (!alert) return botReply("I couldn't find that streamer in this server's alerts. `/live list` shows them.", { ephemeral: true });
+    let info = null;
+    try {
+      info = await LIVE_CHECKS[alert.platform](alert.name, env);
+    } catch (e) {}
+    const sample = info && info.live ? info : { ...(info || {}), live: true, title: "This is a test alert", game: "Just Chatting", viewers: 1234 };
+    const error = await postLiveAlert(env, alert, sample);
+    return botReply(error ? `⚠️ ${error}` : `✅ Sent a test alert for **${alert.label}** to <#${alert.channel_id}>.`, { ephemeral: true });
+  }
+
+  // add
+  const target = liveTarget(opt("streamer"), opt("platform"));
+  if (!target) return botReply("Give me a streamer name or a channel link (kick.com/…, twitch.tv/…, youtube.com/@…).", { ephemeral: true });
+  const found = await findStreamer(env, target);
+  if (!found) return botReply(`I couldn't find **${opt("streamer")}**${target.platform ? ` on ${PLATFORM_INFO[target.platform].label}` : " on Twitch, Kick or YouTube"}. Try their channel link.`, { ephemeral: true });
+  const channel = opt("channel") || interaction.channel_id || (interaction.channel || {}).id;
+  const existing = await env.DB.prepare("SELECT * FROM live_alerts WHERE guild_id = ? AND channel_id = ? AND platform = ? AND name = ?")
+    .bind(guild, channel, found.platform, found.name)
+    .first();
+  if (!existing) {
+    const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM live_alerts WHERE guild_id = ?").bind(guild).first();
+    if (n >= LIVE_ALERTS_PER_SERVER) return botReply(`This server already has ${LIVE_ALERTS_PER_SERVER} live alerts. Remove one with \`/live remove\` first.`, { ephemeral: true });
+  }
+  let image = existing ? existing.image : null;
+  const attachmentId = opt("image");
+  try {
+    if (attachmentId) image = await storeLiveImage(env, ((interaction.data.resolved || {}).attachments || {})[attachmentId] || {}, origin);
+    else if (opt("image_link")) image = httpsUrl(opt("image_link"));
+  } catch (err) {
+    return botReply(`⚠️ ${err.message}`, { ephemeral: true });
+  }
+  if (existing && image !== existing.image) await dropLiveImage(env, existing.image);
+  const message = opt("message") != null ? String(opt("message")).slice(0, 500) : existing ? existing.message : null;
+  const role = opt("ping") != null ? String(opt("ping")) : existing ? existing.role_id : null;
+  // Already live right now: remember this stream, so the alert starts with the next one
+  let current = null;
+  try {
+    current = await LIVE_CHECKS[found.platform](found.name, env);
+  } catch (e) {}
+  const liveId = current && current.live ? String(current.id || current.title || "live") : existing ? existing.live_id : "";
+  await env.DB.prepare(
+    "INSERT INTO live_alerts (guild_id, channel_id, platform, name, label, message, image, role_id, live, live_id, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT(guild_id, channel_id, platform, name) DO UPDATE SET label = excluded.label, message = excluded.message, image = excluded.image, " +
+      "role_id = excluded.role_id, last_error = NULL"
+  )
+    .bind(guild, channel, found.platform, found.name, found.label, message, image, role, current && current.live ? 1 : 0, liveId, Date.now())
+    .run();
+  const alert = { platform: found.platform, name: found.name, label: found.label, message, channel_id: channel };
+  return botReply(null, {
+    ephemeral: true,
+    embeds: [
+      embed({
+        title: `🔔 ${existing ? "Updated" : "Live alert added"}: ${found.label} (${PLATFORM_INFO[found.platform].label})`,
+        description:
+          `When **${found.label}** goes live I'll post in <#${channel}>${role ? ` and ping <@&${role}>` : ""}.\n\n` +
+          `**Message:** ${fillMessage(message, alert, { title: "Their stream title", game: "Their game" })}\n` +
+          `**Picture:** ${image ? "your own" : "the stream preview"}\n\n` +
+          (current && current.live ? "They're live right now, so the first alert comes with their next stream. " : "") +
+          "`/live test` sends a sample now. Run `/live add` again for the same streamer to change the text, picture or ping.",
+        image: image ? { url: image } : undefined,
+      }),
+    ],
+  });
+}
+
 // A message from the bot in the /notify-here channel (does nothing if that isn't set up)
 async function discordNotify(env, fields) {
   if (!env.DISCORD_BOT_TOKEN || !env.GALLERY) return;
@@ -3954,7 +4348,7 @@ async function discordAdminStatus(request, env, cors) {
       notifyChannel: env.GALLERY ? await env.GALLERY.get("discord:notify") : null,
       statsBoard: env.GALLERY ? await env.GALLERY.get(BOARD_KEY, "json") : null,
       inviteUrl: env.DISCORD_CLIENT_ID
-        ? `https://discord.com/oauth2/authorize?client_id=${env.DISCORD_CLIENT_ID}&scope=bot+applications.commands&permissions=19456`
+        ? `https://discord.com/oauth2/authorize?client_id=${env.DISCORD_CLIENT_ID}&scope=bot+applications.commands&permissions=150528`
         : null,
       interactionsUrl: `${new URL(request.url).origin}/discord/interactions`,
       commands: BOT_COMMANDS.map((c) => c.name),
