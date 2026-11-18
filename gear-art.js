@@ -1,4 +1,5 @@
-// Illustrated art for the adventure: the adventurer, their gear and the monsters, drawn as shaded SVG.
+// Illustrated art for the adventure: the adventurer (a slim, cel-shaded anime warrior), their gear and the
+// monsters, drawn as SVG.
 // Gear looks like its tier's material, and higher tiers get more: Wooden (leather and wood), Iron
 // (polished steel), Bogsteel (dark teal steel with gold trim and horns), Frost (ice crystal plate) and
 // Abyssal (black-red plate with glowing cracks and spikes).
@@ -250,79 +251,238 @@ const SinnersArt = (() => {
     },
   };
 
-  // ---------- The adventurer (120 x 200) ----------
+  // ---------- The adventurer (120 x 200): a slim anime warrior, cel shaded ----------
+  // Dynamic stance, sword angled down in the left hand, a long coat, sharp glowing eyes. Armor by tier
+  // is worn over the coat; the hair stays visible under every helmet, anime style.
 
   const CAPES = { "cape-red": ["#b91c1c", "#7f1d1d"], "cape-purple": ["#7e22ce", "#4c1d95"], "cape-gold": ["#eab308", "#a16207"] };
 
-  function hairPaths(style, c, hair) {
-    const h = c.grad("hair", [[0, lighter(hair, 0.25)], [1, darker(hair, 0.3)]]);
-    const top = `<path d="M42 40 Q40 16 60 14 Q82 15 79 40 Q74 28 64 26 Q56 32 44 34 Z" fill="${h}" ${stroke()}/>`;
-    if (style === 1) return { back: `<path d="M41 34 Q38 60 44 84 L52 80 L50 46 Z M79 34 Q82 60 76 84 L68 80 L70 46 Z" fill="${h}" ${stroke()}/>`, front: top };
-    if (style === 2) return { back: "", front: `<path d="M42 40 L36 24 L46 28 L44 12 L54 22 L58 6 L64 20 L72 8 L72 24 L84 18 L78 32 L79 40 Q74 28 64 27 Q56 33 44 34 Z" fill="${h}" ${stroke()}/>` };
-    if (style === 3) return { back: `<circle cx="60" cy="10" r="8" fill="${h}" ${stroke()}/>`, front: top };
-    return { back: "", front: `<path d="M41 40 Q39 15 60 13 Q83 14 80 40 Q78 30 70 26 Q62 30 48 30 Q44 33 41 40 Z" fill="${h}" ${stroke()}/>` };
+  // A limb along joint points with a width at each, as one outlined shape
+  function limb(pts, widths) {
+    const left = [];
+    const right = [];
+    pts.forEach((p, i) => {
+      const a = pts[Math.max(0, i - 1)];
+      const b = pts[Math.min(pts.length - 1, i + 1)];
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = (-dy / len) * (widths[i] / 2);
+      const ny = (dx / len) * (widths[i] / 2);
+      left.push(`${(p[0] + nx).toFixed(1)} ${(p[1] + ny).toFixed(1)}`);
+      right.unshift(`${(p[0] - nx).toFixed(1)} ${(p[1] - ny).toFixed(1)}`);
+    });
+    return `M${left.join(" L")} L${right.join(" L")} Z`;
   }
+
+  // Joints of the pose
+  const POSE = {
+    armL: [[47, 60], [41, 88], [38, 114]],
+    armR: [[77, 60], [85, 86], [82, 110]],
+    legL: [[55, 100], [49, 140], [45, 176]],
+    legR: [[68, 100], [74, 140], [79, 176]],
+  };
+
+  const ink = (w = 1.6) => `stroke="${INK}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"`;
+
+  function animeHair(style, hair) {
+    const dark = darker(hair, 0.35);
+    const light = lighter(hair, 0.3);
+    const back = {
+      1: `<path d="M50 20 Q44 50 46 84 L54 78 L56 40 Z M74 20 Q82 52 78 86 L70 78 L68 40 Z" fill="${hair}" ${ink()}/><path d="M48 40 Q46 62 48 80" fill="none" stroke="${dark}" stroke-width="2"/>`,
+      3: `<path d="M70 14 Q90 16 92 36 Q94 58 84 76 Q86 54 80 40 Q76 28 70 22 Z" fill="${hair}" ${ink()}/>`,
+    };
+    const fronts = {
+      // spiky, the classic
+      0: `<path d="M49 30 L40 18 L50 20 L44 6 L56 14 L58 1 L64 12 L72 2 L72 14 L82 8 L77 20 L86 20 L76 28 L75 34 Q72 22 64 20 L60 30 L58 22 L54 32 L52 24 Z" fill="${hair}" ${ink()}/>`,
+      1: `<path d="M48 32 Q46 10 62 8 Q78 8 77 30 L72 22 L68 34 L64 22 L60 34 L56 22 L52 34 Z" fill="${hair}" ${ink()}/>`,
+      2: `<path d="M48 30 L44 16 L52 18 L50 6 L60 12 L66 4 L68 14 L78 10 L74 20 L80 24 L76 30 Q72 20 64 18 Q56 20 52 30 Z" fill="${hair}" ${ink()}/>`,
+      3: `<path d="M48 32 Q46 10 62 9 Q78 9 76 30 L70 22 L66 32 L62 20 L58 32 L54 22 L50 32 Z" fill="${hair}" ${ink()}/>`,
+    };
+    const shade = `<path d="M54 14 Q62 10 70 13 Q64 14 60 20 Z" fill="${light}" opacity="0.8"/><path d="M70 22 L72 30 L75 34 L76 28 Z" fill="${dark}"/>`;
+    return { back: back[style] || "", front: (fronts[style] || fronts[0]) + shade };
+  }
+
+  // Armor and weapons on the slim figure, by tier
+  const HERO_GEAR = {
+    helmet(c, t, n) {
+      if (n === 1) return `<path d="M49 24 Q62 20 76 24 L76 28 Q62 24 49 28 Z" fill="${t.main}" ${ink(1.2)}/><path d="M76 25 L84 30 L80 33 L76 28" fill="${t.main}" ${ink(1)}/>`;
+      if (n === 2) return `<path d="M49 22 Q62 16 76 22 L76 28 Q62 23 49 28 Z" fill="${c.metal(t, "hhelm")}" ${ink(1.2)}/><path d="M60 18 L64 18 L63 26 L61 26 Z" fill="${t.light}"/>`;
+      if (n === 3)
+        return `<path d="M49 22 Q62 16 76 22 L75 27 Q62 22 50 27 Z" fill="${t.trim}" ${ink(1.2)}/><path d="M51 22 Q42 12 44 0 Q48 12 55 18 Z M74 22 Q84 12 82 0 Q78 12 71 18 Z" fill="${c.grad("hhorn", [[0, "#fef3c7"], [1, "#a16207"]])}" ${ink(1.2)}/><circle cx="62.5" cy="21" r="2.2" fill="${t.dark}" stroke="${t.trim}"/>`;
+      if (n === 4)
+        return `<path d="M50 22 L48 8 L54 18 L58 2 L62 16 L66 0 L69 16 L74 6 L75 22 Q62 17 50 22 Z" fill="${c.grad("hice", [[0, "#ffffff"], [0.5, "#bae6fd"], [1, "#38bdf8"]])}" ${ink(1.1)}/><circle cx="62.5" cy="19" r="2" fill="#fff" stroke="#38bdf8"/>`;
+      // demon visor over the eyes, swept horns
+      return `<path d="M48 26 L77 26 L76 33 Q62 37 49 33 Z" fill="${t.dark}" ${ink(1.2)}/><path d="M52 29 L60 30 M65 30 L73 29" stroke="${t.glow}" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M50 22 Q38 16 34 0 Q44 12 54 16 Z M75 22 Q87 16 91 0 Q81 12 71 16 Z" fill="${c.grad("hdemon", [[0, "#7f1d1d"], [1, "#0c0a09"]])}" ${ink(1.2)}/>`;
+    },
+    chest(c, t, n) {
+      const m = c.metal(t, "hchest");
+      if (n === 1) return `<path d="M50 62 L72 92 M74 62 L52 92" stroke="${t.main}" stroke-width="5" stroke-linecap="round"/><path d="M50 62 L72 92 M74 62 L52 92" stroke="${INK}" stroke-width="0.8" opacity="0.5"/><circle cx="62" cy="77" r="3.4" fill="#a8a29e" ${ink(1)}/>`;
+      let s = `<path d="M50 60 Q62 55 74 60 L72 86 Q62 92 52 86 Z" fill="${m}" ${ink()}/>`;
+      s += `<path d="M62 58 L62 90" stroke="${t.dark}" stroke-width="1.2"/><path d="M53 80 Q62 84 71 80" fill="none" stroke="${t.dark}" stroke-width="1.2"/>`;
+      if (n >= 3) s += `<path d="M50 60 Q62 55 74 60" fill="none" stroke="${t.trim}" stroke-width="2"/>`;
+      // one big shoulder plate on the sword arm's other side, anime style
+      if (n >= 3) {
+        s += `<path d="M70 56 Q86 50 92 62 Q86 70 76 68 Z" fill="${c.metal(t, "hpaul", "v")}" ${ink()}/>`;
+        s += `<path d="M74 60 Q84 56 89 63" fill="none" stroke="${t.trim}" stroke-width="1.6"/>`;
+      }
+      if (n === 4) s += `<path d="M62 64 L67 72 L62 80 L57 72 Z" fill="${c.grad("hcore", [[0, "#fff"], [1, "#38bdf8"]])}" ${ink(1)}/><path d="M84 52 L88 42 L90 54 Z" fill="#e0f2fe" ${ink(1)}/>`;
+      if (n === 5) {
+        s += `<path d="M55 64 L60 74 L56 84 M69 64 L64 74 L68 84" fill="none" stroke="${t.glow}" stroke-width="1.6"/>`;
+        s += `<circle cx="62" cy="72" r="3.2" fill="${c.radial("heye", [[0, "#fde047"], [1, "#dc2626"]])}"/>`;
+        s += `<path d="M80 54 L82 40 L86 54 M86 56 L92 46 L91 60" fill="${t.dark}" ${ink(1)}/>`;
+      }
+      return s;
+    },
+    legs(c, t, n) {
+      const m = c.metal(t, "hlegs", "h");
+      let s = "";
+      [[49, 140], [74, 140]].forEach(([x, y]) => {
+        s += `<ellipse cx="${x}" cy="${y}" rx="6.5" ry="5" fill="${n === 1 ? t.main : m}" ${ink(1.2)}/>`;
+        if (n >= 3) s += `<path d="M${x - 4} ${y} L${x + 4} ${y}" stroke="${t.trim}" stroke-width="1.4"/>`;
+        if (n === 5) s += `<circle cx="${x}" cy="${y}" r="1.6" fill="${t.glow}"/>`;
+      });
+      if (n >= 2) s += `<path d="M52 98 L60 98 L58 116 L51 114 Z M65 98 L73 98 L74 114 L67 116 Z" fill="${m}" ${ink(1.2)}/>`;
+      return s;
+    },
+    shoes(c, t, n) {
+      const m = c.metal(t, "hboots", "v");
+      let s = "";
+      [[45, 176, -1], [79, 176, 1]].forEach(([x, y, d]) => {
+        s += `<path d="M${x - 6} ${y - 18} L${x + 6} ${y - 18} L${x + 6} ${y + 10} L${x + 6 + d * 8} ${y + 14} L${x - 6 + (d < 0 ? -8 : 0)} ${y + 14} L${x - 6} ${y + 10} Z" fill="${m}" ${ink()}/>`;
+        s += `<path d="M${x - 6} ${y - 12} L${x + 6} ${y - 12}" stroke="${n >= 3 ? t.trim : t.dark}" stroke-width="1.8"/>`;
+        if (n === 5) s += `<path d="M${x + d * 6} ${y - 6} L${x + d * 11} ${y - 10} L${x + d * 6} ${y - 2}" fill="${t.dark}" ${ink(0.8)}/>`;
+      });
+      return s;
+    },
+    gloves(c, t, n) {
+      const m = c.metal(t, "hgloves", "v");
+      return [
+        [POSE.armL[1], POSE.armL[2]],
+        [POSE.armR[1], POSE.armR[2]],
+      ]
+        .map(([a, b]) => {
+          const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+          return `<path d="${limb([mid, b], [10, 9.5])}" fill="${m}" ${ink(1.2)}/><circle cx="${b[0]}" cy="${b[1] + 2}" r="5.4" fill="${m}" ${ink(1.2)}/>${n >= 3 ? `<path d="${limb([mid, [mid[0] + (b[0] - mid[0]) * 0.2, mid[1] + (b[1] - mid[1]) * 0.2]], [11, 11])}" fill="${t.trim}"/>` : ""}`;
+        })
+        .join("");
+    },
+    weapon(c, t, n) {
+      // angled down from the left hand
+      const glow = n >= 4 ? `<path d="M36 118 L10 196" stroke="${n === 4 ? "#7dd3fc" : "#ef4444"}" stroke-width="12" stroke-linecap="round" opacity="0.35" class="blade-glow"/>` : "";
+      const blade =
+        n === 1
+          ? c.grad("hbok", [[0, "#d6a85c"], [1, "#7c4a24"]], "h")
+          : n === 4
+            ? c.grad("hiceb", [[0, "#ffffff"], [0.5, "#bae6fd"], [1, "#0ea5e9"]], "h")
+            : n === 5
+              ? c.grad("hdark", [[0, "#7f1d1d"], [0.5, "#1c0508"], [1, "#450a0a"]], "h")
+              : c.grad("hsteel", [[0, "#ffffff"], [0.5, "#cbd5e1"], [1, "#64748b"]], "h");
+      let s = glow;
+      s += `<path d="M34 120 L39 122 L13 194 L9 196 Z" fill="${blade}" ${ink(1.3)}/>`;
+      if (n >= 2) s += `<path d="M36.5 122 L11.5 192" stroke="${n === 5 ? "#ef4444" : n === 4 ? "#fff" : "#f8fafc"}" stroke-width="0.9" opacity="0.9"/>`;
+      if (n === 5) s += `<path d="M26 150 L22 152 L25 156 M20 168 L16 170 L19 174" fill="none" stroke="#ef4444" stroke-width="1.2"/>`;
+      // guard and grip
+      const guard = n >= 3 ? t.trim : n === 1 ? "#5b3a1e" : "#334155";
+      s += `<path d="M29 116 L45 122 L43 126 L27 120 Z" fill="${guard}" ${ink(1.1)}/>`;
+      if (n >= 4) s += `<circle cx="36" cy="121" r="2" fill="${t.gem}" stroke="${t.accent}"/>`;
+      s += `<path d="M37 106 L42 108 L38 119 L33 117 Z" fill="#1c1917" ${ink(1)}/><path d="M36 109 L40 110 M35 113 L39 114" stroke="#57534e" stroke-width="1"/>`;
+      return s;
+    },
+    shield(c, t, n) {
+      const m = c.metal(t, "hshield", "d");
+      const [x, y] = [90, 94];
+      if (n === 1) return `<circle cx="${x}" cy="${y}" r="13" fill="${m}" ${ink()}/><circle cx="${x}" cy="${y}" r="13" fill="none" stroke="#9ca3af" stroke-width="2"/><circle cx="${x}" cy="${y}" r="3.2" fill="#9ca3af" ${ink(1)}/>`;
+      let s = `<path d="M${x - 12} ${y - 14} L${x + 12} ${y - 14} L${x + 11} ${y + 4} Q${x + 7} ${y + 15} ${x} ${y + 20} Q${x - 7} ${y + 15} ${x - 11} ${y + 4} Z" fill="${n === 4 ? c.grad("hicesh", [[0, "#fff"], [1, "#0369a1"]], "d") : m}" ${ink()}/>`;
+      if (n >= 3) s += `<path d="M${x} ${y - 12} L${x} ${y + 16} M${x - 9} ${y - 2} L${x + 9} ${y - 2}" stroke="${t.trim}" stroke-width="2.4"/>`;
+      if (n === 5) s += `<ellipse cx="${x}" cy="${y}" rx="5" ry="3.6" fill="#120306"/><ellipse cx="${x}" cy="${y}" rx="1.8" ry="3" fill="${t.glow}"/>`;
+      return s;
+    },
+    ring(c, t, n) {
+      const [x, y] = POSE.armR[2];
+      return `<circle cx="${x}" cy="${y + 2}" r="2.6" fill="none" stroke="${n >= 3 ? "#facc15" : "#cbd5e1"}" stroke-width="1.5"/><circle cx="${x}" cy="${y - 0.5}" r="1.5" fill="${t.gem}"/>`;
+    },
+  };
 
   function heroSvg(look, worn, style = {}) {
     worn = worn || {};
     style = style || {};
     const c = canvas("0 0 120 200", "hero-sprite", "Your adventurer");
     const skin = look.skin || "#e0ac87";
+    const skinShade = darker(skin, 0.16);
     const hair = look.hair || "#2b1b17";
-    const shirt = look.shirt || "#475569";
-    const pants = look.pants || "#334155";
-    const sk = c.grad("skin", [[0, lighter(skin, 0.12)], [1, darker(skin, 0.12)]], "h");
-    const sh = c.grad("shirt", [[0, lighter(shirt, 0.15)], [1, darker(shirt, 0.3)]], "h");
-    const pa = c.grad("pants", [[0, lighter(pants, 0.1)], [1, darker(pants, 0.35)]], "h");
-    const hairs = hairPaths(look.style || 0, c, hair);
-    let s = `<ellipse cx="60" cy="191" rx="30" ry="5" fill="#000" opacity="0.28"/>`;
+    const coat = darker(look.shirt || "#475569", 0.35);
+    const coatShade = darker(coat, 0.35);
+    const inner = look.shirt || "#475569";
+    const pants = darker(look.pants || "#334155", 0.2);
+    const eye = look.eyes || "#e11d48";
+    const hairs = animeHair(look.style || 0, hair);
+    let s = `<ellipse cx="62" cy="194" rx="34" ry="5" fill="#000" opacity="0.3"/>`;
 
-    // Cape (cosmetic) behind everything
+    // Cosmetic cape, else the long coat's tails, behind everything
     const cape = CAPES[style.cape];
-    if (cape) s += `<path d="M40 66 Q60 60 80 66 Q92 120 98 186 Q86 180 78 188 Q68 180 60 188 Q50 180 42 188 Q34 180 22 186 Q28 120 40 66 Z" fill="${c.grad("cape", [[0, lighter(cape[0], 0.15)], [1, cape[1]]])}" ${stroke()}/>`;
-    s += hairs.back;
+    const tail = cape ? cape[0] : coat;
+    s += `<path d="M48 60 Q62 54 76 60 Q90 110 98 176 Q86 170 80 186 Q74 168 66 160 Q58 170 52 188 Q48 168 40 180 Q34 120 48 60 Z" fill="${tail}" ${ink()}/>`;
+    s += `<path d="M76 60 Q90 110 98 176 Q86 170 80 186 Q78 140 72 100 Z" fill="${cape ? cape[1] : coatShade}"/>`;
+    // The head (hair, face, helmet, hats) is drawn a little bigger, anime proportions
+    const head = (inner) => `<g transform="translate(62.5 46) scale(1.2) translate(-62.5 -46)">${inner}</g>`;
+    s += head(hairs.back);
 
-    // Body: legs, boots, torso, arms, neck, head
-    s += `<path d="M44 108 L58 108 L57 170 L45 170 Z M62 108 L76 108 L75 170 L63 170 Z" fill="${pa}" ${stroke()}/>`;
-    s += `<path d="M43 166 L59 166 L60 184 Q61 190 52 190 L42 190 Q40 186 43 182 Z M61 166 L77 166 L78 182 Q80 190 70 190 L60 190 Q58 186 61 182 Z" fill="${c.grad("boot", [[0, "#6b4426"], [1, "#2e1b0d"]])}" ${stroke()}/>`;
-    s += `<path d="M38 70 L30 100 L26 122 L34 124 L38 104 L44 82 Z M82 70 L90 100 L94 122 L86 124 L82 104 L76 82 Z" fill="${sk}" ${stroke()}/>`;
-    s += `<path d="M38 68 Q60 60 82 68 L80 110 Q60 116 40 110 Z" fill="${sh}" ${stroke()}/>`;
-    s += `<path d="M38 68 L30 92 L40 96 L45 78 Z M82 68 L90 92 L80 96 L75 78 Z" fill="${sh}" ${stroke()}/>`;
-    s += `<path d="M53 64 Q60 70 67 64" fill="none" stroke="${darker(shirt, 0.4)}" stroke-width="1.6"/>`;
-    s += `<rect x="40" y="104" width="40" height="7" rx="1.5" fill="#3b2412" ${stroke(1)}/><rect x="56" y="104" width="8" height="7" rx="1" fill="#d4a017" ${stroke(0.8)}/>`;
-    s += `<circle cx="30" cy="125" r="6" fill="${sk}" ${stroke()}/><circle cx="90" cy="125" r="6" fill="${sk}" ${stroke()}/>`;
-    s += `<path d="M54 54 L66 54 L66 66 Q60 70 54 66 Z" fill="${darker(skin, 0.12)}" ${stroke()}/>`;
-    s += `<ellipse cx="42" cy="42" rx="3.4" ry="5" fill="${sk}" ${stroke(1.2)}/><ellipse cx="78" cy="42" rx="3.4" ry="5" fill="${sk}" ${stroke(1.2)}/>`;
-    s += `<path d="M43 36 Q43 18 60 17 Q77 18 77 36 Q77 52 70 58 Q60 64 50 58 Q43 52 43 36 Z" fill="${sk}" ${stroke()}/>`;
-    // Face
-    const eye = look.eyes || "#1e293b";
-    s += `<ellipse cx="53" cy="40" rx="3.6" ry="3" fill="#fff" ${stroke(0.8)}/><ellipse cx="67" cy="40" rx="3.6" ry="3" fill="#fff" ${stroke(0.8)}/>`;
-    s += `<circle cx="53.6" cy="40.3" r="2" fill="${eye}"/><circle cx="66.4" cy="40.3" r="2" fill="${eye}"/><circle cx="54.3" cy="39.5" r="0.7" fill="#fff"/><circle cx="67.1" cy="39.5" r="0.7" fill="#fff"/>`;
-    s += `<path d="M49 35 Q53 33 57 35 M63 35 Q67 33 71 35" fill="none" stroke="${darker(hair, 0.2)}" stroke-width="1.8" stroke-linecap="round"/>`;
-    s += `<path d="M60 42 Q58.5 47 60.5 48" fill="none" stroke="${darker(skin, 0.3)}" stroke-width="1.2" stroke-linecap="round"/>`;
-    s += `<path d="M55 52 Q60 55.5 65 52" fill="none" stroke="#7a2e2e" stroke-width="1.5" stroke-linecap="round"/>`;
-    s += `<ellipse cx="49" cy="47" rx="3" ry="1.6" fill="#e11d48" opacity="0.18"/><ellipse cx="71" cy="47" rx="3" ry="1.6" fill="#e11d48" opacity="0.18"/>`;
-    if (!worn.helmet || tierNum(worn.helmet) === 1) s += hairs.front;
-
-    // Gear, in each item's tier material (order: legs, boots, chest, gloves, helmet, shield, weapon, ring)
-    ["legs", "shoes", "chest", "gloves", "helmet", "shield", "weapon", "ring"].forEach((slot) => {
-      if (worn[slot]) s += PIECES[slot](c, tierOf(worn[slot]), tierNum(worn[slot]));
+    // Legs and boots
+    s += `<path d="${limb(POSE.legL, [12, 10, 9])}" fill="${pants}" ${ink()}/><path d="${limb(POSE.legR, [12, 10, 9])}" fill="${pants}" ${ink()}/>`;
+    s += `<path d="${limb(POSE.legR, [5, 4, 3])}" fill="${darker(pants, 0.3)}" opacity="0.7"/>`;
+    [[45, 176, -1], [79, 176, 1]].forEach(([x, y, d]) => {
+      s += `<path d="M${x - 5.5} ${y - 6} L${x + 5.5} ${y - 6} L${x + 5.5} ${y + 10} L${x + 5.5 + d * 8} ${y + 14} L${x - 5.5 + (d < 0 ? -8 : 0)} ${y + 14} L${x - 5.5} ${y + 10} Z" fill="#1c1917" ${ink()}/>`;
     });
 
-    // Cloak clasp over the shoulders
-    if (cape) s += `<circle cx="47" cy="68" r="3" fill="#facc15" ${stroke(1)}/><circle cx="73" cy="68" r="3" fill="#facc15" ${stroke(1)}/>`;
+    // Torso: inner shirt, then the open coat over it
+    s += `<path d="M50 58 Q62 54 74 58 L72 98 Q62 102 52 98 Z" fill="${inner}" ${ink()}/>`;
+    s += `<path d="M66 58 L74 58 L72 98 L66 100 Z" fill="${darker(inner, 0.25)}"/>`;
+    s += `<path d="M46 58 Q52 56 58 58 L56 100 L48 102 Q44 80 46 58 Z M66 58 Q72 56 78 58 Q80 80 76 102 L68 100 Z" fill="${coat}" ${ink()}/>`;
+    s += `<path d="M66 58 Q72 56 78 58 Q80 80 76 102 L72 100 Q74 78 70 60 Z" fill="${coatShade}"/>`;
+    s += `<path d="M50 94 L74 94 L74 100 L50 100 Z" fill="#111" ${ink(1)}/><rect x="59" y="94" width="6" height="6" fill="#d4a017" ${ink(0.8)}/>`;
+    // Arms in the coat's sleeves, bare hands
+    s += `<path d="${limb(POSE.armL, [11, 10, 8])}" fill="${coat}" ${ink()}/><path d="${limb(POSE.armR, [11, 10, 8])}" fill="${coat}" ${ink()}/>`;
+    s += `<path d="${limb(POSE.armR, [5, 4, 3])}" fill="${coatShade}" opacity="0.8"/>`;
+    s += `<circle cx="${POSE.armL[2][0]}" cy="${POSE.armL[2][1] + 3}" r="5" fill="${skin}" ${ink(1.2)}/><circle cx="${POSE.armR[2][0]}" cy="${POSE.armR[2][1] + 3}" r="5" fill="${skin}" ${ink(1.2)}/>`;
 
-    // Hat (cosmetic), over hair and helmet
+    // Neck and head: a pointed face, sharp eyes
+    s += `<path d="M58 42 L66 42 L66 56 Q62 59 58 56 Z" fill="${skinShade}" ${ink(1.2)}/>`;
+    let face = `<path d="M51 24 Q51 12 62.5 11 Q74 12 74 25 Q74 36 67 45 Q62.5 49 58 45 Q51 36 51 24 Z" fill="${skin}" ${ink()}/>`;
+    face += `<path d="M68 26 Q74 30 72 36 Q70 42 66 45 Q70 36 68 26 Z" fill="${skinShade}"/>`;
+    face += `<path d="M51 26 Q48 28 49 32 Q50 35 52 34 Z" fill="${skin}" ${ink(1)}/>`;
+    if (!(worn.helmet && tierNum(worn.helmet) === 5)) {
+      // sharp anime eyes with a glowing iris
+      face += `<path d="M53 29 L60 28 L60.5 32 Q56 33.5 53.5 31.5 Z" fill="#fff" ${ink(1)}/><path d="M65 28 L72 29 L71.5 31.5 Q69 33.5 65 32 Z" fill="#fff" ${ink(1)}/>`;
+      face += `<ellipse cx="57.6" cy="30.4" rx="1.9" ry="2.1" fill="${eye}"/><ellipse cx="67.6" cy="30.4" rx="1.9" ry="2.1" fill="${eye}"/>`;
+      face += `<circle cx="58.2" cy="29.7" r="0.6" fill="#fff"/><circle cx="68.2" cy="29.7" r="0.6" fill="#fff"/>`;
+      face += `<path d="M52 27 L60 25.6 M65 25.6 L73 27" stroke="${darker(hair, 0.3)}" stroke-width="1.8" stroke-linecap="round"/>`;
+    }
+    face += `<path d="M62.5 33 L61.5 37 L62.8 37.4" fill="none" stroke="${darker(skin, 0.35)}" stroke-width="0.9"/>`;
+    face += `<path d="M59.5 41 Q62.5 42.2 65.5 40.8" fill="none" stroke="#5c1f1f" stroke-width="1.2" stroke-linecap="round"/>`;
+    face += hairs.front;
+    if (worn.helmet) face += HERO_GEAR.helmet(c, tierOf(worn.helmet), tierNum(worn.helmet));
+
+    // Gear, in each item's tier material
+    ["legs", "shoes", "chest", "gloves", "shield", "weapon", "ring"].forEach((slot) => {
+      if (worn[slot]) s += HERO_GEAR[slot](c, tierOf(worn[slot]), tierNum(worn[slot]));
+    });
+    s += head(face);
+    if (!worn.weapon) s += `<path d="M36 112 L40 114" stroke="${INK}" stroke-width="1"/>`;
+
+    // Cape clasp and hats (cosmetics)
+    if (cape) s += `<circle cx="51" cy="60" r="2.6" fill="#facc15" ${ink(1)}/><circle cx="73" cy="60" r="2.6" fill="#facc15" ${ink(1)}/>`;
     const hats = {
-      "hat-crown": `<path d="M45 22 L44 6 L52 14 L60 2 L68 14 L76 6 L75 22 Z" fill="${c.grad("crown", [[0, "#fef3c7"], [1, "#ca8a04"]])}" ${stroke()}/><circle cx="60" cy="16" r="2.4" fill="#3b82f6"/><circle cx="50" cy="18" r="1.8" fill="#dc2626"/><circle cx="70" cy="18" r="1.8" fill="#dc2626"/>`,
-      "hat-wizard": `<path d="M38 26 L82 26 L74 20 Q68 2 54 -14 Q58 8 46 20 Z" fill="${c.grad("wiz", [[0, "#8b5cf6"], [1, "#4c1d95"]])}" ${stroke()}/><path d="M36 26 Q60 32 84 26" fill="none" stroke="#facc15" stroke-width="2.4"/><circle cx="62" cy="10" r="2" fill="#fde047"/>`,
-      "hat-horns": `<path d="M46 24 Q34 18 34 4 Q42 16 50 18 Z M74 24 Q86 18 86 4 Q78 16 70 18 Z" fill="${c.grad("devil", [[0, "#f87171"], [1, "#7f1d1d"]])}" ${stroke()}/>`,
-      "hat-halo": `<ellipse cx="60" cy="4" rx="16" ry="4.5" fill="none" stroke="#fde68a" stroke-width="3.4"/><ellipse cx="60" cy="4" rx="16" ry="4.5" fill="none" stroke="#fef9c3" stroke-width="1" opacity="0.9"/>`,
+      "hat-crown": `<path d="M50 14 L49 0 L56 8 L62.5 -2 L69 8 L76 0 L75 14 Z" fill="${c.grad("crown", [[0, "#fef3c7"], [1, "#ca8a04"]])}" ${ink()}/><circle cx="62.5" cy="9" r="2" fill="#3b82f6"/>`,
+      "hat-wizard": `<path d="M44 18 L82 18 L74 12 Q70 -6 58 -18 Q62 2 52 12 Z" fill="${c.grad("wiz", [[0, "#8b5cf6"], [1, "#4c1d95"]])}" ${ink()}/><path d="M43 18 Q62 23 83 18" fill="none" stroke="#facc15" stroke-width="2.2"/>`,
+      "hat-horns": `<path d="M52 18 Q42 12 42 -2 Q48 10 56 13 Z M73 18 Q83 12 83 -2 Q77 10 69 13 Z" fill="${c.grad("devil", [[0, "#f87171"], [1, "#7f1d1d"]])}" ${ink()}/>`,
+      "hat-halo": `<ellipse cx="62.5" cy="-2" rx="15" ry="4" fill="none" stroke="#fde68a" stroke-width="3"/>`,
     };
-    if (hats[style.hat]) s += hats[style.hat];
+    if (hats[style.hat]) s += head(hats[style.hat]);
 
     const root = c.finish(s);
-    root.setAttribute("viewBox", style.hat === "hat-wizard" ? "0 -16 120 216" : "0 -6 120 206");
+    root.setAttribute("viewBox", style.hat === "hat-wizard" ? "0 -30 124 230" : "0 -10 124 210");
     const aura = auraOf(worn);
     if (aura) root.classList.add(`aura-${aura}`);
     return root;
