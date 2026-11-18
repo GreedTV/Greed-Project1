@@ -24,13 +24,18 @@ const RARITY = {
   epic: ["Epic", "#a855f7", "#7e22ce"],
   legendary: ["Legendary", "#f59e0b", "#b45309"],
 };
-// Where each region sits on the map (in a 600 x 340 picture)
+// Where each region sits on the map (in a 1000 x 600 picture)
 const MAP_SPOTS = {
-  forest: { x: 110, y: 240 },
-  caves: { x: 225, y: 105 },
-  swamp: { x: 330, y: 255 },
-  mountains: { x: 460, y: 95 },
-  abyss: { x: 520, y: 250 },
+  forest: { x: 160, y: 370 },
+  crypt: { x: 270, y: 470 },
+  caves: { x: 310, y: 245 },
+  hollow: { x: 190, y: 150 },
+  swamp: { x: 450, y: 395 },
+  desert: { x: 585, y: 490 },
+  mountains: { x: 610, y: 160 },
+  volcano: { x: 760, y: 300 },
+  abyss: { x: 860, y: 465 },
+  spire: { x: 895, y: 110 },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -268,41 +273,64 @@ function selectItem(item) {
 }
 
 // ---------- World map ----------
+// A 1000 x 600 continent with ten regions, a road between them in level order, and a medallion per
+// region with its monster. Click a medallion to see its dungeon below the map.
+
+const WORLD_W = 1000;
+const WORLD_H = 600;
+const ROAD_ORDER = ["forest", "crypt", "caves", "hollow", "swamp", "desert", "mountains", "volcano", "abyss", "spire"];
+const TIER_RING = ["#a16207", "#9ca3af", "#14b8a6", "#38bdf8", "#ef4444"];
 
 function renderMap() {
   const map = $("world-map");
-  const root = svg("svg", { viewBox: "0 0 600 340", class: "map-svg" });
-  root.append(mapScenery());
+  const root = svg("svg", { viewBox: `0 0 ${WORLD_W} ${WORLD_H}`, class: "map-svg world" });
+  root.append(worldScenery());
 
-  // The road between places
-  const order = ["forest", "caves", "swamp", "mountains", "abyss"];
-  const pts = order.map((id) => MAP_SPOTS[id]);
+  // The road, through every region in level order
+  const pts = ROAD_ORDER.map((id) => MAP_SPOTS[id]).filter(Boolean);
   const road = pts
     .map((p, i) => {
       if (!i) return `M${p.x} ${p.y}`;
       const q = pts[i - 1];
-      return `Q${(p.x + q.x) / 2 + (i % 2 ? -30 : 30)} ${(p.y + q.y) / 2 + (i % 2 ? 30 : -20)} ${p.x} ${p.y}`;
+      return `Q${(p.x + q.x) / 2 + (i % 2 ? -40 : 40)} ${(p.y + q.y) / 2 + (i % 2 ? 36 : -30)} ${p.x} ${p.y}`;
     })
     .join(" ");
-  root.append(svg("path", { d: road, class: "map-road-edge" }));
-  root.append(svg("path", { d: road, class: "map-road" }));
+  root.append(svg("path", { d: road, class: "map-road-edge" }), svg("path", { d: road, class: "map-road" }));
 
-  const trip = state.run;
-  state.dungeons.forEach((d) => {
-    const { x, y } = MAP_SPOTS[d.id];
-    const g = svg("g", { class: `map-spot${d.open ? "" : " locked"}${selectedPlace === d.id ? " selected" : ""}${trip && trip.dungeon === d.id ? " active" : ""}`, tabindex: 0, role: "button" });
+  const run = state.run;
+  state.dungeons.forEach((d, i) => {
+    const spot = MAP_SPOTS[d.id];
+    if (!spot) return;
+    const { x, y } = spot;
+    const g = svg("g", { class: `map-spot${d.open ? "" : " locked"}${selectedPlace === d.id ? " selected" : ""}${run && run.dungeon === d.id ? " active" : ""}`, tabindex: 0, role: "button" });
     g.setAttribute("aria-label", d.open ? `${d.name}, level ${d.level}` : `${d.name}, unlocks at level ${d.level}`);
-    g.append(svg("ellipse", { cx: x, cy: y + 24, rx: 26, ry: 7, class: "spot-shadow" }));
-    g.append(svg("circle", { cx: x, cy: y, r: 31, class: "spot-halo" }));
-    g.append(svg("circle", { cx: x, cy: y, r: 26, class: "spot-ring" }));
-    g.append(svg("circle", { cx: x, cy: y, r: 22, class: "spot-disc" }));
-    g.append(mapIcon(d.open ? d.emoji : "🔒", x, y, d.open ? 30 : 24));
-    // Name plate under the pin
+    g.style.setProperty("--ring", TIER_RING[d.tier - 1]);
+    g.append(svg("ellipse", { cx: x, cy: y + 34, rx: 30, ry: 8, class: "spot-shadow" }));
+    g.append(svg("circle", { cx: x, cy: y, r: 38, class: "spot-halo" }));
+    g.append(svg("circle", { cx: x, cy: y, r: 32, class: "spot-ring" }));
+    // The monster's portrait, cut to a circle
+    const clipId = `spotclip-${i}`;
+    const clip = svg("clipPath", { id: clipId });
+    clip.append(svg("circle", { cx: x, cy: y, r: 28 }));
+    g.append(clip);
+    g.append(svg("circle", { cx: x, cy: y, r: 28, class: "spot-disc" }));
+    const portrait = d.monster.art && SinnersArt.monsterSvg(d.monster.art);
+    if (portrait) {
+      portrait.setAttribute("x", x - 34);
+      portrait.setAttribute("y", y - 30);
+      portrait.setAttribute("width", 68);
+      portrait.setAttribute("height", 68);
+      const holder = svg("g", { "clip-path": `url(#${clipId})`, class: "spot-portrait" });
+      holder.append(portrait);
+      g.append(holder);
+    } else g.append(mapIcon(d.emoji, x, y, 34));
+    if (!d.open) g.append(mapIcon("🔒", x + 22, y - 22, 22));
+    // Name plate under the medallion
     const text = d.open ? d.name : `${d.name} · Lv ${d.level}`;
-    const w = Math.max(70, text.length * 6.6 + 18);
-    const px = Math.min(600 - w / 2 - 8, Math.max(w / 2 + 8, x)); // kept inside the map
-    g.append(svg("rect", { x: px - w / 2, y: y + 33, width: w, height: 18, rx: 3, class: "spot-plate" }));
-    const label = svg("text", { x: px, y: y + 46, "text-anchor": "middle", class: "spot-label" });
+    const w = Math.max(80, text.length * 7.4 + 20);
+    const px = Math.min(WORLD_W - w / 2 - 8, Math.max(w / 2 + 8, x));
+    g.append(svg("rect", { x: px - w / 2, y: y + 40, width: w, height: 21, rx: 3, class: "spot-plate" }));
+    const label = svg("text", { x: px, y: y + 55, "text-anchor": "middle", class: "spot-label" });
     label.textContent = text;
     g.append(label);
     const choose = () => {
@@ -314,114 +342,103 @@ function renderMap() {
     g.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), choose()));
     root.append(g);
   });
-  // The adventurer's marker while away
-  if (trip) {
-    const { x, y } = MAP_SPOTS[trip.dungeon];
-    const flag = mapIcon(trip.wait || trip.done ? "🎁" : "🚩", x + 28, y - 34, 22);
+  // The adventurer's flag while in a dungeon
+  if (run && MAP_SPOTS[run.dungeon]) {
+    const { x, y } = MAP_SPOTS[run.dungeon];
+    const flag = mapIcon(run.wait || run.done ? "🎁" : "🚩", x + 30, y - 40, 28);
     flag.classList.add("trip-flag");
     root.append(flag);
   }
   map.replaceChildren(root);
 }
 
-const ISLAND = "M34 70 Q70 22 150 30 Q205 14 262 34 Q330 16 400 28 Q470 18 528 44 Q586 70 578 140 Q596 200 572 262 Q556 318 480 322 Q400 336 320 322 Q240 334 160 322 Q70 326 40 280 Q12 236 24 170 Q12 110 34 70 Z";
-
-// The painted land under the pins: sea, coast, the five regions, a river, clouds and a compass.
+// The painted land: sea, the continent, ten biomes, rivers, clouds, a compass and the title.
 // Built once and copied, since it never changes.
 let scenery = null;
-function mapScenery() {
+function worldScenery() {
   if (scenery) return scenery.cloneNode(true);
-  const g = svg("g", { class: "map-scenery" });
-  const defs = svg("defs");
-  defs.innerHTML =
-    '<radialGradient id="m-sea" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#16324a"/><stop offset="1" stop-color="#081420"/></radialGradient>' +
-    '<linearGradient id="m-land" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3d5a2e"/><stop offset="1" stop-color="#26381d"/></linearGradient>' +
-    '<radialGradient id="m-abyss" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ff3b1f" stop-opacity="0.95"/><stop offset="0.45" stop-color="#9b1010" stop-opacity="0.7"/><stop offset="1" stop-color="#1a0505" stop-opacity="0"/></radialGradient>' +
-    '<radialGradient id="m-swamp" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#2f4a2c"/><stop offset="1" stop-color="#1c2e1c"/></radialGradient>' +
-    '<radialGradient id="m-vignette" cx="50%" cy="50%" r="75%"><stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></radialGradient>' +
-    '<pattern id="m-grass" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M3 10 l1 -3 l1 3 M9 5 l1 -3 l1 3" stroke="#4f7a38" stroke-width="1" fill="none" opacity="0.6"/></pattern>' +
-    '<pattern id="m-waves" width="40" height="16" patternUnits="userSpaceOnUse"><path d="M2 8 q5 -4 10 0 t10 0" stroke="#2c5677" stroke-width="1.2" fill="none" opacity="0.7"/></pattern>' +
-    `<clipPath id="m-island"><path d="${ISLAND}"/></clipPath>`;
-  g.append(defs);
-  const add = (tag, attrs) => (g.append(svg(tag, attrs)), g.lastChild);
-  const inland = "translate(300 170) scale(0.965) translate(-300 -170)";
+  const g = svg("g", { class: "world-scenery", "aria-hidden": "true" });
+  g.innerHTML = `
+  <defs>
+    <linearGradient id="w-sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b3a5a"/><stop offset="1" stop-color="#061a2c"/></linearGradient>
+    <linearGradient id="w-land" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d7a3a"/><stop offset="1" stop-color="#3f5626"/></linearGradient>
+    <radialGradient id="w-lava" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fde047"/><stop offset="0.5" stop-color="#f97316"/><stop offset="1" stop-color="#7f1d1d" stop-opacity="0"/></radialGradient>
+    <radialGradient id="w-abyss" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#fca5a5"/><stop offset="0.35" stop-color="#b91c1c"/><stop offset="1" stop-color="#1c0508"/></radialGradient>
+    <radialGradient id="w-vignette" cx="0.5" cy="0.5" r="0.75"><stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></radialGradient>
+    <linearGradient id="w-snow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#94a3b8"/></linearGradient>
+    <linearGradient id="w-sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fcd34d"/><stop offset="1" stop-color="#b45309"/></linearGradient>
+  </defs>
+  <rect width="1000" height="600" fill="url(#w-sea)"/>
+  ${Array.from({ length: 34 }, (_, i) => `<path d="M${(i * 137) % 980 + 10} ${(i * 89) % 580 + 10} q6 -4 12 0 q6 4 12 0" class="wave" style="animation-delay:${(i % 7) * -0.6}s"/>`).join("")}
+  <!-- the continent, with a coastline and shallow water -->
+  <path d="M70 140 Q110 60 230 70 Q330 30 420 60 Q520 30 610 54 Q700 34 770 70 Q850 60 900 120 Q960 200 930 300 Q970 400 920 470 Q880 560 760 548 Q660 580 560 556 Q460 584 360 556 Q250 580 160 540 Q60 520 50 430 Q20 340 50 260 Q30 190 70 140 Z" fill="#1e5a7a" opacity="0.6" transform="translate(-8 -6) scale(1.016)"/>
+  <path d="M70 140 Q110 60 230 70 Q330 30 420 60 Q520 30 610 54 Q700 34 770 70 Q850 60 900 120 Q960 200 930 300 Q970 400 920 470 Q880 560 760 548 Q660 580 560 556 Q460 584 360 556 Q250 580 160 540 Q60 520 50 430 Q20 340 50 260 Q30 190 70 140 Z" fill="url(#w-land)" stroke="#d6c08a" stroke-width="5" stroke-linejoin="round"/>
+  <!-- the spire's island -->
+  <path d="M820 40 Q880 10 940 40 Q980 90 950 150 Q900 180 850 160 Q800 120 820 40 Z" fill="#3a3f4a" stroke="#d6c08a" stroke-width="4"/>
 
-  // Sea with drifting waves
-  add("rect", { width: 600, height: 340, fill: "url(#m-sea)" });
-  add("rect", { width: 640, height: 340, fill: "url(#m-waves)", class: "map-waves" });
+  <!-- Whispering Forest: pines -->
+  <ellipse cx="160" cy="380" rx="110" ry="80" fill="#2f5d27" opacity="0.85"/>
+  ${[[100, 340], [130, 320], [160, 345], [200, 330], [225, 360], [110, 395], [145, 410], [190, 415], [230, 400], [90, 375]].map(([x, y]) => `<path d="M${x} ${y - 26} L${x + 13} ${y} L${x - 13} ${y} Z" fill="#1a3d17" stroke="#0f2a0d" stroke-width="1.5"/><path d="M${x} ${y - 16} L${x + 9} ${y + 2} L${x - 9} ${y + 2} Z" fill="#245a1f"/><rect x="${x - 2}" y="${y}" width="4" height="6" fill="#5b3a1e"/>`).join("")}
 
-  // Coast: surf, sand, then grass
-  add("path", { d: ISLAND, fill: "none", stroke: "#3c7ba3", "stroke-width": 14, opacity: 0.35, class: "map-surf" });
-  add("path", { d: ISLAND, fill: "#c9b27a", stroke: "#8a7547", "stroke-width": 2 });
-  add("path", { d: ISLAND, fill: "url(#m-land)", transform: inland });
-  add("path", { d: ISLAND, fill: "url(#m-grass)", transform: inland });
+  <!-- Sunken Crypt: grey ground and tombstones -->
+  <ellipse cx="270" cy="480" rx="90" ry="55" fill="#55585e" opacity="0.85"/>
+  ${[[230, 470], [260, 460], [290, 475], [320, 465], [250, 500], [300, 505]].map(([x, y]) => `<path d="M${x - 7} ${y + 10} L${x - 7} ${y - 4} Q${x} ${y - 13} ${x + 7} ${y - 4} L${x + 7} ${y + 10} Z" fill="#9ca3af" stroke="#374151" stroke-width="1.5"/><path d="M${x} ${y - 3} L${x} ${y + 5} M${x - 3} ${y} L${x + 3} ${y}" stroke="#4b5563" stroke-width="1.4"/>`).join("")}
 
-  const land = svg("g", { "clip-path": "url(#m-island)" });
-  g.append(land);
-  const put = (tag, attrs) => (land.append(svg(tag, attrs)), land.lastChild);
+  <!-- Goblin Caves: brown hills with a cave mouth -->
+  <path d="M220 290 Q260 200 310 230 Q350 180 400 260 L410 300 Z" fill="#6b4e2e" stroke="#3b2a17" stroke-width="2"/>
+  <path d="M290 296 Q310 262 330 296 Z" fill="#120a06"/><circle cx="304" cy="286" r="2" fill="#ef4444"/><circle cx="314" cy="286" r="2" fill="#ef4444"/>
 
-  // Forest (south-west): rows of pines
-  [[48, 200], [70, 186], [94, 198], [58, 228], [82, 220], [138, 206], [150, 232], [40, 260], [64, 276], [150, 270], [176, 252], [124, 286], [92, 300], [168, 296]].forEach(([x, y], i) => {
-    const s = 0.8 + (i % 3) * 0.15;
-    put("rect", { x: x - 1.5, y: y + 10 * s, width: 3, height: 6 * s, fill: "#4a2c17" });
-    put("path", { d: `M${x} ${y - 14 * s} l${10 * s} ${13 * s} h${-20 * s} Z`, fill: "#1f5c32" });
-    put("path", { d: `M${x} ${y - 6 * s} l${12 * s} ${16 * s} h${-24 * s} Z`, fill: i % 2 ? "#17482a" : "#1b5430" });
-    put("path", { d: `M${x} ${y - 14 * s} l${-10 * s} ${13 * s} h${6 * s} Z`, fill: "#2f7a45", opacity: 0.8 });
-  });
+  <!-- Spider Hollow: dark purple woods and webs -->
+  <ellipse cx="190" cy="160" rx="100" ry="62" fill="#2e1f3d" opacity="0.9"/>
+  ${[[140, 150], [175, 130], [215, 140], [245, 170], [150, 190], [205, 190]].map(([x, y]) => `<path d="M${x} ${y + 14} L${x} ${y - 6} M${x} ${y} L${x - 9} ${y - 12} M${x} ${y + 2} L${x + 10} ${y - 10}" stroke="#4c1d95" stroke-width="3" stroke-linecap="round"/>`).join("")}
+  <g stroke="#e9d5ff" stroke-width="0.8" fill="none" opacity="0.6"><circle cx="232" cy="122" r="6"/><circle cx="232" cy="122" r="11"/><path d="M220 110 L244 134 M244 110 L220 134 M232 108 L232 136 M218 122 L246 122"/></g>
 
-  // Goblin caves (north): rocky hills with a dark mouth and eyes inside
-  put("path", { d: "M160 140 Q185 70 225 62 Q270 66 295 138 Z", fill: "#4a4038" });
-  put("path", { d: "M160 140 Q185 70 225 62 L215 140 Z", fill: "#5d5148" });
-  put("path", { d: "M128 150 Q148 108 178 112 Q196 128 200 150 Z", fill: "#3d342d" });
-  put("path", { d: "M262 150 Q282 112 306 118 Q322 132 326 152 Z", fill: "#3d342d" });
-  put("path", { d: "M208 140 q17 -36 34 0 Z", fill: "#0d0907" });
-  put("circle", { cx: 220, cy: 131, r: 1.6, fill: "#facc15", class: "map-eyes" });
-  put("circle", { cx: 229, cy: 131, r: 1.6, fill: "#facc15", class: "map-eyes" });
+  <!-- Rotting Swamp: murky pools and reeds -->
+  <ellipse cx="450" cy="400" rx="105" ry="65" fill="#3d5a2a" opacity="0.9"/>
+  <ellipse cx="420" cy="410" rx="34" ry="14" fill="#1f3b2e" stroke="#0f2219" stroke-width="1.5"/><ellipse cx="490" cy="385" rx="26" ry="11" fill="#1f3b2e" stroke="#0f2219" stroke-width="1.5"/>
+  ${[[395, 395], [405, 392], [470, 372], [515, 380], [455, 420]].map(([x, y]) => `<path d="M${x} ${y} L${x - 2} ${y - 14} M${x + 3} ${y} L${x + 5} ${y - 12}" stroke="#65a30d" stroke-width="1.6"/><ellipse cx="${x - 2}" cy="${y - 15}" rx="1.6" ry="3.4" fill="#78350f"/>`).join("")}
 
-  // River from the mountains down to the swamp
-  const river = "M470 120 Q430 150 420 185 Q408 222 372 238";
-  put("path", { d: river, fill: "none", stroke: "#2b6c94", "stroke-width": 7, "stroke-linecap": "round" });
-  put("path", { d: river, fill: "none", stroke: "#7cc4ec", "stroke-width": 2, "stroke-dasharray": "5 9", class: "map-river" });
+  <!-- Scorched Desert: dunes and cacti -->
+  <ellipse cx="580" cy="490" rx="125" ry="60" fill="url(#w-sand)" opacity="0.95"/>
+  <path d="M480 500 Q520 470 560 500 Q600 470 640 500 Q680 470 700 495" fill="none" stroke="#92400e" stroke-width="2" opacity="0.6"/>
+  ${[[530, 470], [640, 475], [600, 515]].map(([x, y]) => `<path d="M${x} ${y + 14} L${x} ${y - 12} M${x} ${y} L${x - 7} ${y} L${x - 7} ${y - 7} M${x} ${y - 4} L${x + 7} ${y - 4} L${x + 7} ${y - 11}" stroke="#166534" stroke-width="4" stroke-linecap="round" fill="none"/>`).join("")}
 
-  // Rotting swamp (south): murky pools, lily pads, reeds and mist
-  put("ellipse", { cx: 330, cy: 262, rx: 82, ry: 40, fill: "url(#m-swamp)" });
-  [[305, 255, 26, 12], [350, 272, 30, 11], [338, 246, 16, 7]].forEach(([cx, cy, rx, ry]) => put("ellipse", { cx, cy, rx, ry, fill: "#33503a", stroke: "#4c6b3c", "stroke-width": 1.5 }));
-  [[300, 252], [356, 270], [342, 245], [318, 262]].forEach(([x, y]) => put("circle", { cx: x, cy: y, r: 3, fill: "#5f9e3f" }));
-  [[268, 250], [276, 262], [392, 258], [400, 270], [286, 280]].forEach(([x, y]) => put("path", { d: `M${x} ${y} l-2 -14 M${x + 3} ${y} l1 -11 M${x - 3} ${y} l-4 -9`, stroke: "#6b8f3a", "stroke-width": 1.6 }));
-  put("ellipse", { cx: 330, cy: 250, rx: 90, ry: 16, fill: "#c7d6c0", opacity: 0.12, class: "map-mist" });
+  <!-- Frostpeak Mountains: snowy peaks -->
+  ${[[540, 170, 70], [610, 130, 90], [680, 175, 64], [580, 205, 50]].map(([x, y, h]) => `<path d="M${x - h * 0.8} ${y + h * 0.5} L${x} ${y - h * 0.6} L${x + h * 0.8} ${y + h * 0.5} Z" fill="#64748b" stroke="#334155" stroke-width="2"/><path d="M${x - h * 0.28} ${y - h * 0.18} L${x} ${y - h * 0.6} L${x + h * 0.28} ${y - h * 0.18} L${x + h * 0.1} ${y - h * 0.1} L${x - h * 0.05} ${y - h * 0.22} Z" fill="url(#w-snow)"/>`).join("")}
 
-  // Frostpeak mountains (north-east): shaded peaks with snow
-  [[398, 132, 44], [440, 92, 58], [496, 118, 48], [536, 150, 34]].forEach(([x, y, h]) => {
-    put("path", { d: `M${x - h} ${y + h * 0.9} L${x} ${y - h * 0.6} L${x + h} ${y + h * 0.9} Z`, fill: "#566270" });
-    put("path", { d: `M${x} ${y - h * 0.6} L${x + h} ${y + h * 0.9} L${x + h * 0.15} ${y + h * 0.9} Z`, fill: "#3b4552" });
-    put("path", { d: `M${x - h * 0.32} ${y - h * 0.12} L${x} ${y - h * 0.6} L${x + h * 0.32} ${y - h * 0.12} l${-h * 0.12} ${h * 0.1} l${-h * 0.1} ${-h * 0.08} l${-h * 0.1} ${h * 0.1} Z`, fill: "#eef6fb" });
-  });
+  <!-- Ember Volcano: dark rock, a cone with lava and smoke -->
+  <ellipse cx="760" cy="300" rx="100" ry="70" fill="#2a1d18" opacity="0.95"/>
+  <path d="M700 340 L745 250 L775 250 L820 340 Z" fill="#3b2a24" stroke="#120a06" stroke-width="2"/>
+  <ellipse cx="760" cy="250" rx="16" ry="5" fill="url(#w-lava)"/>
+  <path d="M752 252 Q745 290 735 335 M766 252 Q776 295 790 335" fill="none" stroke="#f97316" stroke-width="3" class="lava"/>
+  <g class="smoke" fill="#57534e" opacity="0.7"><circle cx="760" cy="230" r="10"/><circle cx="770" cy="214" r="13"/><circle cx="756" cy="196" r="15"/></g>
 
-  // Abyss of sinners (south-east): cracked, glowing ground with lava
-  put("circle", { cx: 520, cy: 255, r: 78, fill: "url(#m-abyss)", class: "map-abyss" });
-  put("path", { d: "M470 236 L494 248 L486 262 L512 270 M520 210 L516 236 L532 248 M548 280 L530 266 L540 252 M500 296 L510 280", fill: "none", stroke: "#ff8a3d", "stroke-width": 2, class: "map-lava" });
-  put("path", { d: "M488 300 q10 -14 22 -4 q12 -16 24 -2", fill: "none", stroke: "#3b0a0a", "stroke-width": 3 });
+  <!-- Abyss of Sinners: a glowing chasm -->
+  <ellipse cx="860" cy="470" rx="100" ry="62" fill="#2a0a0e" opacity="0.95"/>
+  <path d="M790 480 Q830 440 860 470 Q890 440 930 480 Q890 500 860 490 Q830 505 790 480 Z" fill="url(#w-abyss)" class="glow"/>
+  ${[[820, 440], [905, 445], [840, 515], [890, 510]].map(([x, y]) => `<path d="M${x} ${y + 10} L${x - 4} ${y - 8} L${x + 2} ${y} L${x + 5} ${y - 12} L${x + 6} ${y + 10} Z" fill="#450a0a" stroke="#1c0508" stroke-width="1.4"/>`).join("")}
 
-  // Clouds drifting over everything, a compass and the map's name
-  [[110, 70, 1], [380, 40, 0.8], [250, 300, 0.7], [560, 205, 0.9]].forEach(([x, y, s], i) => {
-    const c = add("g", { class: `map-cloud c${i}`, opacity: 0.16 });
-    [[0, 0, 26], [22, -6, 20], [42, 2, 18], [18, 8, 22]].forEach(([dx, dy, r]) => c.append(svg("circle", { cx: x + dx * s, cy: y + dy * s, r: r * s, fill: "#ffffff" })));
-  });
-  const compass = add("g", { class: "map-compass", transform: "translate(560 48)" });
-  compass.innerHTML =
-    '<circle r="20" fill="#0b1520" stroke="#c9b27a" stroke-width="1.5" opacity="0.85"/>' +
-    '<path d="M0 -16 L4 0 L0 16 L-4 0 Z" fill="#c9b27a"/><path d="M0 -16 L4 0 L-4 0 Z" fill="#e0123c"/>' +
-    '<text y="-23" text-anchor="middle" fill="#c9b27a" font-size="9" font-weight="700">N</text>';
-  const title = add("g", { transform: "translate(22 22)" });
-  title.innerHTML =
-    '<rect width="132" height="26" rx="3" fill="#0b1520" stroke="#c9b27a" stroke-width="1" opacity="0.85"/>' +
-    '<text x="66" y="17.5" text-anchor="middle" class="map-title">THE SINLANDS</text>';
-  add("rect", { width: 600, height: 340, fill: "url(#m-vignette)", "pointer-events": "none" });
+  <!-- Dragon's Spire: a dark tower with lightning -->
+  <path d="M880 150 L888 70 L904 70 L912 150 Z" fill="#1f2937" stroke="#0b0f14" stroke-width="2"/>
+  <path d="M880 74 L896 48 L912 74 Z" fill="#7f1d1d" stroke="#0b0f14" stroke-width="2"/>
+  <rect x="892" y="92" width="8" height="10" fill="#facc15" opacity="0.85"/>
+  <path d="M940 30 L928 56 L938 56 L926 84" fill="none" stroke="#fde047" stroke-width="2.4" class="bolt"/>
+
+  <!-- rivers -->
+  <path d="M610 120 Q560 260 470 330 Q430 360 440 410" fill="none" stroke="#3b82c4" stroke-width="6" opacity="0.75" stroke-linecap="round"/>
+  <path d="M300 300 Q260 330 240 400 Q230 450 160 520" fill="none" stroke="#3b82c4" stroke-width="5" opacity="0.7" stroke-linecap="round"/>
+
+  <!-- clouds -->
+  <g class="clouds" fill="#ffffff" opacity="0.18"><ellipse cx="380" cy="120" rx="50" ry="14"/><ellipse cx="410" cy="110" rx="30" ry="12"/><ellipse cx="700" cy="420" rx="56" ry="14"/><ellipse cx="120" cy="250" rx="40" ry="11"/></g>
+
+  <!-- compass and title -->
+  <g transform="translate(70 540)"><circle r="26" fill="#0b1e2e" stroke="#d6c08a" stroke-width="2"/><path d="M0 -22 L6 0 L0 22 L-6 0 Z" fill="#d6c08a"/><path d="M0 -22 L6 0 L-6 0 Z" fill="#ef4444"/><text y="-30" text-anchor="middle" class="compass-n">N</text></g>
+  <g transform="translate(500 30)"><rect x="-120" y="-18" width="240" height="32" rx="4" fill="#0b1e2e" stroke="#d6c08a" stroke-width="2"/><text y="5" text-anchor="middle" class="map-title">THE SINLANDS</text></g>
+  <rect width="1000" height="600" fill="url(#w-vignette)" pointer-events="none"/>`;
   scenery = g;
   return g.cloneNode(true);
 }
 
-// A map pin: the place's pixel art (icons.js), or the emoji as text if there's no drawing for it
 function mapIcon(emoji, x, y, size) {
   const art = typeof SinnersIcons !== "undefined" && SinnersIcons.svg(emoji);
   if (!art) {
@@ -461,6 +478,13 @@ const matIcon = (m, n) => {
   return chip;
 };
 
+function monsterIcon(m, big) {
+  const box = el("span", "floor-icon" + (big ? " big" : "") + (m.boss ? " is-boss" : ""));
+  const art = m.art && SinnersArt.monsterSvg(m.art, { boss: m.boss, label: m.name });
+  box.append(art || document.createTextNode(m.emoji || "👾"));
+  return box;
+}
+
 function floorTrack(d, run) {
   const track = el("ol", "floor-track");
   d.floors.forEach((f, i) => {
@@ -473,7 +497,7 @@ function floorTrack(d, run) {
     if (f.boss) cls += " boss";
     const li = el("li", cls);
     li.title = `Floor ${n}: ${f.name} (⚔️ ${f.atk} · 🛡️ ${f.def} · ❤️ ${f.hp})`;
-    li.append(el("span", "floor-icon", f.boss ? "👑" : f.emoji), el("small", null, f.boss ? "Boss" : `F${n}`));
+    li.append(monsterIcon(f), el("small", null, f.boss ? "👑 Boss" : `F${n}`));
     track.append(li);
   });
   return track;
@@ -501,10 +525,7 @@ function renderTrip() {
     if (run.wait) {
       const n = run.next;
       const nextBox = el("div", "next-floor");
-      nextBox.append(
-        el("span", "floor-icon big", n.boss ? "👑" : n.emoji),
-        el("div", null),
-      );
+      nextBox.append(monsterIcon(n, true), el("div", null));
       nextBox.lastChild.append(
         el("strong", null, `Next: floor ${run.floor + 1}${n.boss ? " · the BOSS" : ""} · ${n.name}`),
         el("span", "hint", `⚔️ ${n.atk} · 🛡️ ${n.def} · ❤️ ${n.hp} · ${n.chance}% chance to win · ${minutesText(n.minutes)}`)
@@ -883,7 +904,10 @@ function fighterBox(box, f, side) {
   head.append(name, bar, hp);
   const pic = el("div", "fighter-pic");
   if (f.look) pic.append(heroSvg(f.look, f.worn || {}, f.style || {}));
-  else pic.append(el("span", "fighter-emoji", f.emoji || "👾"));
+  else {
+    const art = f.art && SinnersArt.monsterSvg(f.art, { boss: f.boss, label: f.name });
+    pic.append(art || el("span", "fighter-emoji", f.emoji || "👾"));
+  }
   const fx = el("div", "fighter-fx");
   pic.append(fx);
   box.className = `fighter side-${side}${f.boss ? " is-boss" : ""}`;

@@ -1416,12 +1416,19 @@ const SLOT_PROFILE = {
   shoes: [0, 0.5, 1.5],
 };
 const DUNGEONS = [
-  { id: "forest", name: "Whispering Forest", emoji: "🌲", tier: 1, minutes: 10, xp: [40, 60], loot: 0.25, coins: [8, 14], monster: { name: "Dire Wolf", emoji: "🐺", atk: 4, def: 5, hp: 20 } },
-  { id: "caves", name: "Goblin Caves", emoji: "🕳️", tier: 2, minutes: 30, xp: [150, 210], loot: 0.3, coins: [25, 40], monster: { name: "Goblin Chief", emoji: "👺", atk: 22, def: 24, hp: 98 } },
-  { id: "swamp", name: "Rotting Swamp", emoji: "🐸", tier: 3, minutes: 60, xp: [340, 460], loot: 0.35, coins: [60, 90], monster: { name: "Bog Witch", emoji: "🧙", atk: 48, def: 52, hp: 214 } },
-  { id: "mountains", name: "Frostpeak Mountains", emoji: "🏔️", tier: 4, minutes: 120, xp: [750, 1000], loot: 0.4, coins: [150, 220], monster: { name: "Frost Giant", emoji: "🧊", atk: 93, def: 102, hp: 419 } },
-  { id: "abyss", name: "Abyss of Sinners", emoji: "😈", tier: 5, minutes: 240, xp: [1700, 2300], loot: 0.45, coins: [380, 520], monster: { name: "Sin Demon", emoji: "👹", atk: 162, def: 179, hp: 730 } },
+  { id: "forest", name: "Whispering Forest", emoji: "🌲", tier: 1, minutes: 10, xp: [40, 60], loot: 0.25, coins: [8, 14], monster: { name: "Dire Wolf", emoji: "🐺", art: "wolf", atk: 4, def: 5, hp: 20 } },
+  { id: "crypt", name: "Sunken Crypt", emoji: "⚰️", tier: 1, minutes: 14, xp: [55, 80], loot: 0.28, coins: [10, 18], monster: { name: "Bone Knight", emoji: "💀", art: "skeleton", atk: 6, def: 6, hp: 26 } },
+  { id: "caves", name: "Goblin Caves", emoji: "🕳️", tier: 2, minutes: 30, xp: [150, 210], loot: 0.3, coins: [25, 40], monster: { name: "Goblin Chief", emoji: "👺", art: "goblin", atk: 22, def: 24, hp: 98 } },
+  { id: "hollow", name: "Spider Hollow", emoji: "🕸️", tier: 2, minutes: 40, xp: [190, 260], loot: 0.32, coins: [30, 48], monster: { name: "Broodmother", emoji: "🕷️", art: "spider", atk: 30, def: 22, hp: 118 } },
+  { id: "swamp", name: "Rotting Swamp", emoji: "🐸", tier: 3, minutes: 60, xp: [340, 460], loot: 0.35, coins: [60, 90], monster: { name: "Bog Witch", emoji: "🧙", art: "witch", atk: 48, def: 52, hp: 214 } },
+  { id: "desert", name: "Scorched Desert", emoji: "🏜️", tier: 3, minutes: 75, xp: [420, 560], loot: 0.37, coins: [75, 110], monster: { name: "Sand Emperor", emoji: "🦂", art: "scorpion", atk: 58, def: 60, hp: 250 } },
+  { id: "mountains", name: "Frostpeak Mountains", emoji: "🏔️", tier: 4, minutes: 120, xp: [750, 1000], loot: 0.4, coins: [150, 220], monster: { name: "Frost Giant", emoji: "🧊", art: "giant", atk: 93, def: 102, hp: 419 } },
+  { id: "volcano", name: "Ember Volcano", emoji: "🌋", tier: 4, minutes: 150, xp: [900, 1200], loot: 0.42, coins: [180, 260], monster: { name: "Magma Colossus", emoji: "🗿", art: "golem", atk: 110, def: 125, hp: 500 } },
+  { id: "abyss", name: "Abyss of Sinners", emoji: "😈", tier: 5, minutes: 240, xp: [1700, 2300], loot: 0.45, coins: [380, 520], monster: { name: "Sin Demon", emoji: "👹", art: "demon", atk: 162, def: 179, hp: 730 } },
+  { id: "spire", name: "Dragon's Spire", emoji: "🐉", tier: 5, level: 40, minutes: 300, xp: [2600, 3400], loot: 0.5, coins: [550, 750], monster: { name: "Ancient Dragon", emoji: "🐉", art: "dragon", atk: 205, def: 215, hp: 900 } },
 ];
+// The level a region opens at (its tier's level, or its own)
+const regionLevel = (d) => d.level || TIER_LEVELS[d.tier - 1];
 const MATERIALS = ["Wooden", "Iron", "Bogsteel", "Frost", "Abyssal"];
 const SLOT_NOUNS = {
   helmet: ["Helmet", "Hood", "Cap"],
@@ -1726,6 +1733,11 @@ function fighterOf(name, stats, cls, skills) {
 
 const FLOOR_NAMES = {
   forest: ["Wolf Pup", "Wolf Pack", "Dire Wolf"],
+  crypt: ["Restless Bones", "Crypt Guard", "Bone Knight"],
+  hollow: ["Cave Spiderling", "Web Lurker", "Venom Weaver", "Broodmother"],
+  desert: ["Dune Scorpion", "Sand Stalker", "Sun Scourge", "Dust Tyrant", "Sand Emperor"],
+  volcano: ["Ember Imp", "Lava Hound", "Cinder Brute", "Obsidian Golem", "Molten Titan", "Magma Colossus"],
+  spire: ["Drake Whelp", "Spire Wyvern", "Storm Drake", "Elder Wyrm", "Dragon Knight", "Dragon Priest", "Ancient Dragon"],
   caves: ["Goblin Scout", "Goblin Raider", "Goblin Shaman", "Goblin Chief"],
   swamp: ["Bog Imp", "Swamp Hag", "Mire Witch", "Coven Witch", "Bog Witch"],
   mountains: ["Ice Troll", "Frost Brute", "Rime Giant", "Glacier Giant", "Storm Giant", "Frost Giant"],
@@ -1742,6 +1754,7 @@ function floorMonster(d, n) {
   return {
     name: FLOOR_NAMES[d.id][Math.min(floors, n) - 1],
     emoji: m.emoji,
+    art: m.art,
     atk: Math.round(m.atk * k),
     def: Math.round(m.def * k),
     hp: Math.round(m.hp * k),
@@ -1931,8 +1944,8 @@ async function heroState(env, user) {
     expedition: hero.expDungeon ? { dungeon: hero.expDungeon, start: hero.expStart, end: hero.expEnd, done: now >= hero.expEnd } : null,
     dungeons: DUNGEONS.map((d) => ({
       ...d,
-      level: TIER_LEVELS[d.tier - 1],
-      open: tierOpen(hero.level, d.tier),
+      level: regionLevel(d),
+      open: hero.level >= regionLevel(d),
       floors: Array.from({ length: floorsOf(d) }, (_, i) => floorMonster(d, i + 1)),
       floorMinutes: floorMinutes(d),
       chance: Math.round(winChance(fighting, floorMonster(d, 1)) * 100),
@@ -2035,7 +2048,7 @@ async function startDungeon(env, user, dungeonId) {
   if (!dungeon) fail("Unknown place.", 400);
   const hero = await heroOf(env, user);
   if (hero.expDungeon) fail("Your adventurer is already in a dungeon. Finish that run first.", 409);
-  if (!tierOpen(hero.level, dungeon.tier)) fail(`${dungeon.name} unlocks at adventurer level ${TIER_LEVELS[dungeon.tier - 1]}.`, 409);
+  if (hero.level < regionLevel(dungeon)) fail(`${dungeon.name} unlocks at adventurer level ${regionLevel(dungeon)}.`, 409);
   // Potions and scrolls active now last the whole run (one use each)
   const boosts = Object.fromEntries(["atk", "def", "hp", "xp", "luck"].filter((k) => hero.buffs[k] > 0).map((k) => [k, 1]));
   const snap = await floorSnapshot(env, hero, user, boosts);
@@ -3636,13 +3649,10 @@ const BOT_COLOR = 0xe11d48;
 const ADMINISTRATOR = 0x8; // admin-only commands need Discord's Administrator permission
 const MANAGE_GUILD_PERMISSION = 0x20; // /live needs Manage Server
 const isAdmin = (interaction) => !!interaction.guild_id && (BigInt((interaction.member && interaction.member.permissions) || 0) & BigInt(ADMINISTRATOR)) !== 0n;
-const DUNGEON_CHOICES = [
-  { name: "🌲 Whispering Forest (level 1, 10 min)", value: "forest" },
-  { name: "🕳️ Goblin Caves (level 5, 30 min)", value: "caves" },
-  { name: "🐸 Rotting Swamp (level 10, 1 h)", value: "swamp" },
-  { name: "🏔️ Frostpeak Mountains (level 20, 2 h)", value: "mountains" },
-  { name: "😈 Abyss of Sinners (level 30, 4 h)", value: "abyss" },
-];
+const DUNGEON_CHOICES = DUNGEONS.map((d) => ({
+  name: `${d.emoji} ${d.name} (level ${regionLevel(d)}, ${floorsOf(d)} floors)`,
+  value: d.id,
+}));
 const BOARD_KEY = "discord:statsboard";
 const BOARD_INTERVALS = [
   { name: "5 minutes", value: 5 },
@@ -4205,7 +4215,7 @@ const HELP_TOPICS = {
       },
       {
         name: "Dungeons",
-        value: DUNGEONS.map((d) => `${d.emoji} **${d.name}** · level ${TIER_LEVELS[d.tier - 1]} · ${floorsOf(d)} floors, ${floorMinutes(d)} min each`).join("\n"),
+        value: DUNGEONS.map((d) => `${d.emoji} **${d.name}** · level ${regionLevel(d)} · ${floorsOf(d)} floors, ${floorMinutes(d)} min each`).join("\n"),
       },
       { name: "Deeper or retreat", value: "Won floors drop coins, materials and gear into your loot bag. Go deeper for more (the boss drops the best), or retreat to keep it. Lose a floor and you keep the XP and half the coins, nothing else." },
       { name: "Classes & skills", value: "At level 5 pick **Warrior**, **Rogue** or **Mage** on the website. Each has 3 skills (Cleave, Backstab, Fireball…) you rank up with a skill point every level." },

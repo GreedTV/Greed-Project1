@@ -4535,3 +4535,210 @@ html.lightbox-on {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Illustrated adventure: the big world map, monsters, the adventurer
+   ========================================================================== */
+
+.world-panel {
+  margin-bottom: 16px;
+}
+
+.world-panel .world-map {
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.map-svg.world {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.world-scenery .wave {
+  fill: none;
+  stroke: #7dd3fc;
+  stroke-width: 1.4;
+  opacity: 0.35;
+  animation: wave-drift 4s ease-in-out infinite;
+}
+
+@keyframes wave-drift {
+  50% { transform: translateX(6px); opacity: 0.15; }
+}
+
+.world-scenery .lava {
+  animation: lava-glow 2s ease-in-out infinite;
+}
+
+@keyframes lava-glow {
+  50% { stroke: #fde047; }
+}
+
+.world-scenery .smoke {
+  animation: smoke-rise 6s ease-in-out infinite;
+}
+
+@keyframes smoke-rise {
+  50% { transform: translateY(-6px); opacity: 0.45; }
+}
+
+.world-scenery .glow {
+  animation: abyss-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes abyss-glow {
+  50% { opacity: 0.7; }
+}
+
+.world-scenery .bolt {
+  opacity: 0;
+  animation: bolt-flash 4s steps(1, end) infinite;
+}
+
+@keyframes bolt-flash {
+  0%, 84%, 100% { opacity: 0; }
+  86%, 90% { opacity: 1; }
+  88% { opacity: 0.2; }
+}
+
+.map-title {
+  font: 700 20px "Barlow Semi Condensed", sans-serif;
+  letter-spacing: 0.18em;
+  fill: #f5e6b8;
+}
+
+.compass-n {
+  font: 700 12px "Inter", sans-serif;
+  fill: #f5e6b8;
+}
+
+.map-spot .spot-ring {
+  stroke: var(--ring, #d6c08a);
+  stroke-width: 4;
+}
+
+.map-spot .spot-disc {
+  fill: #1a1420;
+}
+
+.map-spot .spot-portrait {
+  pointer-events: none;
+}
+
+.map-spot.locked .spot-portrait {
+  filter: grayscale(1) brightness(0.55);
+}
+
+.map-spot:not(.locked):hover .spot-portrait,
+.map-spot.selected .spot-portrait {
+  filter: brightness(1.15);
+}
+
+.map-spot .spot-label {
+  font-size: 13px;
+}
+
+/* The adventurer and the dungeon panel under the map */
+.adventure {
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.trip-panel {
+  padding: 16px;
+}
+
+.trip-panel .trip {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+@media (max-width: 860px) {
+  .adventure {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The adventurer is drawn smooth now, not in pixels */
+.hero-sprite {
+  image-rendering: auto;
+  animation: hero-breathe 3s ease-in-out infinite;
+}
+
+@keyframes hero-breathe {
+  50% { transform: translateY(-2px); }
+}
+
+.hero-figure .hero-sprite {
+  width: min(190px, 100%);
+}
+
+.gear-art {
+  image-rendering: auto;
+}
+
+/* Monsters on the floor track and the next-floor card */
+.floor-icon .monster-art {
+  width: 32px;
+  height: 32px;
+}
+
+.floor-icon.big .monster-art {
+  width: 50px;
+  height: 50px;
+}
+
+.floor-icon.is-boss .monster-art {
+  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.7));
+}
+
+/* Monsters in the battle */
+.battle .side-b .fighter-pic .monster-art {
+  width: 170px;
+  height: 170px;
+  filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.35));
+  animation: foe-idle 1.8s ease-in-out infinite;
+}
+
+.battle .side-b.is-boss .fighter-pic .monster-art {
+  width: 200px;
+  height: 200px;
+  filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.75)) drop-shadow(0 6px 0 rgba(0, 0, 0, 0.35));
+}
+
+.battle .fighter-pic .hero-sprite {
+  width: 140px;
+}
+
+@media (max-width: 560px) {
+  .battle .side-b .fighter-pic .monster-art {
+    width: 110px;
+    height: 110px;
+  }
+
+  .battle .side-b.is-boss .fighter-pic .monster-art {
+    width: 128px;
+    height: 128px;
+  }
+
+  .battle .fighter-pic .hero-sprite {
+    width: 84px;
+  }
+}
+
+/* new battle backgrounds */
+.battle-stage.bg-crypt { background: linear-gradient(#15161c, #262833 55%, #3d3f48 56%, #22232a); }
+.battle-stage.bg-hollow { background: linear-gradient(#120a1c, #241433 55%, #2a1d33 56%, #150c1c); }
+.battle-stage.bg-desert { background: linear-gradient(#f59e0b, #fbbf24 55%, #d6a24a 56%, #a16a2a); }
+.battle-stage.bg-volcano { background: linear-gradient(#1a0a06, #3b1408 55%, #2a1810 56%, #120806); }
+.battle-stage.bg-spire { background: linear-gradient(#0b1220, #1e2a44 55%, #2b2f3a 56%, #14161c); }
+
+/* Gear tiles in the bag and shop show the illustrated items */
+.item-icon .gear-art {
+  width: 88%;
+  height: 88%;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45));
+}
