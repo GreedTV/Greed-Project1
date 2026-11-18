@@ -1081,12 +1081,6 @@ const stopLinksWatch = SinnersLinks.onChange(renderLinks);
 
 // ---------- Profile numbers ----------
 
-const GAME_FORMAT = {
-  reaction: ["⚡ Quick Draw", (v) => `${Math.round(v)} ms`],
-  aim: ["🎯 Target Rush", (v) => `${v} hits`],
-  typing: ["⌨️ Chat Typer", (v) => `${v} words`],
-};
-
 async function loadProfile() {
   try {
     const p = await api("/profile");
@@ -1100,10 +1094,10 @@ async function loadProfile() {
 
     const tiles = [
       ["⚔️", "Adventurer level", state ? state.hero.level : "–"],
-      ["🎲", "Bets won", `${p.bets.won} / ${p.bets.placed}`, p.bets.profit ? `${p.bets.profit > 0 ? "+" : ""}${p.bets.profit} 🪙 won` : null],
+      ["🏆", "Adventures won", state ? `${state.hero.wins} / ${state.hero.runs}` : "–"],
+      ["🏟️", "Arena rating", state ? state.hero.rating : "–", state ? `${state.hero.duelWins} wins` : null],
       ["🛒", "Shop purchases", p.purchases],
       ["💬", "Chat messages", p.messages],
-      ...Object.entries(GAME_FORMAT).map(([id, [label, f]]) => [label.split(" ")[0], label.slice(label.indexOf(" ") + 1), p.bests[id] != null ? f(p.bests[id]) : "–", "best"]),
     ];
     $("profile-stats").replaceChildren(
       ...tiles.map(([icon, label, value, note]) => {

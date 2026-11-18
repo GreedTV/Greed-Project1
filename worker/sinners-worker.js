@@ -18,7 +18,7 @@
 //   GET  /youtube/live?channel=<UC id>                               -> { live, videoId, title, name }
 //   GET  /youtube/search?q=<words>&live=1?                           -> { videos: [...] } (Content page browsing)
 //
-// Shop (Games page; items are bought with points)
+// Shop (Shop page; items are bought with points)
 //   GET  /shop                         -> { items: [...] }
 //   GET  /shop/image/<id>              -> the item's picture
 //   GET  /shop/mine                    -> your purchases   (logged in)
@@ -28,18 +28,11 @@
 //                                         | { action: "update", id, ...same fields, image optional } | { action: "delete", id }
 //                                         | { action: "deliver", purchaseId, delivered }   (admin)
 //
-// Mini game leaderboards (Games page)
-//   GET  /games/leaderboard?game=<id>   -> { game, scores: [top 10] }
-//   POST /games/score                  -> { game, score }  (logged in; only your best counts)
-//   GET  /games-admin                  -> every game's top 50   (admin)
-//   POST /games-admin                  -> { action: "reset", game } | { action: "delete", game, userId }
-//                                         | { action: "reset-points" }   (admin)
-//
-// Points and betting games (points are earned by playing the games above; just for fun, no real value)
+// Points (earned from adventures, duels, quests, streaks and the world boss; just for fun, no real value)
 //   GET  /points                       -> your wallet { points, earnedToday, dailyCap }   (logged in)
 //   GET  /points/top                   -> the 10 players with the most points
-//   GET  /bets/state?game=colors|lucky -> the current round, its bets, recent results (and your bet if logged in)
-//   POST /bets/place                   -> { game, choice, amount }   (logged in)
+//   GET  /points-admin                 -> the 20 richest players   (admin)
+//   POST /points-admin                 -> { action: "reset-points" }   (admin)
 //
 // Adventure (Profile page): an adventurer with gear, a bag and dungeon runs
 //   GET  /hero                         -> your adventurer, items, regions and the current run   (logged in)
@@ -66,7 +59,7 @@
 //   GET  /stats                        -> online now, visitors and views (today, 7 days), community numbers
 //
 // Discord bot (slash commands arrive here from Discord; set this as the app's Interactions Endpoint URL)
-//   POST /discord/interactions         -> /dungeon, /duel, /stats, /stats-live, /stats-live-off, /points, /top, /shop, /round, /sinners,
+//   POST /discord/interactions         -> /dungeon, /duel, /stats, /stats-live, /stats-live-off, /points, /top, /shop, /sinners,
 //                                         /notify-here, /notify-off
 //   (scheduled)                        -> keeps the /stats-live board up to date (needs a Cron Trigger, see Setup)
 //   GET  /discord-admin                -> bot setup status and invite link   (admin)
@@ -228,22 +221,13 @@ export default {
       }
       if (path === "/me" && request.method === "GET") return json({ user: await requireUser(request, env) }, 200, cors);
 
-      if (path.startsWith("/points") || path.startsWith("/bets")) {
+      if (path.startsWith("/points")) {
         if (!env.DB) return json({ error: "Storage isn't set up yet (DB binding missing)." }, 503, cors);
         await ensureSchema(env);
         if (path === "/points" && request.method === "GET") return await pointsMine(request, env, cors);
         if (path === "/points/top" && request.method === "GET") return await pointsTop(env, cors);
-        if (path === "/bets/state" && request.method === "GET") return await betState(request, url, env, cors);
-        if (path === "/bets/place" && request.method === "POST") return await betPlace(request, env, cors);
-      }
-
-      if (path.startsWith("/games")) {
-        if (!env.DB) return json({ error: "Leaderboard storage isn't set up yet (DB binding missing)." }, 503, cors);
-        await ensureSchema(env);
-        if (path === "/games/leaderboard" && request.method === "GET") return await gameLeaderboard(url, env, cors);
-        if (path === "/games/score" && request.method === "POST") return await gameScore(request, env, cors);
-        if (path === "/games-admin" && request.method === "GET") return await gamesAdminList(request, env, cors);
-        if (path === "/games-admin" && request.method === "POST") return await gamesAdminAction(request, env, cors);
+        if (path === "/points-admin" && request.method === "GET") return await pointsAdminList(request, env, cors);
+        if (path === "/points-admin" && request.method === "POST") return await pointsAdminAction(request, env, cors);
       }
 
       const room = path.replace(/%3A/gi, ":").match(/^\/chat\/([a-z]+:[a-z0-9_-]+)$/);
@@ -1143,98 +1127,10 @@ async function chatAdminAction(request, env, cors) {
   return json({ ok: true }, 200, cors);
 }
 
-// ---------- Mini game leaderboards ----------
-// Scores come from the visitor's browser, so they can't be fully trusted: impossible scores are
-// refused, submissions are rate limited, banned users can't post, and the admin can remove entries.
-
-const GAMES = {
-  // points: how many points one finished game earns (better play earns more)
-  reaction: { lowerIsBetter: true, min: 90, max: 3000, points: (s) => clampInt((600 - s) / 10, 5, 40) }, // average ms
-  aim: { lowerIsBetter: false, min: 1, max: 120, points: (s) => clampInt(s, 3, 50) }, // targets hit in 30 s
-  typing: { lowerIsBetter: false, min: 1, max: 90, points: (s) => clampInt(s, 3, 50) }, // words typed in 30 s
-};
-const SCORE_GAP_MS = 4000;
-
-function gameOf(id) {
-  const game = GAMES[id];
-  if (!game) fail("Unknown game", 400);
-  return game;
-}
-
-async function topScores(env, id, limit) {
-  const order = gameOf(id).lowerIsBetter ? "ASC" : "DESC";
-  const { results } = await env.DB.prepare(
-    `SELECT user_id AS userId, name, avatar, score, created FROM scores WHERE game = ? ORDER BY score ${order}, created ASC LIMIT ?`
-  )
-    .bind(id, limit)
-    .all();
-  return results;
-}
-
-async function gameLeaderboard(url, env, cors) {
-  const id = url.searchParams.get("game") || "";
-  return json({ game: id, scores: await topScores(env, id, 10) }, 200, cors);
-}
-
-async function gameScore(request, env, cors) {
-  const user = await requireUser(request, env);
-  const { game: id, score: raw } = await readJson(request);
-  const game = gameOf(id);
-  const score = Math.round(Number(raw));
-  if (!Number.isFinite(score) || score < game.min || score > game.max) fail("That score doesn't look possible.", 400);
-
-  const now = Date.now();
-  const last = await env.DB.prepare("SELECT at FROM score_limits WHERE user_id = ?").bind(user.id).first();
-  if (last && now - last.at < SCORE_GAP_MS) fail("Slow down a little before sending another score.", 429);
-
-  const better = game.lowerIsBetter ? "excluded.score < scores.score" : "excluded.score > scores.score";
-  await env.DB.batch([
-    env.DB.prepare(
-      "INSERT INTO scores (game, user_id, name, avatar, score, created) VALUES (?, ?, ?, ?, ?, ?) " +
-        `ON CONFLICT(game, user_id) DO UPDATE SET name = excluded.name, avatar = excluded.avatar, ` +
-        `created = CASE WHEN ${better} THEN excluded.created ELSE scores.created END, ` +
-        `score = CASE WHEN ${better} THEN excluded.score ELSE scores.score END`
-    ).bind(id, user.id, user.name, user.avatar, score, now),
-    env.DB.prepare("INSERT INTO score_limits (user_id, at) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET at = excluded.at").bind(user.id, now),
-  ]);
-
-  const mine = await env.DB.prepare("SELECT score FROM scores WHERE game = ? AND user_id = ?").bind(id, user.id).first();
-  const ahead = await env.DB.prepare(`SELECT COUNT(*) AS n FROM scores WHERE game = ? AND score ${game.lowerIsBetter ? "<" : ">"} ?`)
-    .bind(id, mine.score)
-    .first();
-  const earned = await awardPoints(env, user, game.points(score));
-  const hero = await addHeroXp(env, user.id, earned.pointsEarned);
-  await bumpDaily(env, user.id, { games: 1 });
-  const achievements = await checkAchievements(env, user.id);
-  return json({ achievements, best: mine.score, rank: ahead.n + 1, newBest: mine.score === score, ...earned, heroXp: hero.xp, heroLevels: hero.levels }, 200, cors);
-}
-
-async function gamesAdminList(request, env, cors) {
-  checkAdmin(request, env);
-  const boards = {};
-  for (const id of Object.keys(GAMES)) boards[id] = await topScores(env, id, 50);
-  const { results: richest } = await env.DB.prepare("SELECT user_id AS userId, name, points FROM wallets ORDER BY points DESC LIMIT 20").all();
-  return json({ ...boards, richest }, 200, cors);
-}
-
-async function gamesAdminAction(request, env, cors) {
-  checkAdmin(request, env);
-  const { action, game: id, userId } = await readJson(request);
-  if (action === "reset-points") {
-    await env.DB.batch(["wallets", "bets", "rounds", "pools"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
-    return json({ ok: true }, 200, cors);
-  }
-  gameOf(id);
-  if (action === "reset") await env.DB.prepare("DELETE FROM scores WHERE game = ?").bind(id).run();
-  else if (action === "delete") await env.DB.prepare("DELETE FROM scores WHERE game = ? AND user_id = ?").bind(id, String(userId)).run();
-  else fail("Unknown action", 400);
-  return json({ ok: true }, 200, cors);
-}
-
 // ---------- Points ----------
 
 const START_POINTS = 100;
-const DAILY_CAP = 300; // most points a player can earn from games per day
+const DAILY_CAP = 300; // most points a player can earn this way per day (duel wins)
 
 function clampInt(v, lo, hi) {
   return Math.max(lo, Math.min(hi, Math.round(v)));
@@ -1272,109 +1168,24 @@ async function pointsTop(env, cors) {
   return json({ players: results }, 200, cors);
 }
 
-// ---------- Betting games ----------
-// A new round starts every minute for everyone. Each round's result comes from a keyed hash of the
-// round number (HMAC with SESSION_SECRET), so it can't be predicted or changed from a browser.
-// Winners split the round's pot (plus any jackpot) in proportion to their bets; if nobody picked
-// the result, the pot rolls over into the jackpot. On top of that, every winning bet gets a site bonus
-// (a share of the bet, made by the site), so a win always pays even for someone playing alone. Bonuses
-// count toward the same daily earning cap as the games, so extra accounts can't farm endless points. Rounds are paid out once, by whichever request
-// first sees that a round has finished.
+async function pointsAdminList(request, env, cors) {
+  checkAdmin(request, env);
+  const { results: richest } = await env.DB.prepare("SELECT user_id AS userId, name, points FROM wallets ORDER BY points DESC LIMIT 20").all();
+  return json({ richest }, 200, cors);
+}
 
-const ROUND_MS = 60000;
-const BET_CLOSE_MS = 5000; // betting closes this long before the round ends
-const BET_GAMES = {
-  colors: { choices: ["red", "green", "blue"], bonus: 0.1 }, // +10% of a winning bet
-  lucky: { choices: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], bonus: 0.2 }, // +20% of a winning bet
-};
+async function pointsAdminAction(request, env, cors) {
+  checkAdmin(request, env);
+  const { action } = await readJson(request);
+  if (action !== "reset-points") fail("Unknown action", 400);
+  await env.DB.prepare("DELETE FROM wallets").run();
+  return json({ ok: true }, 200, cors);
+}
+
+// ---------- Helpers ----------
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function betGameOf(id) {
-  const game = BET_GAMES[id];
-  if (!game) fail("Unknown game", 400);
-  return game;
-}
-
-async function roundOutcome(env, id, round) {
-  const sig = await crypto.subtle.sign("HMAC", await hmacKey(env), new TextEncoder().encode(`bet:${id}:${round}`));
-  const n = new DataView(sig).getUint32(0);
-  const { choices } = BET_GAMES[id];
-  return choices[n % choices.length];
-}
-
-// The last `count` finished rounds, including ones nobody bet on: every round's result comes from the
-// same keyed hash, so it can be worked out any time. Pot and winners come from rounds that had bets.
-async function recentRounds(env, id, current, count) {
-  const { results } = await env.DB.prepare("SELECT round, pot, winners, paid FROM rounds WHERE game = ? AND round >= ? AND round < ?")
-    .bind(id, current - count, current)
-    .all();
-  const played = Object.fromEntries(results.map((r) => [r.round, r]));
-  const out = [];
-  for (let r = current - 1; r >= current - count; r--) {
-    const p = played[r];
-    out.push({ round: r, outcome: await roundOutcome(env, id, r), pot: p ? p.pot : 0, winners: p ? p.winners : 0, paid: p ? p.paid : 0, bets: !!p });
-  }
-  return out;
-}
-
-async function settleRounds(env, id) {
-  const current = Math.floor(Date.now() / ROUND_MS);
-  const { results: pending } = await env.DB.prepare(
-    "SELECT DISTINCT round FROM bets WHERE game = ? AND round < ? AND round NOT IN (SELECT round FROM rounds WHERE game = ?) ORDER BY round LIMIT 20"
-  )
-    .bind(id, current, id)
-    .all();
-
-  for (const { round } of pending) {
-    const outcome = await roundOutcome(env, id, round);
-    // Claim the round; if another request already did, skip it
-    const claim = await env.DB.prepare("INSERT INTO rounds (game, round, outcome, settled_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
-      .bind(id, round, outcome, Date.now())
-      .run();
-    if (!claim.meta || claim.meta.changes !== 1) continue;
-
-    const { results: bets } = await env.DB.prepare("SELECT user_id, choice, amount FROM bets WHERE game = ? AND round = ?").bind(id, round).all();
-    const pot = bets.reduce((sum, b) => sum + b.amount, 0);
-    const winners = bets.filter((b) => b.choice === outcome);
-    await env.DB.prepare("INSERT INTO pools (game, jackpot) VALUES (?, 0) ON CONFLICT DO NOTHING").bind(id).run();
-    const pool = await env.DB.prepare("SELECT jackpot FROM pools WHERE game = ?").bind(id).first();
-
-    const writes = [env.DB.prepare("UPDATE bets SET payout = 0 WHERE game = ? AND round = ?").bind(id, round)];
-    let paid = 0;
-    if (winners.length) {
-      const total = pot + pool.jackpot;
-      const winningStake = winners.reduce((sum, b) => sum + b.amount, 0);
-      const day = today();
-      for (const b of winners) {
-        const payout = Math.floor((total * b.amount) / winningStake);
-        paid += payout;
-        const w = await env.DB.prepare("SELECT earned_day AS day, earned_today AS today FROM wallets WHERE user_id = ?").bind(b.user_id).first();
-        const earned = w && w.day === day ? w.today : 0;
-        const bonus = Math.max(0, Math.min(Math.floor(b.amount * BET_GAMES[id].bonus), DAILY_CAP - earned));
-        writes.push(
-          env.DB.prepare("UPDATE wallets SET points = points + ?, earned_day = ?, earned_today = ? WHERE user_id = ?").bind(
-            payout + bonus,
-            day,
-            earned + bonus,
-            b.user_id
-          )
-        );
-        writes.push(
-          env.DB.prepare("UPDATE bets SET payout = ?, bonus = ? WHERE game = ? AND round = ? AND user_id = ?").bind(payout, bonus, id, round, b.user_id)
-        );
-      }
-      writes.push(env.DB.prepare("UPDATE pools SET jackpot = ? WHERE game = ?").bind(total - paid, id)); // leftover from rounding
-    } else {
-      writes.push(env.DB.prepare("UPDATE pools SET jackpot = jackpot + ? WHERE game = ?").bind(pot, id));
-    }
-    writes.push(
-      env.DB.prepare("UPDATE rounds SET pot = ?, winners = ?, paid = ? WHERE game = ? AND round = ?").bind(pot, winners.length, paid, id, round)
-    );
-    await env.DB.batch(writes);
-  }
 }
 
 async function optionalUser(request, env) {
@@ -1383,89 +1194,6 @@ async function optionalUser(request, env) {
   } catch (e) {
     return null;
   }
-}
-
-async function betState(request, url, env, cors) {
-  const id = url.searchParams.get("game") || "";
-  const game = betGameOf(id);
-  await settleRounds(env, id);
-  const now = Date.now();
-  const round = Math.floor(now / ROUND_MS);
-  const user = request.headers.get("Authorization") ? await optionalUser(request, env) : null;
-
-  const { results: bets } = await env.DB.prepare(
-    "SELECT user_id AS userId, name, avatar, choice, amount FROM bets WHERE game = ? AND round = ? ORDER BY created DESC"
-  )
-    .bind(id, round)
-    .all();
-  const choices = Object.fromEntries(game.choices.map((c) => [c, { total: 0, count: 0 }]));
-  bets.forEach((b) => {
-    choices[b.choice].total += b.amount;
-    choices[b.choice].count += 1;
-  });
-  const pool = await env.DB.prepare("SELECT jackpot FROM pools WHERE game = ?").bind(id).first();
-  const history = await recentRounds(env, id, round, 10);
-
-  const out = {
-    game: id,
-    round,
-    now,
-    endsAt: (round + 1) * ROUND_MS,
-    closesAt: (round + 1) * ROUND_MS - BET_CLOSE_MS,
-    choices,
-    pot: bets.reduce((sum, b) => sum + b.amount, 0),
-    jackpot: pool ? pool.jackpot : 0,
-    bets: bets.slice(0, 30),
-    history,
-    bonusRate: game.bonus,
-  };
-  if (user) {
-    out.myBet = bets.find((b) => b.userId === user.id) || null;
-    out.myLast = await env.DB.prepare(
-      "SELECT b.round, b.choice, b.amount, b.payout, b.bonus, r.outcome FROM bets b JOIN rounds r ON r.game = b.game AND r.round = b.round " +
-        "WHERE b.game = ? AND b.user_id = ? ORDER BY b.round DESC LIMIT 1"
-    )
-      .bind(id, user.id)
-      .first();
-    const w = await wallet(env, user);
-    out.points = w.points;
-    out.bonusLeft = Math.max(0, DAILY_CAP - (w.day === today() ? w.today : 0));
-  }
-  return json(out, 200, cors);
-}
-
-async function betPlace(request, env, cors) {
-  const user = await requireUser(request, env);
-  const { game: id, choice: rawChoice, amount: raw } = await readJson(request);
-  const game = betGameOf(id);
-  const choice = String(rawChoice);
-  if (!game.choices.includes(choice)) fail("Pick one of the options.", 400);
-  const amount = Math.floor(Number(raw));
-  if (!Number.isFinite(amount) || amount < 1) fail("Bet at least 1 point.", 400);
-
-  const now = Date.now();
-  const round = Math.floor(now / ROUND_MS);
-  if (now >= (round + 1) * ROUND_MS - BET_CLOSE_MS) fail("Betting is closed for this round. Wait a few seconds for the next one.", 409);
-
-  await wallet(env, user);
-  const existing = await env.DB.prepare("SELECT 1 FROM bets WHERE game = ? AND round = ? AND user_id = ?").bind(id, round, user.id).first();
-  if (existing) fail("You already bet this round.", 409);
-
-  // Take the points only if there are enough
-  const take = await env.DB.prepare("UPDATE wallets SET points = points - ? WHERE user_id = ? AND points >= ?").bind(amount, user.id, amount).run();
-  if (!take.meta || take.meta.changes !== 1) fail("You don't have enough points for that bet.", 400);
-  try {
-    await env.DB.prepare(
-      "INSERT INTO bets (game, round, user_id, name, avatar, choice, amount, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    )
-      .bind(id, round, user.id, user.name, user.avatar, choice, amount, now)
-      .run();
-  } catch (e) {
-    await env.DB.prepare("UPDATE wallets SET points = points + ? WHERE user_id = ?").bind(amount, user.id).run();
-    fail("You already bet this round.", 409);
-  }
-  const w = await env.DB.prepare("SELECT points FROM wallets WHERE user_id = ?").bind(user.id).first();
-  return json({ ok: true, points: w.points, round }, 200, cors);
 }
 
 // ---------- Shop ----------
@@ -2193,14 +1921,11 @@ async function profileGet(request, env, cors) {
   const user = await requireUser(request, env);
   const w = await wallet(env, user);
   const one = (sql, ...args) => env.DB.prepare(sql).bind(...args).first();
-  const [joined, rank, bets, wins, purchases, messages, scores] = await Promise.all([
+  const [joined, rank, purchases, messages] = await Promise.all([
     one("SELECT created FROM users WHERE id = ?", user.id),
     one("SELECT COUNT(*) AS n FROM wallets WHERE points > ?", w.points),
-    one("SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS staked FROM bets WHERE user_id = ?", user.id),
-    one("SELECT COUNT(*) AS n, COALESCE(SUM(payout + bonus - amount), 0) AS profit FROM bets WHERE user_id = ? AND payout > 0", user.id),
     one("SELECT COUNT(*) AS n FROM purchases WHERE user_id = ?", user.id),
     one("SELECT COUNT(*) AS n FROM messages WHERE user_id = ? AND deleted = 0", user.id),
-    env.DB.prepare("SELECT game, score FROM scores WHERE user_id = ?").bind(user.id).all(),
   ]);
   return json(
     {
@@ -2208,10 +1933,8 @@ async function profileGet(request, env, cors) {
       joined: joined ? joined.created : null,
       points: w.points,
       rank: rank.n + 1,
-      bets: { placed: bets.n, staked: bets.staked, won: wins.n, profit: wins.profit },
       purchases: purchases.n,
       messages: messages.n,
-      bests: Object.fromEntries(scores.results.map((s) => [s.game, s.score])),
     },
     200,
     cors
@@ -2220,21 +1943,18 @@ async function profileGet(request, env, cors) {
 
 // ---------- Daily quests and login streak ----------
 // Every day (UTC) each player gets 3 quests picked from QUEST_POOL (the same 3 all day, different per
-// player). Progress comes from what they already do: watching (heroes.watch_minutes), games, adventures
-// and duels (the "daily" table), bets and chat messages (counted from their tables). Each finished quest
+// player). Progress comes from what they already do: watching (heroes.watch_minutes), adventures and
+// duels (the "daily" table) and chat messages (counted from their table). Each finished quest
 // pays coins and adventurer XP; finishing all 3 opens a bonus chest. Opening the site on a new day
 // claims the login streak reward; missing a day starts the streak again.
 
 const QUEST_POOL = [
   { id: "watch20", family: "watch", kind: "watch", target: 20, emoji: "📺", text: "Watch streams for 20 minutes", coins: 40 },
   { id: "watch45", family: "watch", kind: "watch", target: 45, emoji: "📺", text: "Watch streams for 45 minutes", coins: 70 },
-  { id: "games3", family: "games", kind: "games", target: 3, emoji: "🎮", text: "Finish 3 mini games", coins: 35 },
-  { id: "games6", family: "games", kind: "games", target: 6, emoji: "🎮", text: "Finish 6 mini games", coins: 60 },
   { id: "adv3", family: "adventure", kind: "dungeons", target: 3, emoji: "🗺️", text: "Complete 3 adventures", coins: 50 },
   { id: "advwin2", family: "adventure", kind: "dungeon_wins", target: 2, emoji: "🏆", text: "Win 2 adventures", coins: 50 },
   { id: "duel2", family: "arena", kind: "duels", target: 2, emoji: "🏟️", text: "Fight 2 arena duels", coins: 40 },
   { id: "duelwin1", family: "arena", kind: "duel_wins", target: 1, emoji: "⚔️", text: "Win an arena duel", coins: 45 },
-  { id: "bet2", family: "bets", kind: "bets", target: 2, emoji: "🎲", text: "Place 2 bets in Color Clash or Lucky Number", coins: 30 },
   { id: "chat3", family: "chat", kind: "chats", target: 3, emoji: "💬", text: "Send 3 chat messages on Sinners", coins: 30 },
 ];
 const DAILY_COUNTERS = ["games", "dungeons", "dungeon_wins", "duels", "duel_wins", "chats"];
@@ -2262,7 +1982,7 @@ function questsFor(userId, day) {
   return picked;
 }
 
-// Adds to today's counters, e.g. bumpDaily(env, id, { games: 1 })
+// Adds to today's counters, e.g. bumpDaily(env, id, { dungeons: 1 })
 async function bumpDaily(env, userId, add) {
   const keys = Object.keys(add).filter((k) => DAILY_COUNTERS.includes(k) && add[k]);
   if (!keys.length) return;
@@ -2284,10 +2004,9 @@ async function dailyState(env, user) {
   const startOfDay = Date.parse(day + "T00:00:00Z");
   const yesterday = new Date(startOfDay - 86400000).toISOString().slice(0, 10);
   const one = (sql, ...args) => env.DB.prepare(sql).bind(...args).first();
-  const [row, hero, bets, chats, streak] = await Promise.all([
+  const [row, hero, chats, streak] = await Promise.all([
     one(`SELECT ${DAILY_COUNTERS.join(", ")}, claimed, bonus FROM daily WHERE user_id = ? AND day = ?`, user.id, day),
     one("SELECT level, watch_day AS watchDay, watch_minutes AS watchMinutes FROM heroes WHERE user_id = ?", user.id),
-    one("SELECT COUNT(*) AS n FROM bets WHERE user_id = ? AND created >= ?", user.id, startOfDay),
     one("SELECT COUNT(*) AS n FROM messages WHERE user_id = ? AND created >= ? AND deleted = 0", user.id, startOfDay),
     one("SELECT last_day AS lastDay, streak, best FROM streaks WHERE user_id = ?", user.id),
   ]);
@@ -2295,7 +2014,6 @@ async function dailyState(env, user) {
   const counts = {
     ...Object.fromEntries(DAILY_COUNTERS.map((k) => [k, row ? row[k] : 0])),
     watch: hero && hero.watchDay === day ? hero.watchMinutes : 0,
-    bets: bets.n,
     chats: chats.n + (row ? row.chats : 0), // Sinners chat + messages sent to Twitch from Sinners
   };
   const claimed = String((row && row.claimed) || "");
@@ -2620,7 +2338,7 @@ async function bossAction(request, env, cors, ctx) {
 }
 
 // ---------- Achievements and badges ----------
-// Earned automatically from what players do (checked when they open their profile and after games,
+// Earned automatically from what players do (checked when they open their profile and after
 // adventures, duels, quests and boss fights). Each pays coins once. One earned achievement (or season
 // title) can be shown as a badge next to the player's name in chat, the arena and the boss board.
 
@@ -2640,7 +2358,6 @@ const ACHIEVEMENTS = [
   { id: "quests30", emoji: "📋", name: "Questmaster", text: "Finish 30 daily quests", coins: 200, check: (s) => s.quests >= 30, progress: (s) => [s.quests, 30] },
   { id: "boss1", emoji: "👹", name: "Boss Fighter", text: "Hit a world boss", coins: 50, check: (s) => s.bossFights >= 1 },
   { id: "bosstop", emoji: "🥇", name: "Boss Slayer", text: "Finish top 3 on a defeated world boss", coins: 300, check: () => false },
-  { id: "games50", emoji: "🎮", name: "Gamer", text: "Finish 50 mini games", coins: 100, check: (s) => s.games >= 50, progress: (s) => [s.games, 50] },
   { id: "watch600", emoji: "📺", name: "Couch Sinner", text: "Watch streams for 10 hours on Sinners", coins: 150, check: (s) => s.watch >= 600, progress: (s) => [s.watch, 600] },
   { id: "legendary", emoji: "🟠", name: "Legendary Find", text: "Own a legendary item", coins: 300, check: (s) => s.legendary },
   { id: "abyssal", emoji: "🔴", name: "Abyssal Lord", text: "Wear 5 Abyssal (tier 5) items at once", coins: 500, check: (s) => s.tier5Worn >= 5, progress: (s) => [s.tier5Worn, 5] },
@@ -2652,13 +2369,12 @@ const ACHIEVEMENTS = [
 
 async function achievementStats(env, userId) {
   const one = (sql, ...args) => env.DB.prepare(sql).bind(...args).first();
-  const [w, h, streak, quests, boss, games, items] = await Promise.all([
+  const [w, h, streak, quests, boss, items] = await Promise.all([
     one("SELECT points FROM wallets WHERE user_id = ?", userId),
     one("SELECT level, wins, rating, duel_wins_total AS duelWins, cleared, watch_total AS watch FROM heroes WHERE user_id = ?", userId),
     one("SELECT best FROM streaks WHERE user_id = ?", userId),
     one("SELECT quests_done AS n FROM heroes WHERE user_id = ?", userId),
     one("SELECT COUNT(*) AS n FROM boss_hits WHERE user_id = ? AND damage > 0", userId),
-    one("SELECT COALESCE(SUM(games), 0) AS n FROM daily WHERE user_id = ?", userId),
     one(
       "SELECT SUM(CASE WHEN rarity = 'legendary' THEN 1 ELSE 0 END) AS legendary, SUM(CASE WHEN equipped = 1 AND tier >= 5 THEN 1 ELSE 0 END) AS t5 FROM hero_items WHERE user_id = ?",
       userId
@@ -2676,7 +2392,6 @@ async function achievementStats(env, userId) {
     bestStreak: streak ? streak.best : 0,
     quests: quests ? quests.n : 0,
     bossFights: boss.n,
-    games: games.n,
     legendary: !!(items && items.legendary),
     tier5Worn: (items && items.t5) || 0,
   };
@@ -3321,7 +3036,7 @@ async function saveChatTokens(env, platform, userId, extId, name, tok) {
 // "Online" = tabs heard from in the last 90 seconds. Daily totals are kept; the per-visitor rows that
 // make daily unique counts possible are deleted after two days.
 
-const STAT_PAGES = ["index", "watch", "content", "games", "gallery", "about", "stats", "profile", "shop", "terms", "privacy", "admin"];
+const STAT_PAGES = ["index", "watch", "content", "gallery", "about", "stats", "profile", "shop", "terms", "privacy", "admin"];
 const ONLINE_MS = 90000;
 const VISITOR_ID = /^[a-f0-9-]{36}$/;
 
@@ -3397,8 +3112,6 @@ async function siteStats(env) {
       players: await count("SELECT COUNT(*) AS n FROM wallets"),
       chatMessages: await count("SELECT COUNT(*) AS n FROM messages WHERE deleted = 0"),
       chatToday: await count("SELECT COUNT(*) AS n FROM messages WHERE deleted = 0 AND created >= ?", startOfDay),
-      gamesPlayed: await count("SELECT COUNT(*) AS n FROM scores"),
-      betsToday: await count("SELECT COUNT(*) AS n FROM bets WHERE created >= ?", startOfDay),
       pointsTotal: await count("SELECT COALESCE(SUM(points), 0) AS n FROM wallets"),
       purchases: await count("SELECT COUNT(*) AS n FROM purchases"),
       galleryItems: approved,
@@ -3419,18 +3132,6 @@ const DISCORD_API = "https://discord.com/api/v10";
 const BOT_COLOR = 0xe11d48;
 const ADMINISTRATOR = 0x8; // admin-only commands need Discord's Administrator permission
 const isAdmin = (interaction) => !!interaction.guild_id && (BigInt((interaction.member && interaction.member.permissions) || 0) & BigInt(ADMINISTRATOR)) !== 0n;
-const BOARD_CHOICES = [
-  { name: "Most points", value: "points" },
-  { name: "Quick Draw", value: "reaction" },
-  { name: "Target Rush", value: "aim" },
-  { name: "Chat Typer", value: "typing" },
-];
-const BOARD_FORMAT = {
-  reaction: ["⚡ Quick Draw", (v) => `${Math.round(v)} ms`],
-  aim: ["🎯 Target Rush", (v) => `${v} hits`],
-  typing: ["⌨️ Chat Typer", (v) => `${v} words`],
-};
-
 const DUNGEON_CHOICES = [
   { name: "🌲 Whispering Forest (level 1, 10 min)", value: "forest" },
   { name: "🕳️ Goblin Caves (level 5, 30 min)", value: "caves" },
@@ -3478,19 +3179,14 @@ const BOT_COMMANDS = [
   },
   {
     name: "stats",
-    description: "Sinners site report: visitors, players, games, betting, chat, shop (admins)",
+    description: "Sinners site report: visitors, players, chat, shop (admins)",
     default_member_permissions: String(ADMINISTRATOR),
     dm_permission: false,
   },
-  { name: "help", description: "How Sinners and this bot work: commands, adventure, arena, games, shop" },
+  { name: "help", description: "How Sinners and this bot work: commands, adventure, arena, shop" },
   { name: "points", description: "Show someone's Sinners points", options: [{ type: 6, name: "user", description: "Whose points (you if empty)" }] },
-  { name: "top", description: "Sinners leaderboards", options: [{ type: 3, name: "board", description: "Which leaderboard", choices: BOARD_CHOICES }] },
+  { name: "top", description: "The players with the most Sinners points" },
   { name: "shop", description: "What's in the Sinners shop" },
-  {
-    name: "round",
-    description: "The current betting round and recent results",
-    options: [{ type: 3, name: "game", description: "Which game", choices: [{ name: "Color Clash", value: "colors" }, { name: "Lucky Number", value: "lucky" }] }],
-  },
   { name: "sinners", description: "Links to the Sinners website" },
   {
     name: "stats-live",
@@ -3791,7 +3487,7 @@ async function botCommand(interaction, env, origin) {
     const discordUser = (resolved.users && resolved.users[raw]) || caller;
     const label = discordUser.global_name || discordUser.username || "That player";
     const w = await env.DB.prepare("SELECT points, earned_day AS day, earned_today AS today FROM wallets WHERE user_id = ?").bind(id).first();
-    if (!w) return botReply(`${label} hasn't played on Sinners yet. Log in at ${SITE_URL}/games to get 100 free points.`, { ephemeral: !opt("user") });
+    if (!w) return botReply(`${label} hasn't played on Sinners yet. Log in at ${SITE_URL}/profile to get 100 free points.`, { ephemeral: !opt("user") });
     const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM wallets WHERE points > ?").bind(w.points).first();
     const earned = w.day === today() ? w.today : 0;
     return botReply(null, {
@@ -3799,72 +3495,35 @@ async function botCommand(interaction, env, origin) {
         embed({
           title: `🪙 ${label}: ${w.points} points`,
           description: `Rank #${n + 1} on the points list · earned today ${earned} / ${DAILY_CAP}`,
-          url: `${SITE_URL}/games`,
+          url: `${SITE_URL}/profile`,
         }),
       ],
     });
   }
 
   if (name === "top") {
-    const board = opt("board") || "points";
-    let title, rows;
-    if (board === "points") {
-      title = "🪙 Most points";
-      const { results } = await env.DB.prepare("SELECT name, points FROM wallets ORDER BY points DESC LIMIT 10").all();
-      rows = results.map((r) => [r.name, `${r.points} 🪙`]);
-    } else {
-      const [label, format] = BOARD_FORMAT[board] || BOARD_FORMAT.reaction;
-      title = `🏆 ${label}`;
-      rows = (await topScores(env, BOARD_FORMAT[board] ? board : "reaction", 10)).map((r) => [r.name, format(r.score)]);
-    }
+    const { results } = await env.DB.prepare("SELECT name, points FROM wallets ORDER BY points DESC LIMIT 10").all();
     const medals = ["🥇", "🥈", "🥉"];
-    const description = rows.length
-      ? rows.map(([who, score], i) => `${medals[i] || `**${i + 1}.**`} ${who} · ${score}`).join("\n")
+    const description = results.length
+      ? results.map((r, i) => `${medals[i] || `**${i + 1}.**`} ${r.name} · ${r.points} 🪙`).join("\n")
       : "Nobody's on this board yet.";
-    return botReply(null, { embeds: [embed({ title, description, url: `${SITE_URL}/games` })] });
+    return botReply(null, { embeds: [embed({ title: "🪙 Most points", description, url: `${SITE_URL}/profile` })] });
   }
 
   if (name === "shop") {
     const { results } = await env.DB.prepare(`SELECT ${SHOP_COLUMNS} FROM shop_items ORDER BY price, id LIMIT 25`).all();
-    if (!results.length) return botReply(null, { embeds: [embed({ title: "🛒 Sinners shop", description: "The shop is empty for now. New items are coming soon!", url: `${SITE_URL}/games#shop` })] });
+    if (!results.length) return botReply(null, { embeds: [embed({ title: "🛒 Sinners shop", description: "The shop is empty for now. New items are coming soon!", url: `${SITE_URL}/shop` })] });
     return botReply(null, {
       embeds: [
         embed({
           title: "🛒 Sinners shop",
-          description: `Buy with points at ${SITE_URL}/games#shop`,
-          url: `${SITE_URL}/games#shop`,
+          description: `Buy with points at ${SITE_URL}/shop`,
+          url: `${SITE_URL}/shop`,
           thumbnail: { url: origin + shopItemOut(results[0]).image },
           fields: results.map((i) => ({
             name: `${i.name} · ${i.price} 🪙`,
             value: `${i.description || "​"}${i.stock != null ? `\n${i.stock ? `${i.stock} left` : "Sold out"}` : ""}`.slice(0, 1024),
           })),
-        }),
-      ],
-    });
-  }
-
-  if (name === "round") {
-    const id = opt("game") || "colors";
-    betGameOf(id);
-    await settleRounds(env, id);
-    const now = Date.now();
-    const round = Math.floor(now / ROUND_MS);
-    const { results: bets } = await env.DB.prepare("SELECT amount FROM bets WHERE game = ? AND round = ?").bind(id, round).all();
-    const pool = await env.DB.prepare("SELECT jackpot FROM pools WHERE game = ?").bind(id).first();
-    const history = await recentRounds(env, id, round, 8);
-    const label = id === "colors" ? "🎨 Color Clash" : "🍀 Lucky Number";
-    const dot = { red: "🔴", green: "🟢", blue: "🔵" };
-    const pot = bets.reduce((s, b) => s + b.amount, 0);
-    return botReply(null, {
-      embeds: [
-        embed({
-          title: label,
-          url: `${SITE_URL}/games#${id}`,
-          description:
-            `This round ends <t:${Math.floor(((round + 1) * ROUND_MS) / 1000)}:R> · ${bets.length} bet${bets.length === 1 ? "" : "s"} · pot ${pot} 🪙` +
-            (pool && pool.jackpot ? ` · jackpot +${pool.jackpot}` : "") +
-            `\nLast results: ${history.length ? history.map((h) => dot[h.outcome] || `**${h.outcome}**`).join(" ") : "none yet"}` +
-            `\nPlace your bet at ${SITE_URL}/games#${id}`,
         }),
       ],
     });
@@ -3879,7 +3538,7 @@ async function botCommand(interaction, env, origin) {
           description: [
             `▶️ [Watch](${SITE_URL}/watch): Kick, Twitch and YouTube side by side`,
             `📺 [Content](${SITE_URL}/content): browse YouTube while you wait`,
-            `🎮 [Games](${SITE_URL}/games): earn points, bet them, spend them in the shop`,
+            `⚔️ [Adventure](${SITE_URL}/profile): level up an adventurer, fight bosses, earn points`,
             `🖼️ [Gallery](${SITE_URL}/gallery): community clips and images`,
           ].join("\n"),
         }),
@@ -3919,7 +3578,7 @@ const HELP_TOPICS = {
     emoji: "📖",
     title: "📖 Sinners bot guide",
     description:
-      `Sinners (${SITE_URL}) is where we watch Kick, Twitch and YouTube together, chat, play games and level up an adventurer.\n` +
+      `Sinners (${SITE_URL}) is where we watch Kick, Twitch and YouTube together, chat and level up an adventurer.\n` +
       "Your Discord account **is** your Sinners account: log in on the website with Discord and everything here and there is shared.\n\n" +
       "Pick a topic below to learn more.",
     fields: [
@@ -3947,7 +3606,7 @@ const HELP_TOPICS = {
     fields: [
       { name: "1. Log in", value: `Open ${SITE_URL} and press **Log in** (Discord). You get **🪙 100 points** to start.` },
       { name: "2. Make your adventurer", value: `Open your **Profile** (click your name at the top of the site) or type \`/dungeon status\` here. A pixel adventurer is made for you.` },
-      { name: "3. Earn points (🪙)", value: "Play the mini games, win adventures and duels, bet in Color Clash / Lucky Number, and level up. Games and duels earn up to 300 a day." },
+      { name: "3. Earn points (🪙)", value: "Win adventures and duels, finish daily quests, keep your streak, hit the world boss and level up." },
       { name: "Every day", value: "Open the site (or type `/daily`) to claim your **login streak** reward, then do your **3 daily quests** for coins and XP. Finish all 3 for a bonus chest." },
       { name: "4. Spend them", value: `Gear, potions and scrolls in the **Shop** (${SITE_URL}/shop), or special rewards in its Redeem tab.` },
       { name: "Good to know", value: "Points are just for fun: they can't be bought or turned into money." },
@@ -3989,18 +3648,15 @@ const HELP_TOPICS = {
       { name: "Leaderboard", value: `${SITE_URL}/profile#arena shows the top players and lets you pick who to fight.` },
     ],
   },
-  games: {
-    label: "Games & points",
-    emoji: "🎮",
-    title: "🎮 Games & points",
+  points: {
+    label: "Points",
+    emoji: "🪙",
+    title: "🪙 Points",
     fields: [
-      { name: "Mini games", value: `${SITE_URL}/games: ⚡ Quick Draw, 🎯 Target Rush, ⌨️ Chat Typer. Better scores earn more points and adventurer XP.` },
-      {
-        name: "Betting games",
-        value: "🎨 **Color Clash** and 🍀 **Lucky Number**: a new round every minute for everyone. Winners split the pot plus a small site bonus. `/round` shows the current one.",
-      },
+      { name: "Earning points", value: "Win adventures and arena duels, finish daily quests, keep your login streak, hit the weekly world boss and unlock achievements." },
       { name: "Watching streams", value: "While you watch on the Watch page, your adventurer earns a little XP every minute (up to 2 hours a day)." },
-      { name: "Check your progress", value: "`/points` your points and rank\n`/top` leaderboards (points, Quick Draw, Target Rush, Chat Typer)" },
+      { name: "Spending them", value: `Gear, potions, cosmetics and special rewards at ${SITE_URL}/shop. Points are just for fun and can't be bought or cashed out.` },
+      { name: "Check your progress", value: "`/points` your points and rank\n`/top` the players with the most points" },
     ],
   },
   shop: {
@@ -4102,7 +3758,7 @@ async function editOriginal(env, interaction, build) {
   });
 }
 
-const PAGE_LABELS = { index: "Home", watch: "Watch", content: "Content", games: "Games", gallery: "Gallery", about: "About", stats: "Stats", terms: "Terms", privacy: "Privacy" };
+const PAGE_LABELS = { index: "Home", watch: "Watch", content: "Content", gallery: "Gallery", about: "About", stats: "Stats", terms: "Terms", privacy: "Privacy" };
 
 function change(now, before) {
   if (!before) return now ? "🆕 new" : "–";
@@ -4110,7 +3766,7 @@ function change(now, before) {
   return pct === 0 ? "➖ same as the week before" : `${pct > 0 ? "📈 +" : "📉 "}${pct}% vs the week before`;
 }
 
-// The full /stats report: visitors, players, games, betting, chat, shop, gallery and this Discord server
+// The full /stats report: visitors, players, points, chat, shop, gallery and this Discord server
 async function statsReport(env, interaction) {
   const day = today();
   const startOfDay = Date.parse(day + "T00:00:00Z");
@@ -4124,20 +3780,13 @@ async function statsReport(env, interaction) {
         .catch(() => null)
     : Promise.resolve(null);
 
-  const [s, prevWeek, newToday, newWeek, rich, bigWin, roundsToday, betsToday, pools, lastColors, lastLucky, newBests, chatter, shopItems, soldToday, waiting, pending, server] =
+  const [s, prevWeek, newToday, newWeek, rich, chatter, shopItems, soldToday, waiting, pending, server] =
     await Promise.all([
       siteStats(env),
       one("SELECT COALESCE(SUM(views), 0) AS views, COALESCE(SUM(visitors), 0) AS visitors FROM site_days WHERE day >= ? AND day <= ?", dayAgo(13), dayAgo(7)),
       one("SELECT COUNT(*) AS n FROM users WHERE created >= ?", startOfDay),
       one("SELECT COUNT(*) AS n FROM users WHERE created >= ?", startOfDay - 6 * 86400000),
       many("SELECT name, points FROM wallets ORDER BY points DESC LIMIT 3"),
-      one("SELECT name, game, amount, payout + bonus AS won FROM bets WHERE created >= ? AND payout > 0 ORDER BY payout + bonus - amount DESC LIMIT 1", startOfDay - ROUND_MS),
-      one("SELECT COUNT(*) AS n FROM rounds WHERE settled_at >= ?", startOfDay),
-      one("SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS points FROM bets WHERE created >= ?", startOfDay),
-      many("SELECT game, jackpot FROM pools"),
-      recentRounds(env, "colors", Math.floor(Date.now() / ROUND_MS), 6),
-      recentRounds(env, "lucky", Math.floor(Date.now() / ROUND_MS), 6),
-      one("SELECT COUNT(*) AS n FROM scores WHERE created >= ?", startOfDay),
       one("SELECT name, COUNT(*) AS n FROM messages WHERE deleted = 0 AND created >= ? GROUP BY user_id ORDER BY n DESC LIMIT 1", startOfDay),
       one("SELECT COUNT(*) AS n FROM shop_items"),
       one("SELECT COUNT(*) AS n FROM purchases WHERE created >= ?", startOfDay),
@@ -4156,8 +3805,6 @@ async function statsReport(env, interaction) {
   const peakWeek = Math.max(1, ...s.week.map((d) => d.visitors));
   const spark = s.week.map((d) => bars[Math.round((d.visitors / peakWeek) * 7)]).join("");
   const medals = ["🥇", "🥈", "🥉"];
-  const jackpot = (g) => (pools.find((p) => p.game === g) || {}).jackpot || 0;
-  const dot = { red: "🔴", green: "🟢", blue: "🔵" };
   const topPage = s.topPages.find((p) => p.page !== "admin");
 
   const fields = [
@@ -4173,21 +3820,7 @@ async function statsReport(env, interaction) {
       value: rich.length ? rich.map((r, i) => `${medals[i]} ${r.name} · ${r.points} 🪙`).join("\n") : "Nobody yet",
       inline: true,
     },
-    {
-      name: "🎲 Betting today",
-      value:
-        `**${n(roundsToday)}** rounds played\n**${betsToday.n}** bets · ${betsToday.points} 🪙\n` +
-        (bigWin && bigWin.won > bigWin.amount ? `Biggest win: ${bigWin.name} +${bigWin.won - bigWin.amount} 🪙` : "No big wins yet"),
-      inline: true,
-    },
-    {
-      name: "💰 Jackpots",
-      value:
-        `🎨 Color Clash: **${jackpot("colors")}** 🪙\n${lastColors.map((r) => dot[r.outcome] || r.outcome).join(" ") || "no rounds yet"}\n` +
-        `🍀 Lucky Number: **${jackpot("lucky")}** 🪙\n${lastLucky.map((r) => `\`${r.outcome}\``).join(" ") || "no rounds yet"}`,
-      inline: true,
-    },
-    { name: "🎮 Games", value: `**${n(newBests)}** new best scores today\n**${c.gamesPlayed}** leaderboard entries\n**${c.pointsTotal}** 🪙 owned in total`, inline: true },
+    { name: "🪙 Points", value: `**${c.pointsTotal}** 🪙 owned in total`, inline: true },
     {
       name: "💬 Chat",
       value: `**${c.chatToday}** messages today\n**${c.chatMessages}** in total\n${chatter ? `Most active today: ${chatter.name} (${chatter.n})` : "Quiet so far today"}`,

@@ -5,7 +5,6 @@ const PAGE_NAMES = {
   index: "Home",
   watch: "Watch",
   content: "Content",
-  games: "Games",
   gallery: "Gallery",
   about: "About",
   stats: "Stats",
@@ -96,8 +95,6 @@ function renderCommunity(c) {
     ["🎮", "Players", c.players],
     ["🪙", "Points in total", c.pointsTotal],
     ["💬", "Chat messages", c.chatMessages, `${fmt(c.chatToday)} today`],
-    ["🏆", "Leaderboard scores", c.gamesPlayed],
-    ["🎨", "Bets today", c.betsToday],
     ["🛒", "Shop purchases", c.purchases],
     ["🖼️", "Gallery posts", c.galleryItems],
   ];

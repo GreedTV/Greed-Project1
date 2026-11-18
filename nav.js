@@ -17,7 +17,6 @@ const SinnersNav = (() => {
     watch: "watch.js",
     content: "content.js",
     gallery: "gallery.js",
-    games: "games.js",
     admin: "admin.js",
     stats: "stats.js",
     profile: "profile.js",

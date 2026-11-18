@@ -42,7 +42,7 @@ async function refresh() {
     loginMsg.textContent = err.message;
   }
   refreshChat();
-  refreshGames();
+  refreshPoints();
   refreshShop();
   refreshBot();
 }
@@ -326,37 +326,30 @@ async function refreshShop() {
   );
 }
 
-// ---------- Game leaderboards ----------
+// ---------- Points ----------
 
-const GAME_NAMES = {
-  reaction: ["⚡ Quick Draw", (v) => `${Math.round(v)} ms`],
-  aim: ["🎯 Target Rush", (v) => `${v} hits`],
-  typing: ["⌨️ Chat Typer", (v) => `${v} words`],
-};
-
-async function gameAction(body, confirmText, button) {
+async function pointsAction(body, confirmText, button) {
   if (confirmText && !(await SinnersDialog.confirm(confirmText, { title: "Are you sure?", yes: "Yes, do it", icon: "⚠️", danger: true }))) return;
   button.disabled = true;
   try {
-    await api("/games-admin", { method: "POST", body: JSON.stringify(body) });
-    await refreshGames();
+    await api("/points-admin", { method: "POST", body: JSON.stringify(body) });
+    await refreshPoints();
   } catch (err) {
     button.disabled = false;
     SinnersDialog.alert(err.message, { title: "That didn't work", icon: "⚠️" });
   }
 }
 
-async function refreshGames() {
+async function refreshPoints() {
   const box = document.getElementById("games-admin");
-  let boards;
+  let data;
   try {
-    boards = await api("/games-admin");
+    data = await api("/points-admin");
   } catch (err) {
-    box.replaceChildren(el("p", "gallery-empty", `Leaderboards unavailable: ${err.message}`));
+    box.replaceChildren(el("p", "gallery-empty", `Points unavailable: ${err.message}`));
     return;
   }
-  // Points (earned in games, bet in Color Clash / Lucky Number)
-  const richest = boards.richest || [];
+  const richest = data.richest || [];
   const pointsCard = el("div", "side-box games-admin-card");
   const pointsHead = el("div", "side-head");
   pointsHead.append(el("h3", null, `🪙 Points (${richest.length} players)`));
@@ -364,11 +357,7 @@ async function refreshGames() {
   resetPoints.type = "button";
   resetPoints.disabled = !richest.length;
   resetPoints.addEventListener("click", () =>
-    gameAction(
-      { action: "reset-points" },
-      "Reset everyone's points? Every player goes back to the starting amount, and all bets and round history are cleared.",
-      resetPoints
-    )
+    pointsAction({ action: "reset-points" }, "Reset everyone's points? Every player goes back to the starting amount.", resetPoints)
   );
   pointsHead.append(resetPoints);
   pointsCard.append(pointsHead);
@@ -382,38 +371,7 @@ async function refreshGames() {
     });
     pointsCard.append(list);
   }
-
-  box.replaceChildren(
-    pointsCard,
-    ...Object.entries(GAME_NAMES).map(([id, [name, format]]) => {
-      const scores = boards[id] || [];
-      const card = el("div", "side-box games-admin-card");
-      const head = el("div", "side-head");
-      head.append(el("h3", null, `${name} (${scores.length})`));
-      const reset = el("button", "button ghost", "Reset leaderboard");
-      reset.type = "button";
-      reset.disabled = !scores.length;
-      reset.addEventListener("click", () => gameAction({ action: "reset", game: id }, `Delete every ${name} score? This can't be undone.`, reset));
-      head.append(reset);
-      card.append(head);
-      if (!scores.length) {
-        card.append(el("p", "lb-empty", "No scores yet."));
-        return card;
-      }
-      const list = el("ol", "lb-list");
-      scores.forEach((s, i) => {
-        const li = el("li", "lb-row admin-row");
-        li.append(el("span", "lb-rank", `${i + 1}`), el("span", "lb-name", s.name), el("span", "lb-score", format(s.score)));
-        const remove = el("button", "link-btn", "Remove");
-        remove.type = "button";
-        remove.addEventListener("click", () => gameAction({ action: "delete", game: id, userId: s.userId }, `Remove ${s.name}'s ${name} score?`, remove));
-        li.append(remove);
-        list.append(li);
-      });
-      card.append(list);
-      return card;
-    })
-  );
+  box.replaceChildren(pointsCard);
 }
 
 // ---------- Chat moderation ----------
