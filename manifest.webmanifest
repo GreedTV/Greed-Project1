@@ -1,0 +1,20 @@
+{
+  "name": "Sinners",
+  "short_name": "Sinners",
+  "description": "Watch Kick, Twitch and YouTube together, chat, and level up an adventurer.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0e0e10",
+  "theme_color": "#0e0e10",
+  "icons": [
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Watch", "url": "/watch", "description": "Watch streams side by side" },
+    { "name": "Content", "url": "/content", "description": "Browse YouTube" },
+    { "name": "Profile", "url": "/profile", "description": "Your adventurer" }
+  ]
+}

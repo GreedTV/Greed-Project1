@@ -59,6 +59,7 @@ const SinnersNav = (() => {
   function park(page) {
     page.main.classList.add("page-parked");
     page.main.setAttribute("aria-hidden", "true");
+    page.main.removeAttribute("id"); // "Skip to content" goes to the page on screen
     parked.set(page.name, page);
   }
 
@@ -83,6 +84,24 @@ const SinnersNav = (() => {
     }
   }
 
+  // A thin bar at the top while the next page loads
+  const progress = document.createElement("div");
+  progress.className = "nav-progress";
+  progress.setAttribute("aria-hidden", "true");
+  document.body.prepend(progress);
+  let progressTimer = null;
+  function loading(on) {
+    clearTimeout(progressTimer);
+    if (on) {
+      progress.className = "nav-progress";
+      void progress.offsetWidth;
+      progress.classList.add("loading");
+    } else {
+      progress.classList.add("done");
+      progressTimer = setTimeout(() => (progress.className = "nav-progress"), 400);
+    }
+  }
+
   async function go(url, { push = true } = {}) {
     if (busy) return;
     const target = new URL(url, location.href);
@@ -93,6 +112,7 @@ const SinnersNav = (() => {
       return;
     }
     busy = true;
+    loading(true);
     try {
       let next;
       let returning = false;
@@ -128,6 +148,7 @@ const SinnersNav = (() => {
         // Already in the page, just hidden. Moving it would pause or restart its player.
         next.main.classList.remove("page-parked");
         next.main.removeAttribute("aria-hidden");
+        next.main.id = "main";
       } else {
         document.querySelector(".site-footer").before(next.main);
       }
@@ -154,6 +175,7 @@ const SinnersNav = (() => {
       location.href = target.href;
     } finally {
       busy = false;
+      loading(false);
     }
   }
 

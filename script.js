@@ -140,3 +140,8 @@ const SinnersToast = (() => {
   }
   return { show, achievements };
 })();
+
+// Installable as an app, with a friendly page when offline (sw.js)
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}

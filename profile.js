@@ -1550,7 +1550,7 @@ async function start() {
     loadBoss();
     loadExtras();
     renderLinks();
-    if (["#arena", "#daily", "#boss", "#achievements", "#wardrobe", "#links"].includes(location.hash)) $(location.hash.slice(1)).scrollIntoView();
+    if (["#arena", "#daily", "#boss", "#achievements", "#wardrobe", "#links", "#skills", "#forge", "#world-map"].includes(location.hash)) $(location.hash.slice(1)).scrollIntoView();
   } catch (err) {
     $("profile-head").replaceChildren(el("p", "hint", `Couldn't load your profile: ${err.message}`));
   }

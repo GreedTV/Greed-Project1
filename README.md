@@ -103,3 +103,10 @@ Serve this folder with any static server and visit http://localhost:8080. To use
 ## Credits
 
 Platform icons in `icons/` (and inlined on the home page) are from [Simple Icons](https://simpleicons.org/) (CC0). Kick, Twitch and YouTube names and logos belong to their owners.
+
+## Site-wide extras
+
+- **Quick search** (`palette.js`): Ctrl+K / ⌘K, "/" or the ⌕ button in the header. Jump to any page or Profile section, type a name to watch it on Kick / Twitch / YouTube, switch the theme, log in or out.
+- **Installable app** (`manifest.webmanifest`, `sw.js`): the service worker only shows a friendly page when offline; nothing is cached, so updates show at once.
+- **404 page** (`404.html`, served by GitHub Pages for unknown addresses), `robots.txt`, `sitemap.xml` and a canonical link on every page.
+- **Accessibility:** "Skip to content" link, visible keyboard focus, and a loading bar at the top while the next page loads (`nav.js`).
